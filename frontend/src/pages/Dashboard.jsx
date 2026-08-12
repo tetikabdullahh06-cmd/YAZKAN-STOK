@@ -1,0 +1,172 @@
+import { useEffect, useState } from "react";
+import api from "@/lib/api";
+import { Package, AlertTriangle, TrendingUp, History, Users, Settings2, ArrowUpFromLine, ArrowDownToLine } from "lucide-react";
+import { Link } from "react-router-dom";
+
+const currency = (v) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 2 }).format(v || 0);
+
+function KpiCard({ label, value, icon: Icon, tone = "blue", testid }) {
+  const toneCls = {
+    blue: "text-blue-400 bg-blue-500/10 border-blue-500/30",
+    amber: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+    emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+    red: "text-red-400 bg-red-500/10 border-red-500/30",
+  }[tone];
+  return (
+    <div data-testid={testid} className="bg-slate-800/60 border border-slate-700 p-6 rounded-2xl flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-slate-400 uppercase tracking-widest font-semibold">{label}</div>
+        <div className={`w-10 h-10 rounded-lg border flex items-center justify-center ${toneCls}`}>
+          <Icon className="w-5 h-5" strokeWidth={2.2} />
+        </div>
+      </div>
+      <div className="font-display text-4xl font-black tracking-tight font-mono-tab">{value}</div>
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const [d, setD] = useState(null);
+
+  useEffect(() => {
+    api.get("/dashboard").then((r) => setD(r.data)).catch(() => {});
+  }, []);
+
+  if (!d) return <div className="text-slate-400">Yükleniyor...</div>;
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold mb-2">Ana Panel</div>
+        <h1 className="font-display text-4xl md:text-5xl font-black">Takımhane Genel Bakış</h1>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <KpiCard label="Toplam Ürün" value={d.total_products} icon={Package} tone="blue" testid="kpi-total-products" />
+        <KpiCard label="Kritik Stok" value={d.critical_count} icon={AlertTriangle} tone={d.critical_count > 0 ? "red" : "emerald"} testid="kpi-critical-count" />
+        <KpiCard label="Aylık Tüketim" value={currency(d.month_total_cost)} icon={TrendingUp} tone="emerald" testid="kpi-month-total" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Link to="/stok-cikis" data-testid="quick-stock-out" className="group bg-red-950/40 hover:bg-red-950/60 border border-red-800/50 rounded-2xl p-8 flex items-center gap-5 transition-all active:scale-[0.98]">
+          <div className="w-16 h-16 rounded-xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-950/40">
+            <ArrowUpFromLine className="w-8 h-8 text-white" strokeWidth={2.5} />
+          </div>
+          <div>
+            <div className="font-display text-2xl font-bold">Stok Çıkışı</div>
+            <div className="text-slate-400 text-sm mt-1">Personel + tezgah ile hızlı çıkış</div>
+          </div>
+        </Link>
+        <Link to="/stok-giris" data-testid="quick-stock-in" className="group bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-800/50 rounded-2xl p-8 flex items-center gap-5 transition-all active:scale-[0.98]">
+          <div className="w-16 h-16 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-950/40">
+            <ArrowDownToLine className="w-8 h-8 text-white" strokeWidth={2.5} />
+          </div>
+          <div>
+            <div className="font-display text-2xl font-bold">Stok Girişi</div>
+            <div className="text-slate-400 text-sm mt-1">Tedarikçi + miktar + fiyat kaydet</div>
+          </div>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2">
+            <Users className="w-4 h-4 text-blue-400" />
+            <h3 className="font-display text-lg font-bold">En Çok Tüketen Personel (Bu Ay)</h3>
+          </div>
+          <div className="divide-y divide-slate-700">
+            {d.top_personnel.length === 0 && <div className="p-6 text-slate-500 text-sm">Bu ay tüketim yok</div>}
+            {d.top_personnel.map((p, i) => (
+              <div key={i} className="flex items-center justify-between px-6 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm">{i + 1}</div>
+                  <div className="font-medium">{p.name}</div>
+                </div>
+                <div className="font-mono-tab font-bold text-emerald-400">{currency(p.total)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-blue-400" />
+            <h3 className="font-display text-lg font-bold">En Çok Tüketen Tezgah (Bu Ay)</h3>
+          </div>
+          <div className="divide-y divide-slate-700">
+            {d.top_machines.length === 0 && <div className="p-6 text-slate-500 text-sm">Bu ay tüketim yok</div>}
+            {d.top_machines.map((p, i) => (
+              <div key={i} className="flex items-center justify-between px-6 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm">{i + 1}</div>
+                  <div className="font-medium">{p.name}</div>
+                </div>
+                <div className="font-mono-tab font-bold text-emerald-400">{currency(p.total)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {d.critical_products.length > 0 && (
+        <div className="bg-red-950/30 border border-red-800/50 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-red-800/50 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-400" />
+            <h3 className="font-display text-lg font-bold text-red-300">Kritik Stok Uyarıları</h3>
+          </div>
+          <div className="divide-y divide-red-900/50">
+            {d.critical_products.map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-6 py-3">
+                <div>
+                  <div className="font-mono-tab text-xs text-red-300">{p.code}</div>
+                  <div className="font-medium">{p.name}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-red-400 font-bold font-mono-tab">{p.current_stock} / {p.min_stock} {p.unit}</div>
+                  <div className="text-xs text-slate-500">mevcut / min</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2">
+          <History className="w-4 h-4 text-blue-400" />
+          <h3 className="font-display text-lg font-bold">Son Hareketler</h3>
+        </div>
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/50">
+              <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
+                <th className="px-6 py-3">Tarih</th>
+                <th className="px-6 py-3">Tip</th>
+                <th className="px-6 py-3">Ürün</th>
+                <th className="px-6 py-3">Miktar</th>
+                <th className="px-6 py-3">Personel/Tezgah</th>
+                <th className="px-6 py-3">Tutar</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700">
+              {d.recent_movements.length === 0 && <tr><td colSpan={6} className="p-6 text-slate-500">Henüz hareket yok</td></tr>}
+              {d.recent_movements.map((m) => (
+                <tr key={m.id} className="hover:bg-slate-700/40 transition-colors">
+                  <td className="px-6 py-3 font-mono-tab text-slate-400">{new Date(m.created_at).toLocaleString("tr-TR")}</td>
+                  <td className="px-6 py-3">
+                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${m.type === "in" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" : "text-amber-400 bg-amber-500/10 border-amber-500/30"}`}>
+                      {m.type === "in" ? "Giriş" : "Çıkış"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3"><div className="font-medium">{m.product_name}</div><div className="text-xs text-slate-500 font-mono-tab">{m.product_code}</div></td>
+                  <td className="px-6 py-3 font-mono-tab font-bold">{m.quantity}</td>
+                  <td className="px-6 py-3 text-slate-300">{m.personnel_name || "-"} {m.machine_name ? `/ ${m.machine_name}` : ""}</td>
+                  <td className="px-6 py-3 font-mono-tab">{currency(m.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

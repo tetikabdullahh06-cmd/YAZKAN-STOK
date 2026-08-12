@@ -1,0 +1,152 @@
+{
+  "project_context": {
+    "app_type": "industrial B2B SaaS dashboard",
+    "theme": "dark",
+    "primary_language": "tr",
+    "design_archetype": "ARCHETYPE 4: SWISS & HIGH-CONTRAST (Industrial Adaptation)",
+    "description": "CNC Takımhane Stok Takip Uygulaması. Designed for factory environments with high visibility, large touch targets for gloved or fast operation, and high-contrast dark blue/gray tones."
+  },
+  "typography": {
+    "heading_font": "Chivo",
+    "body_font": "IBM Plex Sans",
+    "scale": {
+      "h1": "text-4xl font-bold tracking-tight",
+      "h2": "text-2xl font-bold tracking-tight",
+      "h3": "text-xl font-semibold",
+      "body": "text-base leading-relaxed tracking-wide",
+      "table_header": "text-sm font-bold uppercase tracking-[0.1em]",
+      "table_cell": "text-lg font-medium",
+      "kpi_value": "text-5xl font-black tracking-tighter"
+    },
+    "rules": [
+      "No generic sans fonts like Inter for headings.",
+      "Use uppercase with wide tracking for table headers and overlines.",
+      "Increase base text size slightly to account for viewing distance in factory settings."
+    ]
+  },
+  "colors": {
+    "background": {
+      "base": "bg-slate-950",
+      "surface": "bg-slate-900",
+      "surface_hover": "bg-slate-800",
+      "panel": "bg-slate-800",
+      "login_overlay": "bg-slate-950/80"
+    },
+    "border": {
+      "default": "border-slate-800",
+      "focus": "border-blue-500",
+      "active": "border-blue-400"
+    },
+    "text": {
+      "primary": "text-slate-50",
+      "secondary": "text-slate-400",
+      "muted": "text-slate-500",
+      "inverse": "text-slate-950"
+    },
+    "brand": {
+      "primary": "bg-blue-600 hover:bg-blue-500 text-white",
+      "secondary": "bg-slate-700 hover:bg-slate-600 text-white"
+    },
+    "semantic": {
+      "success": "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
+      "warning": "text-amber-400 bg-amber-400/10 border-amber-400/20",
+      "critical": "text-red-500 bg-red-500/10 border-red-500/20",
+      "critical_button": "bg-red-600 hover:bg-red-500 text-white"
+    },
+    "rules": [
+      "Maintain minimum 4.5:1 contrast for all text.",
+      "Never use pure black or pure white. Use slate-tinted equivalents.",
+      "Critical alerts must use semantic red to draw immediate visual attention."
+    ]
+  },
+  "layout_and_spacing": {
+    "sidebar": "w-72 border-r border-slate-800 bg-slate-950 hidden md:flex flex-col",
+    "main_content": "flex-1 bg-slate-900 overflow-auto p-6 md:p-8 lg:p-12",
+    "bento_grid": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+    "touch_targets": {
+      "button_height": "h-14",
+      "input_height": "h-14",
+      "row_height": "h-16"
+    },
+    "rules": [
+      "Use 'Grid Borders' variant for dashboard widgets: flat background, 1px subtle border (border-slate-800).",
+      "Ensure all actionable areas (buttons, rows) are tall (h-14 to h-16) for easy touch operation.",
+      "Use grid-cols-1 on mobile, scaling to 4 columns on large screens for KPIs."
+    ]
+  },
+  "components": {
+    "buttons": {
+      "primary": "h-14 px-8 rounded-lg font-bold text-lg transition-transform active:scale-95 shadow-lg shadow-blue-900/20",
+      "action_block": "w-full h-24 md:h-32 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 flex flex-col items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+    },
+    "cards": {
+      "kpi": "bg-slate-800 border border-slate-700 p-6 rounded-xl flex flex-col gap-2",
+      "panel": "bg-slate-800 border border-slate-700 rounded-xl overflow-hidden"
+    },
+    "tables": {
+      "wrapper": "w-full overflow-auto rounded-xl border border-slate-700 bg-slate-800",
+      "header": "bg-slate-900/50 text-slate-400 font-bold tracking-wider",
+      "row": "border-b border-slate-700 hover:bg-slate-700/50 transition-colors h-16",
+      "cell": "px-6 py-4 align-middle"
+    },
+    "forms": {
+      "input": "h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all",
+      "label": "block text-sm font-semibold text-slate-400 mb-2 uppercase tracking-wide"
+    },
+    "badges": {
+      "base": "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border"
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "rules": [
+      "Use sharp, functional icons.",
+      "Stroke width: 2px for standard, 2.5px for large action blocks.",
+      "Do NOT use emoji icons under any circumstances."
+    ]
+  },
+  "media_and_images": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1717386255767-52643970d483?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwyfHxpbmR1c3RyaWFsJTIwZmFjdG9yeSUyMGNuYyUyMG1hY2hpbmUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc4NjUxMjgwMnww&ixlib=rb-4.1.0&q=85",
+      "description": "Industrial factory CNC machine background",
+      "usage": "Use as a full-cover background image on the login screen with a heavy slate-950/80 overlay."
+    }
+  },
+  "motion": {
+    "transitions": "Use 'transition-all duration-200 ease-in-out' for colors/opacity.",
+    "transforms": "Use 'active:scale-95' on large buttons for physical feedback.",
+    "rules": [
+      "Avoid heavy animations. This is a functional toolroom app.",
+      "Focus on instant, reliable feedback (color change, slight press effect)."
+    ]
+  },
+  "accessibility": {
+    "rules": [
+      "Add 'data-testid' to EVERY button, input, and table row.",
+      "Ensure focus rings (focus:ring-2 focus:ring-blue-500) are prominent.",
+      "Use redundant coding for status (e.g., Critical stock must have a Red color AND an Alert icon)."
+    ]
+  },
+  "instructions_to_main_agent": [
+    "This is an industrial factory floor application. Aesthetics must take a back seat to clarity, high contrast, and large touch targets.",
+    "Implement the theme primarily via standard Tailwind CSS slate and blue palette.",
+    "All copy MUST be in Turkish (e.g., 'Stok Giriş', 'Stok Çıkış', 'Kritik Uyarılar', 'Personel', 'Tezgah').",
+    "Use Phosphor or Lucide icons. Large 'action block' buttons on the dashboard for 'Stok Giriş' and 'Stok Çıkış' are mandatory for quick factory floor usage.",
+    "Table views must support filtering and be highly legible with h-16 row heights.",
+    "Do NOT use transparent backgrounds for cards or dropdowns. Solid slate-800 or slate-900 is required.",
+    "Avoid generic 'Inter' font. Import and use 'Chivo' for headings and 'IBM Plex Sans' for body text via Google Fonts.",
+    "For the login page, use the provided Unsplash image as a background with a heavy overlay, placing the login card in the center or left side."
+  ],
+  "universal_guidelines": [
+    "You tend to converge toward generic outputs. Avoid this: make creative, distinctive frontends.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts. Create depth through layered design elements.",
+    "You MUST NOT apply universal transition (e.g., transition: all) globally.",
+    "You MUST NOT center align the app container (.App { text-align: center; }).",
+    "Always use modern button styles relevant to the app style.",
+    "NEVER use AI assistant Emoji characters.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Subtle grain textures, custom cursors, selection states separate good from extraordinary."
+  ]
+}

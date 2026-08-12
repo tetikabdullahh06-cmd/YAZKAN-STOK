@@ -1,0 +1,112 @@
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import {
+  LayoutDashboard, Package, Users, Settings2, ArrowDownToLine,
+  ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench
+} from "lucide-react";
+
+const nav = [
+  { to: "/", label: "Panel", icon: LayoutDashboard, end: true, testid: "nav-dashboard" },
+  { to: "/stok-cikis", label: "Stok Çıkışı", icon: ArrowUpFromLine, testid: "nav-stock-out" },
+  { to: "/stok-giris", label: "Stok Girişi", icon: ArrowDownToLine, testid: "nav-stock-in" },
+  { to: "/urunler", label: "Ürünler", icon: Package, testid: "nav-products" },
+  { to: "/personel", label: "Personel", icon: Users, testid: "nav-personnel" },
+  { to: "/tezgahlar", label: "Tezgahlar", icon: Settings2, testid: "nav-machines" },
+  { to: "/hareketler", label: "Hareketler", icon: History, testid: "nav-movements" },
+  { to: "/kritik-stok", label: "Kritik Stok", icon: AlertTriangle, testid: "nav-critical" },
+  { to: "/raporlar", label: "Raporlar", icon: FileBarChart2, testid: "nav-reports" },
+];
+
+export default function Layout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return (
+    <div className="min-h-screen flex bg-slate-900 grain">
+      <aside className="w-72 border-r border-slate-800 bg-slate-950 hidden md:flex flex-col relative z-10">
+        <div className="px-6 py-6 border-b border-slate-800 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
+            <Wrench className="w-6 h-6 text-white" strokeWidth={2.5} />
+          </div>
+          <div>
+            <div className="font-display text-lg font-bold leading-tight">CNC Takımhane</div>
+            <div className="text-xs text-slate-500 uppercase tracking-widest">Stok Takip</div>
+          </div>
+        </div>
+
+        <nav className="flex-1 p-3 space-y-1 overflow-auto">
+          {nav.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              data-testid={n.testid}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 h-14 rounded-lg transition-all duration-200 font-medium text-base ${
+                  isActive
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                }`
+              }
+            >
+              <n.icon className="w-5 h-5 shrink-0" strokeWidth={2} />
+              <span>{n.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-slate-800">
+          <div className="px-3 py-2 mb-2">
+            <div className="text-xs text-slate-500 uppercase tracking-widest">Oturum</div>
+            <div className="text-sm font-semibold text-slate-100 truncate">{user?.name}</div>
+            <div className="text-xs text-slate-500 truncate">{user?.email}</div>
+          </div>
+          <button
+            onClick={async () => { await logout(); navigate("/giris"); }}
+            data-testid="logout-btn"
+            className="w-full h-12 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 flex items-center justify-center gap-2 transition-colors"
+          >
+            <LogOut className="w-4 h-4" /> Çıkış Yap
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile top bar */}
+      <div className="md:hidden fixed top-0 inset-x-0 h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 z-20">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+            <Wrench className="w-4 h-4 text-white" />
+          </div>
+          <div className="font-display font-bold">CNC Takımhane</div>
+        </div>
+        <button onClick={async () => { await logout(); navigate("/giris"); }} className="text-slate-400">
+          <LogOut className="w-5 h-5" />
+        </button>
+      </div>
+
+      <main className="flex-1 overflow-auto relative z-10 pt-14 md:pt-0">
+        <div className="p-4 md:p-8 lg:p-12 max-w-[1600px]">
+          <Outlet />
+        </div>
+        {/* Mobile bottom nav */}
+        <div className="md:hidden fixed bottom-0 inset-x-0 bg-slate-950 border-t border-slate-800 grid grid-cols-5 z-20">
+          {nav.slice(0, 5).map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center h-16 gap-1 text-xs ${
+                  isActive ? "text-blue-400" : "text-slate-500"
+                }`
+              }
+            >
+              <n.icon className="w-5 h-5" />
+              <span className="truncate">{n.label.split(" ")[0]}</span>
+            </NavLink>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+}
