@@ -140,6 +140,33 @@ class ProductIn(BaseModel):
     location: Optional[str] = ""
     quality: Optional[str] = ""
     brand: Optional[str] = ""
+    is_special: bool = False
+
+
+class ToolHolderIn_Model(BaseModel):
+    name: str
+    brand: Optional[str] = ""
+    type: Optional[str] = ""
+    length: Optional[str] = ""
+    diameter: Optional[str] = ""
+    min_stock: float = 0.0
+    current_stock: float = 0.0
+    location: Optional[str] = ""
+    note: Optional[str] = ""
+
+
+class ToolHolderStockIn(BaseModel):
+    quantity: float
+    supplier: Optional[str] = ""
+    supplier_id: Optional[str] = None
+    note: Optional[str] = ""
+
+
+class ToolHolderStockOut(BaseModel):
+    quantity: float
+    machine_id: str
+    personnel_id: Optional[str] = None
+    note: Optional[str] = ""
 
 
 class PersonnelIn(BaseModel):
@@ -246,6 +273,7 @@ async def startup():
         pass
     await db.machines.create_index("code", unique=True)
     await db.movements.create_index("created_at")
+    await db.toolholder_movements.create_index("created_at")
 
     admin_email = os.environ.get("ADMIN_EMAIL", "").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "")
@@ -269,14 +297,22 @@ async def startup():
             await db.users.update_one({"email": admin_email}, {"$set": update})
 
     if await db.products.count_documents({}) == 0:
-        for p in SAMPLE_PRODUCTS:
-            await db.products.insert_one({**p, "id": new_id(), "created_at": now_utc().isoformat()})
-    if await db.personnel.count_documents({}) == 0:
-        for p in SAMPLE_PERSONNEL:
-            await db.personnel.insert_one({**p, "id": new_id(), "created_at": now_utc().isoformat()})
-    if await db.machines.count_documents({}) == 0:
-        for m in SAMPLE_MACHINES:
-            await db.machines.insert_one({**m, "id": new_id(), "created_at": now_utc().isoformat()})
+        # Guard: only auto-seed sample data if never seeded before. After wipe-all
+        # (or manual seed flag insert) sample data will NOT return on restart.
+        seeded_marker = await db.settings.find_one({"key": "sample_seeded"})
+        if not seeded_marker:
+            for p in SAMPLE_PRODUCTS:
+                await db.products.insert_one({**p, "id": new_id(), "created_at": now_utc().isoformat()})
+            if await db.personnel.count_documents({}) == 0:
+                for p in SAMPLE_PERSONNEL:
+                    await db.personnel.insert_one({**p, "id": new_id(), "created_at": now_utc().isoformat()})
+            if await db.machines.count_documents({}) == 0:
+                for m in SAMPLE_MACHINES:
+                    await db.machines.insert_one({**m, "id": new_id(), "created_at": now_utc().isoformat()})
+            await db.settings.update_one({"key": "sample_seeded"},
+                                         {"$set": {"key": "sample_seeded", "value": True,
+                                                   "at": now_utc().isoformat()}},
+                                         upsert=True)
 
 
 @app.on_event("shutdown")
@@ -852,6 +888,128 @@ async def report_by_supplier(user=Depends(get_current_user),
         agg[key]["total"] += m.get("total", 0)
         agg[key]["count"] += 1
     return [{"name": k, **v} for k, v in sorted(agg.items(), key=lambda x: -x[1]["total"])]
+
+
+# ==================== Tool Holders (Takım Tutucular) ====================
+@api.get("/toolholders")
+async def list_toolholders(user=Depends(get_current_user)):
+    return await db.toolholders.find({}, {"_id": 0}).sort("name", 1).to_list(2000)
+
+
+@api.post("/toolholders")
+async def create_toolholder(body: ToolHolderIn_Model, user=Depends(require_admin)):
+    doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat()}
+    await db.toolholders.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/toolholders/{tid}")
+async def update_toolholder(tid: str, body: ToolHolderIn_Model, user=Depends(require_admin)):
+    existing = await db.toolholders.find_one({"id": tid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
+    await db.toolholders.update_one({"id": tid}, {"$set": body.model_dump()})
+    return await db.toolholders.find_one({"id": tid}, {"_id": 0})
+
+
+@api.delete("/toolholders/{tid}")
+async def delete_toolholder(tid: str, user=Depends(require_admin)):
+    r = await db.toolholders.delete_one({"id": tid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
+    return {"ok": True}
+
+
+@api.post("/toolholders/{tid}/in")
+async def toolholder_in(tid: str, body: ToolHolderStockIn, user=Depends(require_admin)):
+    """Takımhaneye giriş: stok artar."""
+    h = await db.toolholders.find_one({"id": tid})
+    if not h:
+        raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
+    new_stock = h.get("current_stock", 0) + body.quantity
+    await db.toolholders.update_one({"id": tid}, {"$set": {"current_stock": new_stock}})
+    mv = {
+        "id": new_id(), "type": "in", "tool_holder_id": h["id"], "name": h["name"],
+        "brand": h.get("brand", ""), "holder_type": h.get("type", ""),
+        "length": h.get("length", ""), "diameter": h.get("diameter", ""),
+        "quantity": body.quantity,
+        "supplier": body.supplier or "", "supplier_id": body.supplier_id or "",
+        "note": body.note or "",
+        "user_id": user["id"], "user_name": user["name"],
+        "created_at": now_utc().isoformat(),
+    }
+    await db.toolholder_movements.insert_one(mv)
+    return {"ok": True, "new_stock": new_stock, "movement": clean(mv)}
+
+
+@api.post("/toolholders/{tid}/out")
+async def toolholder_out(tid: str, body: ToolHolderStockOut, user=Depends(require_admin)):
+    """Tezgaha çıkış: hangi tezgaha bağlandığı bilgisi ile stoktan düşer."""
+    h = await db.toolholders.find_one({"id": tid})
+    if not h:
+        raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
+    if body.quantity > h.get("current_stock", 0):
+        raise HTTPException(status_code=400, detail="Yetersiz stok")
+    machine = await db.machines.find_one({"id": body.machine_id})
+    if not machine:
+        raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
+    personnel = None
+    if body.personnel_id:
+        personnel = await db.personnel.find_one({"id": body.personnel_id})
+    new_stock = h["current_stock"] - body.quantity
+    await db.toolholders.update_one({"id": tid}, {"$set": {"current_stock": new_stock}})
+    mv = {
+        "id": new_id(), "type": "out", "tool_holder_id": h["id"], "name": h["name"],
+        "brand": h.get("brand", ""), "holder_type": h.get("type", ""),
+        "length": h.get("length", ""), "diameter": h.get("diameter", ""),
+        "quantity": body.quantity,
+        "machine_id": machine["id"], "machine_name": machine["name"],
+        "machine_code": machine.get("code", ""),
+        "personnel_id": personnel["id"] if personnel else "",
+        "personnel_name": f"{personnel['first_name']} {personnel['last_name']}" if personnel else "",
+        "note": body.note or "",
+        "user_id": user["id"], "user_name": user["name"],
+        "created_at": now_utc().isoformat(),
+    }
+    await db.toolholder_movements.insert_one(mv)
+    return {"ok": True, "new_stock": new_stock, "movement": clean(mv)}
+
+
+@api.get("/toolholder-movements")
+async def list_toolholder_movements(user=Depends(get_current_user),
+                                    tool_holder_id: Optional[str] = None,
+                                    type: Optional[str] = None,
+                                    limit: int = 500):
+    q = {}
+    if tool_holder_id:
+        q["tool_holder_id"] = tool_holder_id
+    if type:
+        q["type"] = type
+    return await db.toolholder_movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+
+# ==================== Admin: wipe all business data ====================
+@api.post("/admin/wipe-all")
+async def wipe_all_data(user=Depends(require_admin)):
+    """Sadece admin: tüm işletme verilerini siler (ürünler, personel, tezgahlar, tedarikçiler, siparişler, hareketler, tutucular). Kullanıcı hesapları korunur. Ayrıca 'sample_seeded' işaretini set ederek yeniden başlatmada örnek veri tekrar eklenmesini önler."""
+    collections = ["products", "personnel", "machines", "suppliers", "orders",
+                   "movements", "toolholders", "toolholder_movements",
+                   "password_resets"]
+    result = {}
+    for c in collections:
+        r = await db[c].delete_many({})
+        result[c] = r.deleted_count
+    await db.settings.update_one({"key": "sample_seeded"},
+                                 {"$set": {"key": "sample_seeded", "value": True,
+                                           "at": now_utc().isoformat(),
+                                           "reason": "wiped by admin"}},
+                                 upsert=True)
+    return {"ok": True, "deleted": result}
 
 
 # ==================== Orders ====================

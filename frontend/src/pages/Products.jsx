@@ -5,7 +5,7 @@ import { Plus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } f
 import ProductImport from "@/components/ProductImport";
 import { useAuth } from "@/context/AuthContext";
 
-const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "" };
+const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", is_special: false };
 const DEFAULT_CATS = ["Kesici Uç", "Matkap", "Kater", "Apparat", "Ölçüm Aleti", "Diğer"];
 const CATS_STORAGE_KEY = "cnc_extra_categories";
 
@@ -42,8 +42,14 @@ export default function Products() {
   };
 
   const filtered = items.filter((p) => {
-    const s = q.toLowerCase();
-    return !s || (p.code || "").toLowerCase().includes(s) || p.name.toLowerCase().includes(s)
+    const s = q.toLowerCase().trim();
+    if (!s) return true;
+    // "özel takım" araması ~ tüm özel takımları getir
+    const normalized = s.replace(/ı/g, "i").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ç/g, "c").replace(/ş/g, "s").replace(/ğ/g, "g");
+    if (["ozel", "ozel takim", "özel", "özel takım", "special"].some((k) => normalized.includes(k))) {
+      if (p.is_special) return true;
+    }
+    return (p.code || "").toLowerCase().includes(s) || p.name.toLowerCase().includes(s)
       || (p.category || "").toLowerCase().includes(s) || (p.location || "").toLowerCase().includes(s)
       || (p.brand || "").toLowerCase().includes(s) || (p.quality || "").toLowerCase().includes(s);
   });
@@ -54,6 +60,7 @@ export default function Products() {
       ...form,
       min_stock: parseFloat(form.min_stock) || 0,
       current_stock: parseFloat(form.current_stock) || 0,
+      is_special: !!form.is_special,
     };
     try {
       if (editId) await api.put(`/products/${editId}`, payload);
@@ -163,6 +170,18 @@ export default function Products() {
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Mevcut Stok</label>
             <input type="number" step="0.01" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} data-testid="pf-current" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3 font-mono-tab" />
           </div>
+          <div className="md:col-span-3">
+            <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 bg-slate-950 hover:border-blue-500/50 cursor-pointer select-none">
+              <input type="checkbox" checked={!!form.is_special}
+                onChange={(e) => setForm({ ...form, is_special: e.target.checked })}
+                data-testid="pf-special"
+                className="w-5 h-5 accent-blue-600" />
+              <span className="text-sm">
+                <span className="font-semibold text-blue-300">Özel Takım</span>
+                <span className="text-slate-500 ml-2 text-xs">— Bu ürün özel takım olarak işaretlenir. "özel takım" araması yapıldığında tüm işaretli ürünler listelenir.</span>
+              </span>
+            </label>
+          </div>
           <div className="md:col-span-3 flex gap-3">
             <button type="submit" data-testid="pf-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">Kaydet</button>
             <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">İptal</button>
@@ -191,7 +210,16 @@ export default function Products() {
                 return (
                   <tr key={p.id} data-testid={`product-row-${p.code}`} className={`h-16 hover:bg-slate-700/40 ${crit ? "bg-red-950/20" : ""}`}>
                     <td className="px-4 font-mono-tab font-semibold text-slate-300">{p.code}</td>
-                    <td className="px-4 font-medium">{p.name}</td>
+                    <td className="px-4 font-medium">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{p.name}</span>
+                        {p.is_special && (
+                          <span data-testid={`product-special-badge-${p.code}`} className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/40 rounded px-1.5 py-0.5">
+                            Özel Takım
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 text-slate-400 text-sm">{p.category}</td>
                     <td className="px-4 text-slate-400 text-sm">
                       {p.brand && <span className="text-slate-300">{p.brand}</span>}

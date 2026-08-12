@@ -19,7 +19,7 @@ if not BASE_URL:
 
 API = f"{BASE_URL}/api"
 ADMIN_EMAIL = "takimhane@yazkan.com.tr"
-ADMIN_PW = "Admin123!"
+ADMIN_PW = "123456"
 LEGACY_EMAIL = "tetikabdullahh06@gmail.com"
 
 EXPECTED_403_DETAIL = "Bu işlem için yönetici yetkisi gerekli. Sadece görüntüleme yapabilirsiniz."

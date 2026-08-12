@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 6 testing complete for Tool Holders (Takım Tutucular) + Özel Takım (is_special) product flag + admin wipe-all endpoint. Added /app/backend/tests/test_toolholders.py (19 new tests): CRUD, stock in/out flows, movement filtering, RBAC 403s, ToolHolder↔Product isolation, is_special create/default/tolerance. Updated ADMIN_PW '123456' in test_rbac.py and backend_test.py to match new .env credential. FULL SUITE: 97 passed / 1 skipped (legacy user absent) in 135s. Frontend E2E via Playwright verified: admin login OK, nav-toolholders visible, Yeni Tutucu creates row with all fields, th-in modal contains NO machine dropdown (correct), th-out modal REQUIRES machine dropdown (correct), machine list populated, decrements stock; Ürünler page pf-special checkbox exists, creating with pf-special=true shows ÖZEL TAKIM badge, searching 'özel takım' filters to only is_special=true products. Wipe-all executed as final cleanup — deleted 10 products / 5 personnel / 4 machines / 1 order / 93 movements / 2 toolholders / 12 toolholder_movements; all list endpoints now return []. Admin user preserved. Viewer wipe attempt returns 403.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "TakimTutucular Çıkış modal (machine dropdown)", "issues": ["React hydration warning: <span> is being rendered inside <option> (options in machine dropdown contain a highlighted code span). Non-blocking but should be a plain string like `${code} — ${name}` without inner spans to eliminate console warning."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_toolholders.py",
+    "/app/backend/tests/test_rbac.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter6_toolholders.xml",
+    "/app/test_reports/pytest/iter6_full.xml"
+  ],
+  "action_items": [
+    "Consider simplifying the machine <option> children to a plain text template to remove the React hydration warning (<span> child of <option>)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1434 lines — well past the 700-line guideline. Split into APIRouter modules (auth, products, toolholders, orders, reports, admin) for maintainability.",
+    "ToolHolder /out endpoint correctly enforces machine_id at Pydantic level (missing => 422) and at business level (invalid id => 404) — good layered validation.",
+    "Role check (require_admin) is applied on every mutation endpoint including /admin/wipe-all — verified by 403 on viewer attempt.",
+    "clean() removes _id but /toolholders GET already excludes _id via projection — consistent.",
+    "is_special has bool default False on Pydantic model, and existing docs without the field are gracefully treated as false in the frontend — tolerance confirmed.",
+    "Startup seed re-inserts SAMPLE_PRODUCTS / PERSONNEL / MACHINES whenever the collection is empty — that means the next backend restart AFTER the wipe will reseed sample data. The 'guard flag' comment in code (line 308-309) is not actually implemented. If the user restarts, sample data will reappear. Consider adding a real guard doc in a config collection or checking a marker before seeding."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_toolholders.py (new — 19 tests)",
+    "/app/backend/tests/test_rbac.py (ADMIN_PW Admin123! → 123456)",
+    "/app/backend/tests/backend_test.py (ADMIN_PW Admin123! → 123456)"
+  ],
+  "success_rate": {"backend": "100% (97/97 executed, 1 skipped legacy-user)", "frontend": "100% (all iter6 flows verified)"},
+  "test_credentials": "Admin: takimhane@yazkan.com.tr / 123456. Viewers registered dynamically per session.",
+  "seed_data_creation": "Ephemeral TEST_TH_* toolholders and TEST_Special_* products created per test and deleted in finally blocks. UI test created UI_Test_Holder_* and UI_Special_* which were wiped by final /api/admin/wipe-all.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter6 introduced /api/toolholders CRUD + /in + /out, /api/toolholder-movements list, is_special on ProductIn, /api/admin/wipe-all. Test module: /app/backend/tests/test_toolholders.py. Admin credentials in .env are now takimhane@yazkan.com.tr / 123456 (NOT Admin123!). All tests use these constants. Frontend testids: nav-toolholders, th-add-btn, th-f-name/brand/type/length/diameter/location/min/current, th-f-submit, th-row-<id>, th-in-<id>, th-out-<id>, th-stock-qty, th-stock-machine, th-stock-submit; pf-special, product-special-badge-<code>. Database was wiped clean at end — subsequent runs must seed via admin flow (or backend restart will auto-reseed SAMPLE_* products/personnel/machines because seed condition is 'count==0').",
+  "rca of the issue": "N/A — no bugs found. Only mechanical change required was updating ADMIN_PW constant in existing test files to match the new .env password (123456)."
+}

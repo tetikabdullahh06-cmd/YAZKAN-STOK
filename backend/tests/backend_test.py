@@ -23,7 +23,7 @@ if not BASE_URL:
 
 API = f"{BASE_URL}/api"
 ADMIN_EMAIL = "takimhane@yazkan.com.tr"
-ADMIN_PW = "Admin123!"
+ADMIN_PW = "123456"
 
 
 @pytest.fixture(scope="session")

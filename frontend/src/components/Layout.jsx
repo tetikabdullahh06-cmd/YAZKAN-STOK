@@ -13,6 +13,7 @@ const NAV = [
   { to: "/urunler", label: "Ürünler", icon: Package, testid: "nav-products" },
   { to: "/personel", label: "Personel", icon: Users, testid: "nav-personnel" },
   { to: "/tezgahlar", label: "Tezgahlar", icon: Settings2, testid: "nav-machines" },
+  { to: "/takim-tutucular", label: "Takım Tutucular", icon: Wrench, testid: "nav-toolholders" },
   { to: "/tedarikciler", label: "Tedarikçiler", icon: Building2, testid: "nav-suppliers" },
   { to: "/siparisler", label: "Siparişler", icon: ClipboardList, testid: "nav-orders" },
   { to: "/hareketler", label: "Hareketler", icon: History, testid: "nav-movements" },
