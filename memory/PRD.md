@@ -1,54 +1,23 @@
 # CNC Takımhane Stok Takip — PRD
 
 ## Original problem statement
-Turkish CNC toolroom web + mobile stock/personnel/machine consumption tracking for 5 users with equal rights.
-
-## User personas
-- Toolroom operator/technician (5 users, single role)
-
-## Core requirements
-- Product / Personnel / Machine / Supplier / Order CRUD
-- Stock IN (supplier, qty, price) — Stock OUT (personnel + machine)
-- Critical stock: dashboard + email alert
-- Reports: by product / personnel / machine / supplier + Excel export
-- Dashboard: KPIs + top consumers + recent movements
-- Daily digest email at 08:00 Europe/Istanbul
-- QR / barcode scan on stock in & out
-- PWA (install to home screen)
+Turkish CNC toolroom stock/personnel/machine consumption tracking for 5 users.
 
 ## Implemented (2026-02)
-### Iteration 1 (MVP - Faz 1-4)
-- JWT auth (register / login / me / logout), admin seeded
-- Sample data (8 products, 5 personnel, 4 machines)
-- Full CRUD: products (with custom category), personnel, machines
-- Stock in/out with movement history + filters
-- Critical stock endpoint + email (6h dedupe, Resend)
-- Dashboard, reports summary, Excel export
-- Turkish industrial dark UI (Chivo + IBM Plex Sans)
-- Backend: 22/22 pytest passing
+### Iteration 1 — MVP (Faz 1-4)
+JWT auth, admin seeded, sample data. CRUD: products (custom category), personnel, machines. Stock in/out, movements, critical stock email, dashboard, reports + Excel. Turkish dark UI. Backend 22/22.
 
-### Iteration 2 (Faz 5-6)
-- **PWA**: manifest.json + service worker, "install to home screen" ready
-- **QR / Barkod tarama**: html5-qrcode ile stok girişi + çıkışı ekranlarında kamera butonu
-- **Günlük özet e-postası**: APScheduler cron 08:00 Europe/Istanbul, dünkü giriş/çıkış detay HTML tablosu
-- **Tedarikçiler**: CRUD + tedarikçi kartları + toplam alım tutarı
-- **Siparişler**: Sipariş oluşturma (kalemler, teslim tarihi), açık/kapalı filtresi, "Kapat & Stoğa İşle" akışı otomatik stok girişi yaratır
-- Stok girişi ekranı tedarikçi dropdown ile bağlı
-- Rapor: tedarikçi bazlı toplam alım (`/api/reports/by-supplier`)
-- Manuel test için `/api/admin/send-daily-digest`
-- Backend: 37/37 pytest passing
+### Iteration 2 — Faz 5-6
+PWA (manifest+SW). QR/barkod tarama (stock in & out). APScheduler daily digest 08:00 Europe/Istanbul. Suppliers CRUD + Orders (line items, delivery, "Kapat & Stoğa İşle"). Report by supplier. Backend 37/37.
+
+### Iteration 3 — Ölçekleme
+**Excel toplu ürün içe aktarma** — şablon indir, dosya yükle, önizleme (create/update/skip stats), tek tıkla uygula. Yeni/güncelle otomatik ayırt edilir. **Kısmi sipariş teslimatı** — sipariş kalemleri için ayrı ayrı teslim miktarı girme, `received_qty` takibi, statü `open → partial → closed`, `Tamamını Kapat` sadece kalanı stoğa işler. Backend 46/46.
 
 ## Backlog / P1
-- Barkod fiziksel scanner (USB) girişi
-- Toplu sipariş içe aktarma (CSV/Excel)
-- Sipariş kapatırken kısmi teslimat desteği
-- Native mobile (Expo) — Emergent yayın desteklediğinde
-
-## P2
-- Rol bazlı yetki (admin / operatör / görüntüleyici)
-- Muhasebe / ERP entegrasyonu
-- Advanced brute-force lockout
-- Router modularization (server.py splitting)
+- USB barkod tabancası desteği
+- Bakım takvimi (tezgah kalibrasyon)
+- Native mobile (Expo) — platform destek verdiğinde
+- Rol bazlı yetki
 
 ## Credentials
-`/app/memory/test_credentials.md`
+`/app/memory/test_credentials.md` — Admin: tetikabdullahh06@gmail.com / Admin123!

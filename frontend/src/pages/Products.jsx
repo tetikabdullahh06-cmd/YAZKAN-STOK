@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet } from "lucide-react";
+import ProductImport from "@/components/ProductImport";
 
 const empty = { code: "", name: "", category: "Kesici Uç", unit: "adet", unit_price: 0, min_stock: 0, current_stock: 0 };
 const DEFAULT_CATS = ["Kesici Uç", "Matkap", "Kater", "Apparat", "Ölçüm Aleti", "Diğer"];
@@ -18,6 +19,7 @@ export default function Products() {
   });
   const [newCat, setNewCat] = useState("");
   const [showNewCat, setShowNewCat] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const load = () => api.get("/products").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -80,6 +82,10 @@ export default function Products() {
         <button onClick={() => { setForm(empty); setEditId(null); setShowForm(true); }} data-testid="product-add-btn"
           className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-900/30">
           <Plus className="w-5 h-5" /> Yeni Ürün
+        </button>
+        <button onClick={() => setShowImport(true)} data-testid="product-import-btn"
+          className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 transition-all active:scale-95">
+          <FileSpreadsheet className="w-5 h-5" /> Excel'den İçe Aktar
         </button>
       </div>
 
@@ -174,6 +180,7 @@ export default function Products() {
           </table>
         </div>
       </div>
+      {showImport && <ProductImport onClose={() => setShowImport(false)} onCommitted={load} />}
     </div>
   );
 }

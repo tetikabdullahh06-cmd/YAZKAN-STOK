@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 import bcrypt
 import jwt
 import httpx
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -176,6 +176,15 @@ class OrderIn(BaseModel):
     delivery_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
     note: Optional[str] = ""
     items: List[OrderItemIn]
+
+
+class ReceiveItemIn(BaseModel):
+    product_id: str
+    quantity: float
+
+
+class ReceiveIn(BaseModel):
+    items: List[ReceiveItemIn]
 
 
 # ---------- Sample Data ----------
@@ -754,7 +763,7 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Kalem miktarı 0'dan büyük olmalı")
         items.append({
             "product_id": prod["id"], "product_code": prod["code"], "product_name": prod["name"],
-            "quantity": it.quantity, "unit_price": it.unit_price,
+            "quantity": it.quantity, "received_qty": 0, "unit_price": it.unit_price,
             "total": round(it.quantity * it.unit_price, 2),
         })
     order = {
@@ -783,10 +792,13 @@ async def close_order(oid: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Sipariş zaten kapalı")
     # Convert each item to a stock-in movement and update product stock
     for it in order.get("items", []):
+        remaining = it["quantity"] - it.get("received_qty", 0)
+        if remaining <= 0:
+            continue
         prod = await db.products.find_one({"id": it["product_id"]})
         if not prod:
             continue
-        new_stock = prod.get("current_stock", 0) + it["quantity"]
+        new_stock = prod.get("current_stock", 0) + remaining
         update = {"current_stock": new_stock}
         if it.get("unit_price", 0) > 0:
             update["unit_price"] = it["unit_price"]
@@ -794,16 +806,19 @@ async def close_order(oid: str, user=Depends(get_current_user)):
         await db.movements.insert_one({
             "id": new_id(), "type": "in", "product_id": prod["id"],
             "product_code": prod["code"], "product_name": prod["name"],
-            "quantity": it["quantity"], "unit_price": it["unit_price"],
-            "total": it["total"],
+            "quantity": remaining, "unit_price": it["unit_price"],
+            "total": round(remaining * it["unit_price"], 2),
             "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
             "note": f"Sipariş #{order['id'][:8]}",
             "order_id": order["id"],
             "user_id": user["id"], "user_name": user["name"],
             "created_at": now_utc().isoformat(),
         })
+        it["received_qty"] = it["quantity"]
     await db.orders.update_one({"id": oid},
-                               {"$set": {"status": "closed", "closed_at": now_utc().isoformat()}})
+                               {"$set": {"status": "closed",
+                                         "closed_at": now_utc().isoformat(),
+                                         "items": order["items"]}})
     return await db.orders.find_one({"id": oid}, {"_id": 0})
 
 
@@ -813,6 +828,165 @@ async def delete_order(oid: str, user=Depends(get_current_user)):
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
     return {"ok": True}
+
+
+@api.post("/orders/{oid}/receive")
+async def receive_order(oid: str, body: ReceiveIn, user=Depends(get_current_user)):
+    order = await db.orders.find_one({"id": oid})
+    if not order:
+        raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
+    if order.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Sipariş zaten kapalı")
+    if not body.items:
+        raise HTTPException(status_code=400, detail="Teslim alınacak kalem yok")
+
+    new_items = [dict(it) for it in order["items"]]
+    any_received_now = False
+
+    for rcv in body.items:
+        if rcv.quantity <= 0:
+            continue
+        it = next((x for x in new_items if x["product_id"] == rcv.product_id), None)
+        if not it:
+            raise HTTPException(status_code=400, detail="Kalem sipariste yok")
+        remaining = it["quantity"] - it.get("received_qty", 0)
+        if rcv.quantity > remaining + 1e-9:
+            raise HTTPException(status_code=400,
+                                detail=f"{it['product_name']}: kalan {remaining} birim, fazla teslim alınamaz")
+        it["received_qty"] = it.get("received_qty", 0) + rcv.quantity
+        any_received_now = True
+
+        prod = await db.products.find_one({"id": it["product_id"]})
+        if prod:
+            new_stock = prod.get("current_stock", 0) + rcv.quantity
+            update = {"current_stock": new_stock}
+            if it.get("unit_price", 0) > 0:
+                update["unit_price"] = it["unit_price"]
+            await db.products.update_one({"id": prod["id"]}, {"$set": update})
+            await db.movements.insert_one({
+                "id": new_id(), "type": "in", "product_id": prod["id"],
+                "product_code": prod["code"], "product_name": prod["name"],
+                "quantity": rcv.quantity, "unit_price": it.get("unit_price", 0),
+                "total": round(rcv.quantity * it.get("unit_price", 0), 2),
+                "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
+                "note": f"Sipariş #{order['id'][:8]} kısmi teslimat",
+                "order_id": order["id"],
+                "user_id": user["id"], "user_name": user["name"],
+                "created_at": now_utc().isoformat(),
+            })
+
+    if not any_received_now:
+        raise HTTPException(status_code=400, detail="Geçerli teslim miktarı yok")
+
+    all_received = all(it.get("received_qty", 0) >= it["quantity"] - 1e-9 for it in new_items)
+    new_status = "closed" if all_received else "partial"
+    update_doc = {"items": new_items, "status": new_status}
+    if new_status == "closed":
+        update_doc["closed_at"] = now_utc().isoformat()
+    await db.orders.update_one({"id": oid}, {"$set": update_doc})
+    return await db.orders.find_one({"id": oid}, {"_id": 0})
+
+
+# ==================== Products bulk import ====================
+@api.get("/products/import/template")
+async def product_import_template(user=Depends(get_current_user)):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ürünler"
+    ws.append(["code", "name", "category", "unit", "unit_price", "min_stock", "current_stock"])
+    ws.append(["KU-999", "Örnek Kesici Uç", "Kesici Uç", "adet", 100.00, 10, 25])
+    ws.append(["MT-999", "Örnek Matkap Ø8", "Matkap", "adet", 50.00, 5, 15])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="urun_sablonu.xlsx"'},
+    )
+
+
+@api.post("/products/import")
+async def product_import(file: UploadFile = File(...), commit: bool = False,
+                         user=Depends(get_current_user)):
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Sadece .xlsx dosyası yükleyin")
+    content = await file.read()
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Excel dosyası okunamadı")
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        raise HTTPException(status_code=400, detail="Dosyada veri yok (başlık + en az bir satır gerekli)")
+
+    header = [str(c).strip().lower() if c else "" for c in rows[0]]
+    idx = {h: i for i, h in enumerate(header) if h}
+    for r in ("code", "name", "category"):
+        if r not in idx:
+            raise HTTPException(status_code=400, detail=f"Zorunlu sütun eksik: {r}")
+
+    def _get(row, col, default=None):
+        i = idx.get(col)
+        return row[i] if (i is not None and i < len(row)) else default
+
+    preview = []
+    for row_num, row in enumerate(rows[1:], start=2):
+        if not row or all(v is None or str(v).strip() == "" for v in row):
+            continue
+        code = str(_get(row, "code") or "").strip()
+        name = str(_get(row, "name") or "").strip()
+        category = str(_get(row, "category") or "").strip()
+        if not code or not name or not category:
+            preview.append({"row": row_num, "action": "skip",
+                            "error": "code/name/category boş olamaz",
+                            "data": {"code": code, "name": name, "category": category}})
+            continue
+        try:
+            unit = str(_get(row, "unit") or "adet").strip() or "adet"
+            unit_price = float(_get(row, "unit_price") or 0)
+            min_stock = float(_get(row, "min_stock") or 0)
+            current_stock = float(_get(row, "current_stock") or 0)
+        except (TypeError, ValueError):
+            preview.append({"row": row_num, "action": "skip",
+                            "error": "unit_price / min_stock / current_stock sayı olmalı",
+                            "data": {"code": code}})
+            continue
+        existing = await db.products.find_one({"code": code})
+        action = "update" if existing else "create"
+        preview.append({
+            "row": row_num, "action": action, "error": None,
+            "data": {"code": code, "name": name, "category": category, "unit": unit,
+                     "unit_price": unit_price, "min_stock": min_stock,
+                     "current_stock": current_stock},
+        })
+
+    stats = {
+        "total": len(preview),
+        "create": sum(1 for p in preview if p["action"] == "create"),
+        "update": sum(1 for p in preview if p["action"] == "update"),
+        "skip": sum(1 for p in preview if p["action"] == "skip"),
+    }
+
+    if not commit:
+        return {"committed": False, "stats": stats, "preview": preview}
+
+    created, updated = 0, 0
+    for p in preview:
+        if p["action"] == "skip":
+            continue
+        d = p["data"]
+        if p["action"] == "create":
+            await db.products.insert_one({**d, "id": new_id(),
+                                          "created_at": now_utc().isoformat()})
+            created += 1
+        else:
+            await db.products.update_one({"code": d["code"]}, {"$set": d})
+            updated += 1
+    return {"committed": True, "stats": stats, "created": created,
+            "updated": updated, "preview": preview}
 
 
 # ==================== Daily digest email + scheduler ====================

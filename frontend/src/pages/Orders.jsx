@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2, Package, Loader2, X } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Package, PackageCheck, Loader2, X } from "lucide-react";
+import OrderReceive from "@/components/OrderReceive";
 
 const currency = (v) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(v || 0);
 
@@ -17,6 +18,7 @@ export default function Orders() {
   const [items, setItems] = useState([{ product_id: "", quantity: "", unit_price: "" }]);
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(null);
+  const [receiveOrder, setReceiveOrder] = useState(null);
 
   const load = async () => {
     const p = {};
@@ -103,6 +105,7 @@ export default function Orders() {
       <div className="flex gap-2 flex-wrap">
         <button onClick={() => setStatusFilter("")} className={`h-10 px-4 rounded-lg text-sm font-semibold ${!statusFilter ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}>Tümü</button>
         <button onClick={() => setStatusFilter("open")} className={`h-10 px-4 rounded-lg text-sm font-semibold ${statusFilter === "open" ? "bg-amber-600 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}>Açık</button>
+        <button onClick={() => setStatusFilter("partial")} className={`h-10 px-4 rounded-lg text-sm font-semibold ${statusFilter === "partial" ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}>Kısmi</button>
         <button onClick={() => setStatusFilter("closed")} className={`h-10 px-4 rounded-lg text-sm font-semibold ${statusFilter === "closed" ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}>Kapalı</button>
       </div>
 
@@ -171,8 +174,12 @@ export default function Orders() {
             <div key={o.id} className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-700">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${o.status === "open" ? "text-amber-400 bg-amber-500/10 border-amber-500/30" : "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"}`}>
-                    {o.status === "open" ? "Açık" : "Kapalı"}
+                  <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
+                    o.status === "open" ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+                    : o.status === "partial" ? "text-blue-400 bg-blue-500/10 border-blue-500/30"
+                    : "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                  }`}>
+                    {o.status === "open" ? "Açık" : o.status === "partial" ? "Kısmi" : "Kapalı"}
                   </span>
                   <div>
                     <div className="font-display font-bold">{o.supplier_name}</div>
@@ -185,30 +192,48 @@ export default function Orders() {
                     <div className="text-xs text-slate-500 uppercase tracking-widest">Tutar</div>
                     <div className="font-mono-tab font-bold text-emerald-400">{currency(o.total)}</div>
                   </div>
-                  {o.status === "open" && (
-                    <button onClick={() => closeOrder(o)} disabled={closing === o.id} data-testid={`ord-close-${o.id.slice(0,8)}`}
-                      className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-1 disabled:opacity-50">
-                      {closing === o.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Kapat & Stoğa İşle
-                    </button>
+                  {o.status !== "closed" && (
+                    <>
+                      <button onClick={() => setReceiveOrder(o)} data-testid={`ord-receive-${o.id.slice(0,8)}`}
+                        className="h-10 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center gap-1">
+                        <PackageCheck className="w-4 h-4" /> Teslimat Al
+                      </button>
+                      <button onClick={() => closeOrder(o)} disabled={closing === o.id} data-testid={`ord-close-${o.id.slice(0,8)}`}
+                        className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-1 disabled:opacity-50">
+                        {closing === o.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Tamamını Kapat
+                      </button>
+                    </>
                   )}
                   <button onClick={() => del(o)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
               <div className="divide-y divide-slate-700">
-                {o.items.map((it, i) => (
-                  <div key={i} className="flex justify-between items-center px-5 py-2 text-sm">
-                    <div><span className="font-mono-tab text-slate-500">{it.product_code}</span> <span className="text-slate-200">{it.product_name}</span></div>
-                    <div className="flex gap-4 font-mono-tab">
-                      <span className="text-slate-400">{it.quantity} × {currency(it.unit_price)}</span>
-                      <span className="text-slate-100 font-bold w-28 text-right">{currency(it.total)}</span>
+                {o.items.map((it, i) => {
+                  const rec = it.received_qty || 0;
+                  const remaining = (it.quantity || 0) - rec;
+                  return (
+                    <div key={i} className="flex justify-between items-center px-5 py-2 text-sm gap-3">
+                      <div className="min-w-0"><span className="font-mono-tab text-slate-500">{it.product_code}</span> <span className="text-slate-200">{it.product_name}</span></div>
+                      <div className="flex gap-4 items-center font-mono-tab shrink-0">
+                        <span className="text-slate-400 text-xs">{it.quantity} × {currency(it.unit_price)}</span>
+                        {rec > 0 && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full border ${remaining <= 0 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" : "text-blue-400 bg-blue-500/10 border-blue-500/30"}`}>
+                            {remaining <= 0 ? "✓ Alındı" : `${rec}/${it.quantity} alındı`}
+                          </span>
+                        )}
+                        <span className="text-slate-100 font-bold w-28 text-right">{currency(it.total)}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {o.note && <div className="px-5 py-3 border-t border-slate-700 text-xs text-slate-400">Not: {o.note}</div>}
             </div>
           ))}
         </div>
+      )}
+      {receiveOrder && (
+        <OrderReceive order={receiveOrder} onClose={() => setReceiveOrder(null)} onReceived={load} />
       )}
     </div>
   );

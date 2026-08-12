@@ -468,3 +468,234 @@ class TestAuthProtectionV2:
         r = getattr(requests, method)(f"{API}{path}", json={})
         assert r.status_code == 401
 
+
+
+# ==================== Iteration 3: Products bulk import ====================
+class TestProductImport:
+    def test_template_download(self, h):
+        r = requests.get(f"{API}/products/import/template", headers=h)
+        assert r.status_code == 200
+        assert "spreadsheetml" in r.headers.get("Content-Type", "")
+        assert len(r.content) > 1000
+        # Validate content is a real xlsx
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(r.content))
+        ws = wb.active
+        header = [c.value for c in ws[1]]
+        for col in ("code", "name", "category"):
+            assert col in header, f"template header missing {col}"
+        # Has at least one example row
+        assert ws.max_row >= 2
+
+    def test_template_auth(self):
+        r = requests.get(f"{API}/products/import/template")
+        assert r.status_code == 401
+
+    def _make_xlsx(self, rows):
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        for r in rows:
+            ws.append(r)
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf
+
+    def test_import_rejects_non_xlsx(self, h):
+        files = {"file": ("bad.txt", b"hello", "text/plain")}
+        r = requests.post(f"{API}/products/import", headers=h, files=files)
+        assert r.status_code == 400
+        assert "xlsx" in r.json().get("detail", "").lower()
+
+    def test_import_missing_required_column(self, h):
+        buf = self._make_xlsx([
+            ["code", "name"],  # missing category
+            ["X-1", "Test", ],
+        ])
+        files = {"file": ("bad.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        r = requests.post(f"{API}/products/import", headers=h, files=files)
+        assert r.status_code == 400
+        assert "category" in r.json().get("detail", "").lower()
+
+    def test_import_preview_then_commit(self, h):
+        # Fetch an existing seeded product to use for update
+        existing_list = requests.get(f"{API}/products", headers=h).json()
+        existing = existing_list[0]
+        existing_code = existing["code"]
+        existing_old_name = existing["name"]
+
+        new_code = f"IMP-{uuid.uuid4().hex[:6]}"
+        buf = self._make_xlsx([
+            ["code", "name", "category", "unit", "unit_price", "min_stock", "current_stock"],
+            [existing_code, "TEST_Updated_Name", existing.get("category", "Kesici Uç"), "adet", 123.45, 3, 7],
+            [new_code, "TEST_Import New", "Test Cat", "adet", 15.0, 2, 5],
+            ["", "no code", "cat", "adet", 0, 0, 0],  # skip
+            ["OK-CODE", "", "cat", "adet", 0, 0, 0],  # skip (missing name)
+        ])
+        files = {"file": ("import.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+
+        # Preview (commit=false)
+        r = requests.post(f"{API}/products/import", headers=h, files=files)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["committed"] is False
+        stats = d["stats"]
+        assert stats["total"] == 4
+        assert stats["update"] >= 1
+        assert stats["create"] >= 1
+        assert stats["skip"] == 2
+        assert isinstance(d["preview"], list)
+        # verify actions
+        actions_by_code = {p["data"].get("code"): p["action"] for p in d["preview"]}
+        assert actions_by_code.get(existing_code) == "update"
+        assert actions_by_code.get(new_code) == "create"
+
+        # Commit (need a fresh file handle)
+        buf2 = self._make_xlsx([
+            ["code", "name", "category", "unit", "unit_price", "min_stock", "current_stock"],
+            [existing_code, "TEST_Updated_Name", existing.get("category", "Kesici Uç"), "adet", 123.45, 3, 7],
+            [new_code, "TEST_Import New", "Test Cat", "adet", 15.0, 2, 5],
+        ])
+        files2 = {"file": ("import.xlsx", buf2, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        rc = requests.post(f"{API}/products/import?commit=true", headers=h, files=files2)
+        assert rc.status_code == 200, rc.text
+        dc = rc.json()
+        assert dc["committed"] is True
+        assert dc["created"] >= 1
+        assert dc["updated"] >= 1
+
+        # Verify persistence
+        after = requests.get(f"{API}/products", headers=h).json()
+        upd = next((p for p in after if p["code"] == existing_code), None)
+        assert upd is not None
+        assert upd["name"] == "TEST_Updated_Name"
+        new_p = next((p for p in after if p["code"] == new_code), None)
+        assert new_p is not None
+        assert new_p["name"] == "TEST_Import New"
+
+        # Cleanup - restore existing name, delete new
+        requests.put(f"{API}/products/{upd['id']}", headers=h, json={
+            **upd, "name": existing_old_name,
+        })
+        requests.delete(f"{API}/products/{new_p['id']}", headers=h)
+
+
+# ==================== Iteration 3: Partial receive ====================
+class TestPartialReceive:
+    def _mkorder(self, h, qtys=(6, 4)):
+        sname = f"TEST_PRSup_{uuid.uuid4().hex[:6]}"
+        sid = requests.post(f"{API}/suppliers", headers=h, json={"name": sname}).json()["id"]
+        pcode = f"PR-{uuid.uuid4().hex[:6]}"
+        p = requests.post(f"{API}/products", headers=h, json={
+            "code": pcode, "name": "TEST PR", "category": "T", "unit": "adet",
+            "unit_price": 1.0, "min_stock": 1, "current_stock": 0,
+        }).json()
+        pid = p["id"]
+        items = [{"product_id": pid, "quantity": q, "unit_price": 5.0} for q in qtys]
+        order = requests.post(f"{API}/orders", headers=h, json={
+            "supplier_id": sid, "delivery_date": "2026-02-01",
+            "items": items,
+        }).json()
+        return sid, pid, order
+
+    def test_new_order_items_have_received_qty_zero(self, h):
+        sid, pid, order = self._mkorder(h, qtys=(3,))
+        for it in order["items"]:
+            assert it.get("received_qty", 0) == 0
+        assert order["status"] == "open"
+        requests.delete(f"{API}/orders/{order['id']}", headers=h)
+        requests.delete(f"{API}/products/{pid}", headers=h)
+        requests.delete(f"{API}/suppliers/{sid}", headers=h)
+
+    def test_partial_receive_flow(self, h):
+        sid, pid, order = self._mkorder(h, qtys=(6,))  # single item, qty 6
+        oid = order["id"]
+        prod_before = requests.get(f"{API}/products", headers=h).json()
+        stock_before = next(p["current_stock"] for p in prod_before if p["id"] == pid)
+
+        # Receive 2 of 6
+        r1 = requests.post(f"{API}/orders/{oid}/receive", headers=h,
+                           json={"items": [{"product_id": pid, "quantity": 2}]})
+        assert r1.status_code == 200, r1.text
+        d1 = r1.json()
+        assert d1["status"] == "partial"
+        assert d1["items"][0]["received_qty"] == 2
+
+        # Filter by status=partial
+        rp = requests.get(f"{API}/orders", headers=h, params={"status": "partial"})
+        assert rp.status_code == 200
+        assert any(o["id"] == oid for o in rp.json())
+
+        # Stock incremented by 2
+        prods = requests.get(f"{API}/products", headers=h).json()
+        assert next(p["current_stock"] for p in prods if p["id"] == pid) == stock_before + 2
+
+        # Movement with 'kısmi teslimat' note
+        mv = requests.get(f"{API}/movements", headers=h,
+                         params={"product_id": pid, "type": "in"}).json()
+        order_mvs = [m for m in mv if m.get("order_id") == oid]
+        assert len(order_mvs) == 1
+        assert "kısmi teslimat" in order_mvs[0].get("note", "")
+
+        # Over-receive attempt (remaining is 4, ask for 10)
+        rov = requests.post(f"{API}/orders/{oid}/receive", headers=h,
+                            json={"items": [{"product_id": pid, "quantity": 10}]})
+        assert rov.status_code == 400
+        det = rov.json().get("detail", "")
+        assert "kalan" in det.lower() and "4" in det
+
+        # Receive remaining 4 -> closed
+        r2 = requests.post(f"{API}/orders/{oid}/receive", headers=h,
+                           json={"items": [{"product_id": pid, "quantity": 4}]})
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["status"] == "closed"
+        assert r2.json()["items"][0]["received_qty"] == 6
+
+        # Receive on closed order = 400
+        r3 = requests.post(f"{API}/orders/{oid}/receive", headers=h,
+                          json={"items": [{"product_id": pid, "quantity": 1}]})
+        assert r3.status_code == 400
+
+        # Final stock = initial + 6
+        prods = requests.get(f"{API}/products", headers=h).json()
+        assert next(p["current_stock"] for p in prods if p["id"] == pid) == stock_before + 6
+
+        # cleanup
+        requests.delete(f"{API}/orders/{oid}", headers=h)
+        requests.delete(f"{API}/products/{pid}", headers=h)
+        requests.delete(f"{API}/suppliers/{sid}", headers=h)
+
+    def test_close_after_partial_only_stocks_remaining(self, h):
+        sid, pid, order = self._mkorder(h, qtys=(10,))
+        oid = order["id"]
+        stock_before = next(p["current_stock"] for p in
+                            requests.get(f"{API}/products", headers=h).json() if p["id"] == pid)
+
+        # Partial: receive 3
+        r1 = requests.post(f"{API}/orders/{oid}/receive", headers=h,
+                           json={"items": [{"product_id": pid, "quantity": 3}]})
+        assert r1.status_code == 200
+        assert r1.json()["status"] == "partial"
+
+        # Close the order — should only add remaining 7 to stock (not full 10)
+        rc = requests.post(f"{API}/orders/{oid}/close", headers=h)
+        assert rc.status_code == 200, rc.text
+        closed = rc.json()
+        assert closed["status"] == "closed"
+        for it in closed["items"]:
+            assert it["received_qty"] == it["quantity"]
+
+        stock_after = next(p["current_stock"] for p in
+                           requests.get(f"{API}/products", headers=h).json() if p["id"] == pid)
+        # 3 from partial + 7 from close = +10 total
+        assert stock_after == stock_before + 10
+
+        # cleanup
+        requests.delete(f"{API}/orders/{oid}", headers=h)
+        requests.delete(f"{API}/products/{pid}", headers=h)
+        requests.delete(f"{API}/suppliers/{sid}", headers=h)
+
+    def test_receive_auth_required(self):
+        r = requests.post(f"{API}/orders/x/receive", json={"items": []})
+        assert r.status_code == 401
