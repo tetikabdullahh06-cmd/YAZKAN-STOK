@@ -1,0 +1,24 @@
+{
+  "summary": "Iter8 BUG FIX verification: /api/toolholders/import & /api/products/import edge cases all pass. Confirmed the root-cause fix — NaN/Inf are now sanitized to 0.0 via _safe_num, so the response body is always valid JSON (no more 'Failed to execute json on Response ... NaN' error). Turkish decimal comma '1,5' parses to 1.5. Datetime cells in string columns coerce to strings cleanly. UTF-8 BOM in name is stripped. Empty numeric cells default to 0.0. Truly bad text 'abc' still triggers row skip with 'sayı olmalı'. RBAC unchanged: viewer POST /api/toolholders/import → 403. commit=true persists sanitized values. Frontend defensive JSON parsing verified in ToolHolderImport.jsx & ProductImport.jsx (await r.text() → JSON.parse in try/catch → toast on failure). Full E2E via Playwright: admin login → /takim-tutucular → open import modal → upload 4-row edge-case xlsx (2 valid + 1 NaN/Inf + 1 Turkish-comma) → preview modal renders stats (Toplam=4, Yeni=4, Skip=0) and preview table with sanitized values (_nan row stock=0, _tr row stock=2.5) — NO JSON parse error toast → click '4 Kaydı Uygula' → success toast '4 yeni, 0 güncellendi' → rows appear on list. All 4 test tool holders deleted afterwards; 0 TEST_ leftovers.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_edge_import.py",
+    "/app/test_reports/pytest/iter8_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_safe_num correctly handles NaN, +/-Inf, Turkish comma, empty strings and None — good defensive coding.",
+    "Both toolholder_import and product_import have DUPLICATE inner helper defs (_safe_str, _safe_num, _get). Consider extracting to module-level helpers to satisfy DRY (identical ~30 lines in two places).",
+    "_safe_str returns '' for None; front-end code does p.data.length ?? '-' which never triggers because empty string is not nullish. Minor cosmetic — table shows blank instead of '-' for missing string cols.",
+    "server.py is 1607 lines — exceeds the >700-line rule in code review guidelines. Split into modules (auth, products, toolholders, orders, reports) for maintainability. Pre-existing, not iter8."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter8_edge_import.py"],
+  "success_rate": {"backend": "100% (11/11 iter8 tests pass)", "frontend": "100% (E2E preview + commit + list refresh verified)"},
+  "test_credentials": "Admin: takimhane@yazkan.com.tr / 123456 — unchanged.",
+  "seed_data_creation": "All 4 tool holders created during E2E (TEST_E2E_TH_b9d94d_*) were deleted post-run. Backend commit-true test also cleaned up its 2 created rows. Final state: 0 TEST_ tool holders, 0 TEST_ products. 456 seed products (YZK*) and 1 leftover test viewer account remain (pre-existing / no user-delete API).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter8 tests: /app/backend/tests/test_iter8_edge_import.py — 11 tests covering NaN/Inf sanitization, Turkish comma, datetime coercion, BOM stripping, empty cells, abc→skip, commit persistence, viewer RBAC and product-import edge cases. Reusable helpers: _xlsx_bytes(), _assert_valid_json(). To run: pytest backend/tests/test_iter8_edge_import.py -v -o addopts='' with REACT_APP_BACKEND_URL env var set. Frontend E2E: file input has data-testid='th-import-file' but is class='hidden' — use page.set_input_files directly (do NOT wait_for_selector visible). Commit button testid='th-import-commit'.",
+  "rca of the issue": "ROOT CAUSE: openpyxl returns float('nan') / float('inf') for cells with literal 'NaN'/'Inf' or math errors. Python's default json.dumps serializes these as literal 'NaN' / 'Infinity' tokens (allow_nan=True by default), which are invalid per RFC 8259. Browser fetch().json() then throws 'Unexpected non-whitespace character after JSON at position 4' when trying to parse. FIX (verified): Both import endpoints now route every numeric cell through _safe_num(v, default=0.0) which returns the default for NaN/Inf and tolerates Turkish decimal comma. All string columns go through _safe_str which stringifies datetimes and strips BOM/whitespace. Response now serializes to valid JSON in every case. Front-end also hardened: uses await r.text() then JSON.parse in try/catch, so even if backend ever returned malformed JSON again, users get a friendly toast instead of a raw browser exception. REPRODUCTION (before fix): upload xlsx with 'NaN' in min_stock → backend returns HTTP 200 body containing literal NaN → fetch().json() throws → modal blank. MITIGATION: fix already in place; regression tests added at test_iter8_edge_import.py."
+}

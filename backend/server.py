@@ -1039,20 +1039,45 @@ async def toolholder_import(file: UploadFile = File(...), commit: bool = False,
 
     def _get(row, col, default=None):
         i = idx.get(col)
-        return row[i] if (i is not None and i < len(row)) else default
+        if i is None or i >= len(row):
+            return default
+        return row[i]
+
+    def _safe_str(v):
+        # datetime/int/float/None → clean string. Strips BOM whitespace.
+        if v is None:
+            return ""
+        return str(v).strip().lstrip("\ufeff")
+
+    def _safe_num(v, default=0.0):
+        # NaN / Inf / bad text → default. Otherwise finite float.
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            # Turkish decimal comma tolerated
+            if isinstance(v, str):
+                v = v.replace(",", ".").strip()
+            x = float(v)
+        except (TypeError, ValueError):
+            raise
+        if x != x:  # NaN
+            return default
+        if x == float("inf") or x == float("-inf"):
+            return default
+        return x
 
     preview = []
     for row_num, row in enumerate(rows[1:], start=2):
-        if not row or all(v is None or str(v).strip() == "" for v in row):
+        if not row or all(v is None or _safe_str(v) == "" for v in row):
             continue
-        name = str(_get(row, "name") or "").strip()
+        name = _safe_str(_get(row, "name"))
         if not name:
             preview.append({"row": row_num, "action": "skip", "error": "name boş olamaz",
                             "data": {"name": name}})
             continue
         try:
-            min_stock = float(_get(row, "min_stock") or 0)
-            current_stock = float(_get(row, "current_stock") or 0)
+            min_stock = _safe_num(_get(row, "min_stock"), 0.0)
+            current_stock = _safe_num(_get(row, "current_stock"), 0.0)
         except (TypeError, ValueError):
             preview.append({"row": row_num, "action": "skip",
                             "error": "min_stock/current_stock sayı olmalı",
@@ -1060,16 +1085,16 @@ async def toolholder_import(file: UploadFile = File(...), commit: bool = False,
             continue
         d = {
             "name": name,
-            "brand": str(_get(row, "brand") or "").strip(),
-            "type": str(_get(row, "type") or "").strip(),
-            "length": str(_get(row, "length") or "").strip(),
-            "diameter": str(_get(row, "diameter") or "").strip(),
+            "brand": _safe_str(_get(row, "brand")),
+            "type": _safe_str(_get(row, "type")),
+            "length": _safe_str(_get(row, "length")),
+            "diameter": _safe_str(_get(row, "diameter")),
             "min_stock": min_stock,
             "current_stock": current_stock,
-            "location": str(_get(row, "location") or "").strip(),
-            "note": str(_get(row, "note") or "").strip(),
+            "location": _safe_str(_get(row, "location")),
+            "note": _safe_str(_get(row, "note")),
         }
-        # Match on name + type + brand (best-effort uniqueness key)
+        # Match on name + brand + type (best-effort uniqueness key)
         query = {"name": d["name"]}
         if d["brand"]:
             query["brand"] = d["brand"]
@@ -1376,32 +1401,52 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
 
     def _get(row, col, default=None):
         i = idx.get(col)
-        return row[i] if (i is not None and i < len(row)) else default
+        if i is None or i >= len(row):
+            return default
+        return row[i]
+
+    def _safe_str(v):
+        if v is None:
+            return ""
+        return str(v).strip().lstrip("\ufeff")
+
+    def _safe_num(v, default=0.0):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        try:
+            if isinstance(v, str):
+                v = v.replace(",", ".").strip()
+            x = float(v)
+        except (TypeError, ValueError):
+            raise
+        if x != x or x == float("inf") or x == float("-inf"):
+            return default
+        return x
 
     preview = []
     for row_num, row in enumerate(rows[1:], start=2):
-        if not row or all(v is None or str(v).strip() == "" for v in row):
+        if not row or all(v is None or _safe_str(v) == "" for v in row):
             continue
-        code = str(_get(row, "code") or "").strip()
-        name = str(_get(row, "name") or "").strip()
-        category = str(_get(row, "category") or "").strip()
+        code = _safe_str(_get(row, "code"))
+        name = _safe_str(_get(row, "name"))
+        category = _safe_str(_get(row, "category"))
         if not name or not category:
             preview.append({"row": row_num, "action": "skip",
                             "error": "name/category boş olamaz",
                             "data": {"code": code, "name": name, "category": category}})
             continue
         try:
-            unit = str(_get(row, "unit") or "adet").strip() or "adet"
-            min_stock = float(_get(row, "min_stock") or 0)
-            current_stock = float(_get(row, "current_stock") or 0)
+            unit = _safe_str(_get(row, "unit")) or "adet"
+            min_stock = _safe_num(_get(row, "min_stock"), 0.0)
+            current_stock = _safe_num(_get(row, "current_stock"), 0.0)
         except (TypeError, ValueError):
             preview.append({"row": row_num, "action": "skip",
                             "error": "min_stock / current_stock sayı olmalı",
                             "data": {"code": code}})
             continue
-        location = str(_get(row, "location") or "").strip()
-        quality = str(_get(row, "quality") or "").strip()
-        brand = str(_get(row, "brand") or "").strip()
+        location = _safe_str(_get(row, "location"))
+        quality = _safe_str(_get(row, "quality"))
+        brand = _safe_str(_get(row, "brand"))
         existing = await db.products.find_one({"code": code}) if code else None
         action = "update" if existing else "create"
         preview.append({

@@ -26,8 +26,11 @@ export default function ToolHolderImport({ onClose, onCommitted }) {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "Önizleme başarısız");
+      const text = await r.text();
+      let d;
+      try { d = JSON.parse(text); }
+      catch { throw new Error(`Sunucu geçersiz yanıt döndürdü (${r.status}): ${text.slice(0, 200)}`); }
+      if (!r.ok) throw new Error((d && d.detail) || "Önizleme başarısız");
       setPreview(d);
     } catch (e) { toast.error(e.message); }
     setLoading(false);
@@ -52,8 +55,11 @@ export default function ToolHolderImport({ onClose, onCommitted }) {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "İçe aktarma başarısız");
+      const text = await r.text();
+      let d;
+      try { d = JSON.parse(text); }
+      catch { throw new Error(`Sunucu geçersiz yanıt döndürdü (${r.status}): ${text.slice(0, 200)}`); }
+      if (!r.ok) throw new Error((d && d.detail) || "İçe aktarma başarısız");
       toast.success(`${d.created} yeni, ${d.updated} güncellendi`);
       onCommitted?.();
       onClose?.();
