@@ -33,8 +33,8 @@ export default function Layout() {
             <Wrench className="w-6 h-6 text-white" strokeWidth={2.5} />
           </div>
           <div>
-            <div className="font-display text-lg font-bold leading-tight">CNC Takımhane</div>
-            <div className="text-xs text-slate-500 uppercase tracking-widest">Stok Takip</div>
+            <div className="font-display text-base font-bold leading-tight">YAZKAN DÖKÜM</div>
+            <div className="text-xs text-slate-500 uppercase tracking-widest">Takımhane Stok</div>
           </div>
         </div>
 
@@ -92,7 +92,7 @@ export default function Layout() {
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
             <Wrench className="w-4 h-4 text-white" />
           </div>
-          <div className="font-display font-bold">CNC Takımhane</div>
+          <div className="font-display font-bold">YAZKAN DÖKÜM</div>
           {!isAdmin && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">
               <Eye className="w-3 h-3" /> Görüntüleme

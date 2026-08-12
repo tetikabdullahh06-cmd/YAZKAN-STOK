@@ -1,7 +1,7 @@
 {
-  "short_name": "CNC Takımhane",
-  "name": "CNC Takımhane Stok Takip",
-  "description": "CNC işleme fabrikası takımhanesi stok, personel ve tezgah bazlı sarfiyat takip uygulaması",
+  "short_name": "Yazkan Takımhane",
+  "name": "Yazkan Döküm Takımhane Stok Takip",
+  "description": "Yazkan Döküm takımhanesi stok, personel ve tezgah bazlı sarfiyat takip uygulaması",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

@@ -35,7 +35,7 @@ export default function Register() {
           </div>
           <div>
             <div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold">Endüstriyel Stok</div>
-            <div className="font-display text-3xl font-black text-slate-50">CNC Takımhane</div>
+            <div className="font-display text-2xl font-black text-slate-50 leading-tight">YAZKAN DÖKÜM TAKIMHANE</div>
           </div>
         </div>
 

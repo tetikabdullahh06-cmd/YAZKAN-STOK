@@ -1,60 +1,59 @@
-# CNC Takımhane Stok Takip — PRD
+# Yazkan Döküm Takımhane Stok Takip — PRD
 
 ## Original problem statement
-Turkish CNC toolroom stock/personnel/machine consumption tracking for a small factory. Track cutting tools, inserts, materials. Web + PWA. B2B SaaS style dashboard.
+Turkish factory (Yazkan Döküm) takımhane stok/personel/tezgah sarfiyat takibi. B2B SaaS dashboard, PWA. Marka: YAZKAN DÖKÜM TAKIMHANE.
 
 ## Personas
-- **Yönetici (admin)**: tek yetkili — tüm CRUD, sipariş, stok giriş/çıkış, teslim alma, Excel içe aktarma
-- **Görüntüleme (viewer)**: kayıt olan tüm diğer kullanıcılar — yalnızca listeleme, rapor okuma, kritik stok görüntüleme
+- **Yönetici (admin)**: takimhane@yazkan.com.tr — tek CRUD yetkili
+- **Görüntüleme (viewer)**: kayıt olan diğer kullanıcılar — yalnızca listeleme/rapor
 
 ## Core requirements
-- Ürün: otomatik `YZK00001…` kod (opsiyonel manuel), ad, kategori, birim, min/current stok, konum, kalite, marka — fiyat YOK
-- Personel: ad, soyad, önceden tanımlı görev (CNC Dik İşlemeci, CNC Tornacı, Üniversal Tornacı, Taşlamacı, Üretim Mühendisi + custom)
-- Tezgah: kod, ad, tür (CNC Torna, CNC Freze / Dik İşleme, Üniversal Torna, Taşlama, Delme, Diğer + custom), marka, model, açıklama
-- Stok Giriş/Çıkış: fiyatsız; QR/barkod ile ürün seçimi; çıkışta personel+tezgah zorunlu
-- Tedarikçi + Sipariş: kalemler kayıtlı ürün ya da manuel; teslim alırken manuel ürün yoksa otomatik YZK kodu ile oluşturulur
-- Raporlar: tarih aralığı + tek seçimli (Ürün/Personel/Tezgah bazlı), Excel indirme
-- Kritik stok e-postası (Resend via Emergent Email Key), günlük 08:00 TR özet e-postası
-- PWA (manifest + service worker)
-- **Rol bazlı erişim**: admin=mutate, viewer=read-only. Backend'de `require_admin` dependency ile tüm POST/PUT/DELETE gate'li; GET herkese açık. Frontend'de mutation butonları admin dışında gizli, "Görüntüleme Modu" bannerı gösterilir.
+- Ürün: auto `YZK00001…` kod, Konum/Kalite/Marka, fiyatsız
+- Personel: ad/soyad + önceden tanımlı görev
+- Tezgah: kod/ad/tür (CNC Torna, CNC Freze/Dik İşleme, vb.) + marka/model
+- Stok Giriş/Çıkış, QR/barkod tarama, Suppliers + Orders (kısmi teslimat, manuel ürün otomatik oluşturma)
+- Raporlar (Ürün/Personel/Tezgah tek seçim), Excel export
+- Kritik stok e-postası, günlük 08:00 TR özet e-postası (Resend via Emergent Email Key)
+- PWA
+- RBAC: admin=mutate, viewer=read-only. Backend `require_admin` + Frontend UI gating
+- **Şifremi unuttum**: e-posta ile 1 saatlik tek kullanımlık token → yeni şifre belirleme
 
 ## Implemented
-### Iteration 1 — MVP (Faz 1-4)  [2026-02]
-JWT auth, admin seed, sample data. CRUD: products, personnel, machines. Stok in/out, movements, kritik stok email, dashboard, raporlar + Excel. Türkçe dark UI. Backend 22/22.
+### Iter 1-3 [2026-02]
+MVP, PWA, QR, Suppliers, Orders (kısmi teslimat), Excel import.
 
-### Iteration 2 — Faz 5-6  [2026-02]
-PWA, QR/barkod, APScheduler daily digest, Suppliers CRUD + Orders. Backend 37/37.
+### Iter 4 — Msg 100 Pivot [2026-02-12]
+Fiyat kaldırıldı, `YZK#####` auto-code, Konum/Kalite/Marka, personel görev listesi, tezgah tür, manuel sipariş kalemleri → otomatik ürün. Backend 40/40.
 
-### Iteration 3 — Ölçekleme  [2026-02]
-Excel toplu ürün içe aktarma, kısmi sipariş teslimatı. Backend 46/46.
+### Iter 5 — RBAC [2026-02-12]
+`role` (admin|viewer), `require_admin` dependency (20 endpoint), startup migration, UI gating + rol rozeti + "Görüntüleme Modu" banner. Backend 79/79.
 
-### Iteration 4 — Msg 100 Pivot  [2026-02-12]
-Fiyat kaldırıldı, Konum/Kalite/Marka eklendi, `YZK#####` auto-code, personel sicil no→görev listesi, tezgah tür alanı, manuel sipariş kalemi → otomatik ürün, raporlar tek seçimli, `close_order` manuel kalemler için düzeltildi. Backend 40/40.
-
-### Iteration 5 — Rol Bazlı Erişim  [2026-02-12]
-- Admin email değiştirildi: `takimhane@yazkan.com.tr` (env: ADMIN_EMAIL/OWNER_EMAIL)
-- User modeline `role` alanı: `"admin" | "viewer"` (default viewer)
-- Startup migration: role'ü olmayanlar viewer'a düşürülür, ADMIN_EMAIL sahibi admin yapılır
-- `require_admin` FastAPI Depends → 20 mutation endpoint (products/personnel/machines/suppliers/orders/stock/imports/admin) 
-- `/auth/me`, `/login`, `/register` yanıtları `role` içerir; register her zaman viewer
-- Frontend: `useAuth().isAdmin`, Layout nav filtreleme (Stok Girişi/Çıkışı admin-only), rol rozeti + "Görüntüleme Modu" bannerı
-- Products/Personnel/Machines/Suppliers/Orders sayfalarında Add/Edit/Delete/Receive/Close butonları viewer'a gizli
+### Iter 6 — Rebranding + Şifre Sıfırlama [2026-02-12]
+- Marka değişimi: "CNC Takımhane" → "YAZKAN DÖKÜM TAKIMHANE" (Login/Register/Layout başlıkları, index.html title, manifest.json, meta tags, e-posta from_name)
+- Admin şifre: `Admin123!` → `123456` (env)
+- Şifremi unuttum akışı:
+  - POST /api/auth/forgot-password (enumeration-safe — her zaman 200)
+  - E-posta gönderimi (Resend via Emergent Email Key, HTML template)
+  - Token: `secrets.token_urlsafe(32)`, SHA-256 hash olarak DB'de, 1 saat geçerli, tek kullanımlık
+  - POST /api/auth/reset-password (token + yeni şifre)
+  - Frontend: /sifremi-unuttum + /sifre-sifirla?token= sayfaları
+  - E2E test: kullanılan token 400, süresi dolan 400, invalid 400 ✓
 
 ## Backlog
 ### P1
 - USB barkod tabancası (klavye emülasyonu)
 - Tezgah bakım takvimi + hatırlatma
-- Admin panelinden viewer kullanıcıları listeleme + rol değiştirme + silme
-- Multi-admin: birden fazla yönetici desteği (şu an yalnızca ENV'daki tek admin)
+- Admin panelinde kullanıcı yönetimi (viewer listeleme/silme, rol atama)
+- Uygulama içi şifre değiştirme (giriş yapmışken)
 
 ### P2
+- Multi-admin desteği
 - Native mobile (Expo)
 - Ürün resmi yükleme
 - Envanter sayım modu
-- Yasal migrations (`unit_price`/`reg_no` cleanup on legacy docs)
 
 ## Credentials
-Bkz. `/app/memory/test_credentials.md`. Admin: `takimhane@yazkan.com.tr` / `Admin123!`
+Bkz. `/app/memory/test_credentials.md`. Admin: `takimhane@yazkan.com.tr` / `123456`
 
 ## Tech stack
-React + Vite + TailwindCSS + Shadcn UI • FastAPI + Motor (MongoDB) + APScheduler • JWT (httpOnly cookie + Bearer) • Resend via Emergent Email Key • html5-qrcode • openpyxl
+React + TailwindCSS + Shadcn UI • FastAPI + Motor (MongoDB) + APScheduler • JWT (httpOnly cookie + Bearer) • Resend via Emergent Email Key • html5-qrcode • openpyxl • bcrypt • secrets/hashlib (password reset tokens)

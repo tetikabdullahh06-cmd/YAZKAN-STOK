@@ -5,6 +5,8 @@ import Layout from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import Products from "@/pages/Products";
 import Personnel from "@/pages/Personnel";
@@ -24,6 +26,8 @@ export default function App() {
         <Routes>
           <Route path="/giris" element={<Login />} />
           <Route path="/kayit" element={<Register />} />
+          <Route path="/sifremi-unuttum" element={<ForgotPassword />} />
+          <Route path="/sifre-sifirla" element={<ResetPassword />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="urunler" element={<Products />} />

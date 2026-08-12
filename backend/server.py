@@ -121,6 +121,15 @@ class LoginIn(BaseModel):
     password: str
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str = Field(min_length=6)
+
+
 class ProductIn(BaseModel):
     code: Optional[str] = ""
     name: str
@@ -341,6 +350,89 @@ async def login(body: LoginIn, response: Response):
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     return {"ok": True}
+
+
+# ---------- Password reset ----------
+import secrets, hashlib
+
+
+def _hash_token(t: str) -> str:
+    return hashlib.sha256(t.encode()).hexdigest()
+
+
+async def send_password_reset_email(to_email: str, reset_url: str, user_name: str):
+    if not EMAIL_KEY:
+        logger.warning("EMERGENT_EMAIL_KEY not configured — cannot send password reset")
+        return False
+    subject = "Yazkan Döküm Takımhane — Şifre Sıfırlama"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width:560px; margin:0 auto; background:#0f172a; color:#f8fafc; padding:32px; border-radius:12px;">
+      <h2 style="color:#60a5fa; margin:0 0 8px 0;">Şifre Sıfırlama</h2>
+      <p style="color:#cbd5e1; font-size:14px;">Merhaba <strong>{user_name}</strong>,</p>
+      <p style="color:#cbd5e1; font-size:14px;">Yazkan Döküm Takımhane sisteminde şifre sıfırlama talebinde bulundunuz. Yeni bir şifre belirlemek için aşağıdaki bağlantıya tıklayın:</p>
+      <p style="margin:28px 0;">
+        <a href="{reset_url}" style="display:inline-block; padding:14px 24px; background:#2563eb; color:#fff; text-decoration:none; border-radius:8px; font-weight:bold;">Şifreyi Sıfırla</a>
+      </p>
+      <p style="color:#94a3b8; font-size:12px;">Bu bağlantı 1 saat içinde geçerliliğini yitirir. Talep sizin tarafınızdan yapılmadıysa bu e-postayı yok sayabilirsiniz.</p>
+      <p style="color:#64748b; font-size:11px; margin-top:24px; word-break:break-all;">Bağlantı çalışmıyorsa: {reset_url}</p>
+    </div>
+    """
+    payload = {"to": [to_email], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
+                             headers={"X-Email-Key": EMAIL_KEY}, json=payload)
+            r.raise_for_status()
+        return True
+    except Exception as e:
+        logger.error(f"Password reset email failed: {e}")
+        return False
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordIn):
+    email = body.email.lower()
+    user = await db.users.find_one({"email": email})
+    # Always return the same response — don't leak whether the email exists
+    if user:
+        raw_token = secrets.token_urlsafe(32)
+        await db.password_resets.insert_one({
+            "id": new_id(),
+            "user_id": user["id"],
+            "email": email,
+            "token_hash": _hash_token(raw_token),
+            "expires_at": (now_utc() + timedelta(hours=1)).isoformat(),
+            "used": False,
+            "created_at": now_utc().isoformat(),
+        })
+        app_url = os.environ.get("APP_URL", "").rstrip("/")
+        reset_url = f"{app_url}/sifre-sifirla?token={raw_token}"
+        await send_password_reset_email(email, reset_url, user.get("name", email))
+    return {"ok": True, "message": "Eğer bu e-posta sistemde kayıtlıysa, şifre sıfırlama bağlantısı gönderildi."}
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordIn):
+    if not body.token:
+        raise HTTPException(status_code=400, detail="Token gerekli")
+    token_hash = _hash_token(body.token)
+    rec = await db.password_resets.find_one({"token_hash": token_hash, "used": False})
+    if not rec:
+        raise HTTPException(status_code=400, detail="Geçersiz veya kullanılmış bağlantı")
+    try:
+        expires = datetime.fromisoformat(rec["expires_at"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Bağlantı geçersiz")
+    if now_utc() > expires:
+        raise HTTPException(status_code=400, detail="Bağlantının süresi dolmuş, tekrar talep edin")
+    user = await db.users.find_one({"id": rec["user_id"]})
+    if not user:
+        raise HTTPException(status_code=400, detail="Kullanıcı bulunamadı")
+    await db.users.update_one({"id": user["id"]},
+                              {"$set": {"password_hash": hash_password(body.new_password)}})
+    await db.password_resets.update_one({"id": rec["id"]},
+                                        {"$set": {"used": True, "used_at": now_utc().isoformat()}})
+    return {"ok": True, "message": "Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz."}
 
 
 @api.get("/auth/me")

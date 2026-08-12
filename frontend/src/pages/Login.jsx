@@ -40,7 +40,7 @@ export default function Login() {
           </div>
           <div>
             <div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold">Endüstriyel Stok</div>
-            <div className="font-display text-3xl font-black text-slate-50">CNC Takımhane</div>
+            <div className="font-display text-2xl font-black text-slate-50 leading-tight">YAZKAN DÖKÜM TAKIMHANE</div>
           </div>
         </div>
 
@@ -87,6 +87,12 @@ export default function Login() {
               {loading && <Loader2 className="w-5 h-5 animate-spin" />}
               Giriş Yap
             </button>
+
+            <div className="text-center">
+              <Link to="/sifremi-unuttum" data-testid="login-forgot-link" className="text-sm text-blue-400 hover:text-blue-300 font-semibold">
+                Şifremi Unuttum
+              </Link>
+            </div>
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-800 text-center text-sm text-slate-400">
