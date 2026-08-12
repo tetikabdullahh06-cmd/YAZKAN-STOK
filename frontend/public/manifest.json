@@ -1,0 +1,26 @@
+{
+  "short_name": "CNC Takımhane",
+  "name": "CNC Takımhane Stok Takip",
+  "description": "CNC işleme fabrikası takımhanesi stok, personel ve tezgah bazlı sarfiyat takip uygulaması",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#2563eb",
+  "background_color": "#020617",
+  "lang": "tr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjM2IiBmaWxsPSIjMjU2M2ViIi8+PGcgZmlsbD0iI2ZmZiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNDggNDgpIj48cGF0aCBkPSJNODYuNCAyMC44Yy00IDAtOCAxLjYtMTAuOCA0LjRMNTIgNDguOGE0IDQgMCAwMTMuMiA2LjhsNC44LTQuOCAxNCAxNC00LjggNC44Yy0uOC44LTIgMS42LTMuMiAxLjZMNDIuNCA3Ny42Yy0zLjIuOC02IDMuMi04IDYuNEwyMi40IDEwNGMtMS42IDIuOC0xLjIgNiAxLjIgOC40bDE2IDE2YzIuNCAyLjQgNS42IDIuOCA4LjQgMS4ybDIwLTEyYzMuMi0yIDUuNi01LjIgNi40LThsNi40LTIzLjZjLjQtMS4yLjgtMi40IDEuNi0zLjJsNC44LTQuOCAxNCAxNC00LjggNC44Yy0yLjggMi44LTEuMiA3LjIgMi40IDcuNiA1LjIuNCAxMC40LTEuNiAxNC00Ljg4IDMuMi0zLjIgNi4wLTEwLjggNS4yLTE1LjZ2LTQwLjRDMTIwLjggNDMuMiAxMDMuMiAyMC44IDg2LjQgMjAuOHoiLz48L2c+PC9zdmc+",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9Ijk2IiBmaWxsPSIjMjU2M2ViIi8+PGcgZmlsbD0iI2ZmZiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTI4IDEyOCkgc2NhbGUoMi42NjY3KSI+PHBhdGggZD0iTTg2LjQgMjAuOGMtNCAwLTggMS42LTEwLjggNC40TDUyIDQ4LjhhNCA0IDAgMDEzLjIgNi44bDQuOC00LjggMTQgMTQtNC44IDQuOGMtLjguOC0yIDEuNi0zLjIgMS42TDQyLjQgNzcuNmMtMy4yLjgtNiAzLjItOCA2LjRMMjIuNCAxMDRjLTEuNiAyLjgtMS4yIDYgMS4yIDguNGwxNiAxNmMyLjQgMi40IDUuNiAyLjggOC40IDEuMmwyMC0xMmMzLjItMiA1LjYtNS4yIDYuNC04bDYuNC0yMy42Yy40LTEuMi44LTIuNCAxLjYtMy4ybDQuOC00LjggMTQgMTQtNC44IDQuOGMtMi44IDIuOC0xLjIgNy4yIDIuNCA3LjYgNS4yLjQgMTAuNC0xLjYgMTQtNC44OCAzLjItMy4yIDYuMC0xMC44IDUuMi0xNS42di00MC40QzEyMC44IDQzLjIgMTAzLjIgMjAuOCA4Ni40IDIwLjh6Ii8+PC9nPjwvc3ZnPg==",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -2,44 +2,68 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { ArrowDownToLine, Loader2 } from "lucide-react";
+import QrScannerButton from "@/components/QrScanner";
 
 export default function StockIn() {
   const [products, setProducts] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
-  const [supplier, setSupplier] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [supplierManual, setSupplierManual] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { api.get("/products").then((r) => setProducts(r.data)); }, []);
+  const reload = () => Promise.all([
+    api.get("/products").then((r) => setProducts(r.data)),
+    api.get("/suppliers").then((r) => setSuppliers(r.data)).catch(() => setSuppliers([])),
+  ]);
+  useEffect(() => { reload(); }, []);
 
   const selected = products.find((p) => p.id === productId);
+
+  const onScan = (code) => {
+    const c = String(code).trim().toUpperCase();
+    const match = products.find((p) => p.code.toUpperCase() === c);
+    if (match) {
+      setProductId(match.id);
+      toast.success(`Ürün seçildi: ${match.name}`);
+    } else {
+      toast.error(`Kod bulunamadı: ${code}`);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     if (!productId) return toast.error("Ürün seçiniz");
     setLoading(true);
+    const supplierName = supplierId ? suppliers.find((s) => s.id === supplierId)?.name || "" : supplierManual;
     try {
       const r = await api.post("/stock/in", {
         product_id: productId,
         quantity: parseFloat(quantity),
         unit_price: unitPrice ? parseFloat(unitPrice) : null,
-        supplier, note,
+        supplier: supplierName,
+        supplier_id: supplierId || null,
+        note,
       });
       toast.success(`Stok girişi kaydedildi. Yeni stok: ${r.data.new_stock}`);
-      setProductId(""); setQuantity(""); setUnitPrice(""); setSupplier(""); setNote("");
-      api.get("/products").then((r) => setProducts(r.data));
+      setProductId(""); setQuantity(""); setUnitPrice(""); setSupplierId(""); setSupplierManual(""); setNote("");
+      reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
     setLoading(false);
   };
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <div className="text-xs text-emerald-400 uppercase tracking-[0.2em] font-semibold mb-2">Depoya Kaydet</div>
-        <h1 className="font-display text-4xl font-black">Stok Girişi</h1>
-        <p className="text-slate-400 text-sm mt-1">Depoya yeni gelen malzemeleri kaydedin.</p>
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <div className="text-xs text-emerald-400 uppercase tracking-[0.2em] font-semibold mb-2">Depoya Kaydet</div>
+          <h1 className="font-display text-4xl font-black">Stok Girişi</h1>
+          <p className="text-slate-400 text-sm mt-1">Depoya yeni gelen malzemeleri kaydedin.</p>
+        </div>
+        <QrScannerButton onScan={onScan} testid="si-qr" />
       </div>
 
       <form onSubmit={submit} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 md:p-8 space-y-5">
@@ -68,8 +92,19 @@ export default function StockIn() {
 
         <div>
           <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tedarikçi</label>
-          <input value={supplier} onChange={(e) => setSupplier(e.target.value)} data-testid="si-supplier"
-            className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-emerald-500 outline-none" />
+          {suppliers.length > 0 ? (
+            <select value={supplierId} onChange={(e) => { setSupplierId(e.target.value); setSupplierManual(""); }} data-testid="si-supplier"
+              className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-emerald-500 outline-none">
+              <option value="">-- Kayıtlı tedarikçiden seç --</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          ) : (
+            <div className="text-xs text-slate-500 mb-2">Henüz kayıtlı tedarikçi yok — aşağıya elle yazın veya Tedarikçiler sayfasından ekleyin.</div>
+          )}
+          {!supplierId && (
+            <input value={supplierManual} onChange={(e) => setSupplierManual(e.target.value)} placeholder="veya elle yazın..."
+              className="w-full h-12 mt-2 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-emerald-500 outline-none" />
+          )}
         </div>
 
         <div>

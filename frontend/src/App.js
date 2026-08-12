@@ -14,6 +14,8 @@ import StockOut from "@/pages/StockOut";
 import Movements from "@/pages/Movements";
 import CriticalStock from "@/pages/CriticalStock";
 import Reports from "@/pages/Reports";
+import Suppliers from "@/pages/Suppliers";
+import Orders from "@/pages/Orders";
 
 export default function App() {
   return (
@@ -27,6 +29,8 @@ export default function App() {
             <Route path="urunler" element={<Products />} />
             <Route path="personel" element={<Personnel />} />
             <Route path="tezgahlar" element={<Machines />} />
+            <Route path="tedarikciler" element={<Suppliers />} />
+            <Route path="siparisler" element={<Orders />} />
             <Route path="stok-giris" element={<StockIn />} />
             <Route path="stok-cikis" element={<StockOut />} />
             <Route path="hareketler" element={<Movements />} />

@@ -1,48 +1,54 @@
 # CNC Takımhane Stok Takip — PRD
 
 ## Original problem statement
-Turkish CNC toolroom web + mobile stock/personnel/machine consumption tracking for 5 users with equal rights. Products (cutter tips, drills, holders, apparatus, measurement tools), stock in/out linked to personnel + machine, critical stock alert with email + dashboard, reports with Excel export (daily/weekly/monthly/custom).
+Turkish CNC toolroom web + mobile stock/personnel/machine consumption tracking for 5 users with equal rights.
 
 ## User personas
-- Toolroom operator/technician (5 users, single role, equal permissions)
+- Toolroom operator/technician (5 users, single role)
 
-## Core requirements (static)
-- Product / Personnel / Machine CRUD
-- Stock IN (supplier, date, qty, price)
-- Stock OUT (must bind to personnel + machine; auto-decrement)
-- Movement history with filters
-- Critical stock: dashboard + email alert (Resend)
-- Reports: by product / personnel / machine + Excel .xlsx
+## Core requirements
+- Product / Personnel / Machine / Supplier / Order CRUD
+- Stock IN (supplier, qty, price) — Stock OUT (personnel + machine)
+- Critical stock: dashboard + email alert
+- Reports: by product / personnel / machine / supplier + Excel export
 - Dashboard: KPIs + top consumers + recent movements
-- JWT auth (email + password), Turkish UI
-- Industrial dark blue/gray theme, large touch targets
+- Daily digest email at 08:00 Europe/Istanbul
+- QR / barcode scan on stock in & out
+- PWA (install to home screen)
 
 ## Implemented (2026-02)
-- Full-stack web MVP (Faz 1-4)
-- Auth: register, login, logout, /me, JWT (cookie + Bearer)
-- Admin seeded: tetikabdullahh06@gmail.com / Admin123!
-- Sample data seeded: 8 products, 5 personnel, 4 machines
-- All CRUD endpoints (products / personnel / machines)
-- Stock IN / OUT endpoints, movement history with filters
-- Critical stock endpoint + email via Emergent Resend (6h dedupe)
-- Dashboard endpoint (KPIs, top consumers, critical list, recent)
-- Reports summary + Excel export (openpyxl, 4 sheets)
-- Full frontend: Login, Register, Dashboard, Products (with custom category add),
-  Personnel, Machines, StockIn, StockOut, Movements, CriticalStock, Reports
-- Sidebar + mobile bottom nav, sonner toasts, Chivo/IBM Plex Sans fonts
-- Backend: 22/22 pytest passing; Frontend: all flows validated
+### Iteration 1 (MVP - Faz 1-4)
+- JWT auth (register / login / me / logout), admin seeded
+- Sample data (8 products, 5 personnel, 4 machines)
+- Full CRUD: products (with custom category), personnel, machines
+- Stock in/out with movement history + filters
+- Critical stock endpoint + email (6h dedupe, Resend)
+- Dashboard, reports summary, Excel export
+- Turkish industrial dark UI (Chivo + IBM Plex Sans)
+- Backend: 22/22 pytest passing
+
+### Iteration 2 (Faz 5-6)
+- **PWA**: manifest.json + service worker, "install to home screen" ready
+- **QR / Barkod tarama**: html5-qrcode ile stok girişi + çıkışı ekranlarında kamera butonu
+- **Günlük özet e-postası**: APScheduler cron 08:00 Europe/Istanbul, dünkü giriş/çıkış detay HTML tablosu
+- **Tedarikçiler**: CRUD + tedarikçi kartları + toplam alım tutarı
+- **Siparişler**: Sipariş oluşturma (kalemler, teslim tarihi), açık/kapalı filtresi, "Kapat & Stoğa İşle" akışı otomatik stok girişi yaratır
+- Stok girişi ekranı tedarikçi dropdown ile bağlı
+- Rapor: tedarikçi bazlı toplam alım (`/api/reports/by-supplier`)
+- Manuel test için `/api/admin/send-daily-digest`
+- Backend: 37/37 pytest passing
 
 ## Backlog / P1
-- React Native (Expo) mobile app: login, stock-out screen, search, push notifications (Faz 5)
-- Barcode / QR scan for fast stock-out via mobile camera
-- Daily / weekly email summary report
-- Supplier and purchase-order tracking
+- Barkod fiziksel scanner (USB) girişi
+- Toplu sipariş içe aktarma (CSV/Excel)
+- Sipariş kapatırken kısmi teslimat desteği
+- Native mobile (Expo) — Emergent yayın desteklediğinde
 
 ## P2
-- Role-based permissions (admin / operator / viewer)
-- ERP / accounting integration
-- Advanced brute-force lockout on login
-- Split server.py into per-domain routers
+- Rol bazlı yetki (admin / operatör / görüntüleyici)
+- Muhasebe / ERP entegrasyonu
+- Advanced brute-force lockout
+- Router modularization (server.py splitting)
 
 ## Credentials
-See `/app/memory/test_credentials.md`.
+`/app/memory/test_credentials.md`

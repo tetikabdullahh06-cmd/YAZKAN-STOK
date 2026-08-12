@@ -8,8 +8,9 @@ import os
 import io
 import uuid
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import datetime, timezone, timedelta, date
+from typing import Optional, List
+from zoneinfo import ZoneInfo
 
 import bcrypt
 import jwt
@@ -20,6 +21,8 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 from openpyxl import Workbook
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # ---------- Setup ----------
 mongo_url = os.environ["MONGO_URL"]
@@ -141,6 +144,7 @@ class StockInIn(BaseModel):
     quantity: float
     unit_price: Optional[float] = None
     supplier: Optional[str] = ""
+    supplier_id: Optional[str] = None
     note: Optional[str] = ""
 
 
@@ -150,6 +154,28 @@ class StockOutIn(BaseModel):
     personnel_id: str
     machine_id: str
     note: Optional[str] = ""
+
+
+class SupplierIn(BaseModel):
+    name: str
+    contact_person: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    address: Optional[str] = ""
+    note: Optional[str] = ""
+
+
+class OrderItemIn(BaseModel):
+    product_id: str
+    quantity: float
+    unit_price: float = 0.0
+
+
+class OrderIn(BaseModel):
+    supplier_id: str
+    delivery_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
+    note: Optional[str] = ""
+    items: List[OrderItemIn]
 
 
 # ---------- Sample Data ----------
@@ -421,7 +447,7 @@ async def stock_in(body: StockInIn, user=Depends(get_current_user)):
         "product_code": product["code"], "product_name": product["name"],
         "quantity": body.quantity, "unit_price": unit_price,
         "total": body.quantity * unit_price,
-        "supplier": body.supplier or "", "note": body.note or "",
+        "supplier": body.supplier or "", "supplier_id": body.supplier_id or "", "note": body.note or "",
         "user_id": user["id"], "user_name": user["name"],
         "created_at": now_utc().isoformat(),
     }
@@ -636,8 +662,6 @@ async def report_excel(user=Depends(get_current_user),
     )
 
 
-app.include_router(api)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -645,3 +669,269 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ==================== Suppliers ====================
+@api.get("/suppliers")
+async def list_suppliers(user=Depends(get_current_user)):
+    return await db.suppliers.find({}, {"_id": 0}).sort("name", 1).to_list(2000)
+
+
+@api.post("/suppliers")
+async def create_supplier(body: SupplierIn, user=Depends(get_current_user)):
+    if await db.suppliers.find_one({"name": body.name}):
+        raise HTTPException(status_code=400, detail="Bu isimde tedarikçi zaten mevcut")
+    doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat()}
+    await db.suppliers.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/suppliers/{sid}")
+async def update_supplier(sid: str, body: SupplierIn, user=Depends(get_current_user)):
+    existing = await db.suppliers.find_one({"id": sid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    if body.name != existing["name"] and await db.suppliers.find_one({"name": body.name}):
+        raise HTTPException(status_code=400, detail="Bu isimde tedarikçi zaten mevcut")
+    await db.suppliers.update_one({"id": sid}, {"$set": body.model_dump()})
+    return await db.suppliers.find_one({"id": sid}, {"_id": 0})
+
+
+@api.delete("/suppliers/{sid}")
+async def delete_supplier(sid: str, user=Depends(get_current_user)):
+    r = await db.suppliers.delete_one({"id": sid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    return {"ok": True}
+
+
+@api.get("/reports/by-supplier")
+async def report_by_supplier(user=Depends(get_current_user),
+                             date_from: Optional[str] = None, date_to: Optional[str] = None):
+    q = _date_query(date_from, date_to)
+    q["type"] = "in"
+    movements = await db.movements.find(q, {"_id": 0}).to_list(20000)
+    agg = {}
+    for m in movements:
+        key = m.get("supplier") or "Belirtilmemiş"
+        agg.setdefault(key, {"qty": 0, "total": 0, "count": 0})
+        agg[key]["qty"] += m.get("quantity", 0)
+        agg[key]["total"] += m.get("total", 0)
+        agg[key]["count"] += 1
+    return [{"name": k, **v} for k, v in sorted(agg.items(), key=lambda x: -x[1]["total"])]
+
+
+# ==================== Orders ====================
+def _compute_order_totals(items):
+    total = 0.0
+    for it in items:
+        total += (it.get("quantity", 0) or 0) * (it.get("unit_price", 0) or 0)
+    return round(total, 2)
+
+
+@api.get("/orders")
+async def list_orders(user=Depends(get_current_user), status: Optional[str] = None):
+    q = {}
+    if status:
+        q["status"] = status
+    return await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(2000)
+
+
+@api.post("/orders")
+async def create_order(body: OrderIn, user=Depends(get_current_user)):
+    supplier = await db.suppliers.find_one({"id": body.supplier_id})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    if not body.items:
+        raise HTTPException(status_code=400, detail="En az bir kalem eklemelisiniz")
+    items = []
+    for it in body.items:
+        prod = await db.products.find_one({"id": it.product_id})
+        if not prod:
+            raise HTTPException(status_code=404, detail=f"Ürün bulunamadı: {it.product_id}")
+        if it.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Kalem miktarı 0'dan büyük olmalı")
+        items.append({
+            "product_id": prod["id"], "product_code": prod["code"], "product_name": prod["name"],
+            "quantity": it.quantity, "unit_price": it.unit_price,
+            "total": round(it.quantity * it.unit_price, 2),
+        })
+    order = {
+        "id": new_id(),
+        "supplier_id": supplier["id"], "supplier_name": supplier["name"],
+        "delivery_date": body.delivery_date or "",
+        "note": body.note or "",
+        "status": "open",
+        "items": items,
+        "total": _compute_order_totals(items),
+        "created_by": user["name"],
+        "created_at": now_utc().isoformat(),
+        "closed_at": None,
+    }
+    await db.orders.insert_one(order)
+    order.pop("_id", None)
+    return order
+
+
+@api.post("/orders/{oid}/close")
+async def close_order(oid: str, user=Depends(get_current_user)):
+    order = await db.orders.find_one({"id": oid})
+    if not order:
+        raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
+    if order.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Sipariş zaten kapalı")
+    # Convert each item to a stock-in movement and update product stock
+    for it in order.get("items", []):
+        prod = await db.products.find_one({"id": it["product_id"]})
+        if not prod:
+            continue
+        new_stock = prod.get("current_stock", 0) + it["quantity"]
+        update = {"current_stock": new_stock}
+        if it.get("unit_price", 0) > 0:
+            update["unit_price"] = it["unit_price"]
+        await db.products.update_one({"id": prod["id"]}, {"$set": update})
+        await db.movements.insert_one({
+            "id": new_id(), "type": "in", "product_id": prod["id"],
+            "product_code": prod["code"], "product_name": prod["name"],
+            "quantity": it["quantity"], "unit_price": it["unit_price"],
+            "total": it["total"],
+            "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
+            "note": f"Sipariş #{order['id'][:8]}",
+            "order_id": order["id"],
+            "user_id": user["id"], "user_name": user["name"],
+            "created_at": now_utc().isoformat(),
+        })
+    await db.orders.update_one({"id": oid},
+                               {"$set": {"status": "closed", "closed_at": now_utc().isoformat()}})
+    return await db.orders.find_one({"id": oid}, {"_id": 0})
+
+
+@api.delete("/orders/{oid}")
+async def delete_order(oid: str, user=Depends(get_current_user)):
+    r = await db.orders.delete_one({"id": oid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
+    return {"ok": True}
+
+
+# ==================== Daily digest email + scheduler ====================
+TR_TZ = ZoneInfo("Europe/Istanbul")
+
+
+async def send_daily_digest():
+    """Send yesterday's stock in/out summary to OWNER_EMAIL."""
+    if not EMAIL_KEY or not OWNER_EMAIL:
+        logger.info("Daily digest: email not configured, skipping")
+        return
+
+    now_tr = datetime.now(TR_TZ)
+    yesterday = (now_tr - timedelta(days=1)).date()
+    day_start = datetime.combine(yesterday, datetime.min.time(), tzinfo=TR_TZ).astimezone(timezone.utc).isoformat()
+    day_end = datetime.combine(yesterday, datetime.max.time(), tzinfo=TR_TZ).astimezone(timezone.utc).isoformat()
+
+    movements = await db.movements.find(
+        {"created_at": {"$gte": day_start, "$lte": day_end}}, {"_id": 0}
+    ).to_list(5000)
+
+    ins = [m for m in movements if m.get("type") == "in"]
+    outs = [m for m in movements if m.get("type") == "out"]
+    in_total = round(sum(m.get("total", 0) for m in ins), 2)
+    out_total = round(sum(m.get("total", 0) for m in outs), 2)
+
+    def _rows(items):
+        if not items:
+            return '<tr><td colspan="4" style="padding:12px; color:#94a3b8; text-align:center;">Kayıt yok</td></tr>'
+        return "".join(
+            f'<tr><td style="padding:8px 12px; border-top:1px solid #334155;">{m.get("product_code","")}</td>'
+            f'<td style="padding:8px 12px; border-top:1px solid #334155;">{m.get("product_name","")}</td>'
+            f'<td style="padding:8px 12px; border-top:1px solid #334155; text-align:right; color:#e2e8f0;">{m.get("quantity",0)}</td>'
+            f'<td style="padding:8px 12px; border-top:1px solid #334155; text-align:right; color:#e2e8f0;">₺{m.get("total",0):,.2f}</td></tr>'
+            for m in items
+        )
+
+    subject = f"[Günlük Özet] {yesterday.strftime('%d.%m.%Y')} — Takımhane Hareketleri"
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width:720px; margin:0 auto; background:#0f172a; color:#f8fafc; padding:24px; border-radius:12px;">
+      <h2 style="color:#60a5fa; margin:0 0 4px 0; font-size:22px;">Günlük Takımhane Özeti</h2>
+      <div style="color:#94a3b8; font-size:13px; margin-bottom:20px;">{yesterday.strftime('%d %B %Y')}</div>
+
+      <div style="display:flex; gap:12px; margin-bottom:24px;">
+        <div style="flex:1; background:#1e293b; padding:16px; border-radius:8px; border-left:3px solid #10b981;">
+          <div style="color:#94a3b8; font-size:11px; text-transform:uppercase; letter-spacing:1px;">Giriş</div>
+          <div style="font-size:24px; font-weight:bold; color:#10b981;">{len(ins)}</div>
+          <div style="color:#cbd5e1; font-size:13px;">₺{in_total:,.2f}</div>
+        </div>
+        <div style="flex:1; background:#1e293b; padding:16px; border-radius:8px; border-left:3px solid #f59e0b;">
+          <div style="color:#94a3b8; font-size:11px; text-transform:uppercase; letter-spacing:1px;">Çıkış</div>
+          <div style="font-size:24px; font-weight:bold; color:#f59e0b;">{len(outs)}</div>
+          <div style="color:#cbd5e1; font-size:13px;">₺{out_total:,.2f}</div>
+        </div>
+      </div>
+
+      <h3 style="color:#10b981; font-size:15px; margin:16px 0 8px 0;">Stok Girişleri</h3>
+      <table style="width:100%; border-collapse:collapse; background:#1e293b; border-radius:6px; overflow:hidden; font-size:13px;">
+        <thead><tr style="background:#0f172a;">
+          <th style="padding:10px 12px; text-align:left; color:#94a3b8;">Kod</th>
+          <th style="padding:10px 12px; text-align:left; color:#94a3b8;">Ürün</th>
+          <th style="padding:10px 12px; text-align:right; color:#94a3b8;">Miktar</th>
+          <th style="padding:10px 12px; text-align:right; color:#94a3b8;">Tutar</th>
+        </tr></thead>
+        <tbody>{_rows(ins)}</tbody>
+      </table>
+
+      <h3 style="color:#f59e0b; font-size:15px; margin:20px 0 8px 0;">Stok Çıkışları</h3>
+      <table style="width:100%; border-collapse:collapse; background:#1e293b; border-radius:6px; overflow:hidden; font-size:13px;">
+        <thead><tr style="background:#0f172a;">
+          <th style="padding:10px 12px; text-align:left; color:#94a3b8;">Kod</th>
+          <th style="padding:10px 12px; text-align:left; color:#94a3b8;">Ürün</th>
+          <th style="padding:10px 12px; text-align:right; color:#94a3b8;">Miktar</th>
+          <th style="padding:10px 12px; text-align:right; color:#94a3b8;">Tutar</th>
+        </tr></thead>
+        <tbody>{_rows(outs)}</tbody>
+      </table>
+
+      <p style="color:#94a3b8; font-size:12px; margin-top:24px;">CNC Takımhane Stok Takip Sistemi — Otomatik günlük özet</p>
+    </div>
+    """
+    payload = {"to": [OWNER_EMAIL], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
+                             headers={"X-Email-Key": EMAIL_KEY}, json=payload)
+            r.raise_for_status()
+        logger.info(f"Daily digest sent for {yesterday}")
+    except Exception as e:
+        logger.error(f"Daily digest email failed: {e}")
+
+
+@api.post("/admin/send-daily-digest")
+async def trigger_daily_digest(user=Depends(get_current_user)):
+    """Manual trigger for daily digest — useful for testing."""
+    await send_daily_digest()
+    return {"ok": True}
+
+
+_scheduler: Optional[AsyncIOScheduler] = None
+
+
+@app.on_event("startup")
+async def start_scheduler():
+    global _scheduler
+    if _scheduler is None:
+        _scheduler = AsyncIOScheduler(timezone=TR_TZ)
+        _scheduler.add_job(send_daily_digest, CronTrigger(hour=8, minute=0, timezone=TR_TZ),
+                           id="daily_digest", replace_existing=True)
+        _scheduler.start()
+        logger.info("Scheduler started: daily digest at 08:00 Europe/Istanbul")
+
+
+@app.on_event("shutdown")
+async def stop_scheduler():
+    global _scheduler
+    if _scheduler:
+        _scheduler.shutdown(wait=False)
+        _scheduler = None
+
+
+app.include_router(api)

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { ArrowUpFromLine, Loader2, AlertTriangle } from "lucide-react";
+import QrScannerButton from "@/components/QrScanner";
 
 export default function StockOut() {
   const [products, setProducts] = useState([]);
@@ -48,10 +49,21 @@ export default function StockOut() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <div className="text-xs text-red-400 uppercase tracking-[0.2em] font-semibold mb-2">Depodan Ver</div>
-        <h1 className="font-display text-4xl font-black">Stok Çıkışı</h1>
-        <p className="text-slate-400 text-sm mt-1">Personel ve tezgah bazlı hızlı çıkış.</p>
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <div className="text-xs text-red-400 uppercase tracking-[0.2em] font-semibold mb-2">Depodan Ver</div>
+          <h1 className="font-display text-4xl font-black">Stok Çıkışı</h1>
+          <p className="text-slate-400 text-sm mt-1">Personel ve tezgah bazlı hızlı çıkış.</p>
+        </div>
+        <QrScannerButton
+          onScan={(code) => {
+            const c = String(code).trim().toUpperCase();
+            const match = products.find((p) => p.code.toUpperCase() === c);
+            if (match) { setProductId(match.id); toast.success(`Ürün seçildi: ${match.name}`); }
+            else toast.error(`Kod bulunamadı: ${code}`);
+          }}
+          testid="so-qr"
+        />
       </div>
 
       <form onSubmit={submit} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 md:p-8 space-y-5">

@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 2 E2E testing complete. Backend: 37/37 pytest tests pass (added 15 new tests for suppliers CRUD, orders lifecycle with close-to-stock-in, reports/by-supplier aggregation, stock-in with supplier_id, daily-digest trigger, and auth protection on all 6 new endpoints). Frontend: login → sidebar shows Tedarikçiler + Siparişler → supplier create/card visible → order create with 2-column supplier/product selects + qty/price → 'Kapat & Stoğa İşle' triggers stock-in movements and increments product stock → StockIn si-qr opens scanner (qr-close visible), si-supplier dropdown populated → StockOut so-qr opens scanner. PWA: manifest.json + sw.js both return 200; index.html includes <link rel='manifest'> and apple-mobile-web-app-capable meta. APScheduler started successfully on backend startup (logs confirm 'Scheduler started: daily digest at 08:00 Europe/Istanbul'). Daily-digest email endpoint returned {ok:true} (Emergent Resend accepted with 202).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Global (any page with dynamic <option> content)", "issues": ["Pre-existing React hydration warning '<span> cannot be a child of <option>' — same as iteration 1; caused by build-tooling injecting x-* metadata <span> inside <option> in StockIn, StockOut, Orders selects. Non-blocking, functional."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Consider fixing/removing dev-tool x-* attribute injection into <option> tags to eliminate console hydration warnings (build-tool concern, not app logic).",
+    "(Optional) server.py is now 937 lines — well past the 700-line soft cap; strongly recommend splitting into routers (auth, products, personnel, machines, stock, suppliers, orders, reports, scheduler)."
+  ],
+  "critical_code_review_comments": [
+    "server.py grew from 648 → 937 lines; split into APIRouter modules soon to keep maintainability.",
+    "@app.on_event('startup'/'shutdown') is deprecated in FastAPI; migrate to lifespan context (also matters for scheduler).",
+    "close_order iterates items sequentially with awaits — for large orders could be batched; not critical.",
+    "close_order silently continues if a product was deleted mid-order (uses 'continue'); consider recording the skipped product in response so UI can warn.",
+    "CORS allow_origin_regex='.*' with allow_credentials=True remains (from iter 1) — tighten for production.",
+    "send_daily_digest email failure is swallowed via try/except; that's fine for scheduler but manual /admin/send-daily-digest also returns ok:true even on send failure — consider surfacing status in response for admins testing."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py (extended with iteration-2 test classes)"],
+  "success_rate": {"backend": "100% (37/37)", "frontend": "100% of tested flows"},
+  "test_credentials": "Admin: tetikabdullahh06@gmail.com / Admin123!",
+  "seed_data_creation": "Test suppliers/orders created inline with TEST_/TESTUI_ prefix; cleaned up after each test. One leftover TEST_Supplier_ac828a observed from a prior aborted run — minor cosmetic residue; can be manually purged if desired.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live in /app/backend/tests/backend_test.py; run with `pytest backend/tests/backend_test.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. All iteration 1 + iteration 2 tests green (37/37). SupplierIn uses 'contact_person' not 'contact'. Orders items must have quantity>0. close_order is idempotent-guarded (409 pattern via 400). QR scanner opens a dialog with data-testid='qr-close' — can't test camera itself headlessly."
+}

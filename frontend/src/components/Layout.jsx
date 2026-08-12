@@ -2,7 +2,8 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Package, Users, Settings2, ArrowDownToLine,
-  ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench
+  ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench,
+  Building2, ClipboardList
 } from "lucide-react";
 
 const nav = [
@@ -12,6 +13,8 @@ const nav = [
   { to: "/urunler", label: "Ürünler", icon: Package, testid: "nav-products" },
   { to: "/personel", label: "Personel", icon: Users, testid: "nav-personnel" },
   { to: "/tezgahlar", label: "Tezgahlar", icon: Settings2, testid: "nav-machines" },
+  { to: "/tedarikciler", label: "Tedarikçiler", icon: Building2, testid: "nav-suppliers" },
+  { to: "/siparisler", label: "Siparişler", icon: ClipboardList, testid: "nav-orders" },
   { to: "/hareketler", label: "Hareketler", icon: History, testid: "nav-movements" },
   { to: "/kritik-stok", label: "Kritik Stok", icon: AlertTriangle, testid: "nav-critical" },
   { to: "/raporlar", label: "Raporlar", icon: FileBarChart2, testid: "nav-reports" },

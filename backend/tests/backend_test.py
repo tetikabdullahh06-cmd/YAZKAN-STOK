@@ -231,3 +231,240 @@ class TestDashboardReports:
         assert r.status_code == 200
         assert "spreadsheetml" in r.headers.get("Content-Type", "")
         assert len(r.content) > 100
+
+
+# ==================== Iteration 2: Suppliers ====================
+class TestSuppliers:
+    def test_suppliers_crud_full(self, h):
+        name = f"TEST_Supplier_{uuid.uuid4().hex[:6]}"
+        r = requests.post(f"{API}/suppliers", headers=h,
+                          json={"name": name, "contact_person": "Ali", "phone": "5551112233", "email": "s@x.com", "note": "n"})
+        assert r.status_code == 200, r.text
+        sup = r.json()
+        assert sup["name"] == name and "id" in sup
+        sid = sup["id"]
+
+        # duplicate
+        r2 = requests.post(f"{API}/suppliers", headers=h, json={"name": name})
+        assert r2.status_code == 400
+
+        # list contains
+        rl = requests.get(f"{API}/suppliers", headers=h)
+        assert rl.status_code == 200
+        assert any(s["id"] == sid for s in rl.json())
+
+        # update
+        ru = requests.put(f"{API}/suppliers/{sid}", headers=h,
+                         json={"name": name, "contact_person": "Veli"})
+        assert ru.status_code == 200
+        assert ru.json()["contact_person"] == "Veli"
+
+        # delete
+        rd = requests.delete(f"{API}/suppliers/{sid}", headers=h)
+        assert rd.status_code == 200
+        assert rd.json().get("ok") is True
+
+    def test_suppliers_auth_required(self):
+        r = requests.get(f"{API}/suppliers")
+        assert r.status_code == 401
+        r2 = requests.post(f"{API}/suppliers", json={"name": "X"})
+        assert r2.status_code == 401
+
+
+# ==================== Iteration 2: Orders ====================
+class TestOrders:
+    def test_order_lifecycle(self, h):
+        # Create supplier
+        sname = f"TEST_OrdSup_{uuid.uuid4().hex[:6]}"
+        rs = requests.post(f"{API}/suppliers", headers=h, json={"name": sname})
+        assert rs.status_code == 200
+        sid = rs.json()["id"]
+
+        # Create product
+        pcode = f"TO-{uuid.uuid4().hex[:6]}"
+        rp = requests.post(f"{API}/products", headers=h, json={
+            "code": pcode, "name": "TEST Ord Prod", "category": "T", "unit": "adet",
+            "unit_price": 5.0, "min_stock": 5, "current_stock": 10,
+        })
+        assert rp.status_code == 200
+        pid = rp.json()["id"]
+        initial_stock = rp.json()["current_stock"]
+
+        # Invalid supplier
+        rbad = requests.post(f"{API}/orders", headers=h, json={
+            "supplier_id": "nonexistent", "delivery_date": "2026-02-01",
+            "items": [{"product_id": pid, "quantity": 3, "unit_price": 7.5}],
+        })
+        assert rbad.status_code == 404
+
+        # Invalid product
+        rbadp = requests.post(f"{API}/orders", headers=h, json={
+            "supplier_id": sid, "delivery_date": "2026-02-01",
+            "items": [{"product_id": "nonexistent", "quantity": 3, "unit_price": 7.5}],
+        })
+        assert rbadp.status_code == 404
+
+        # Create order
+        ro = requests.post(f"{API}/orders", headers=h, json={
+            "supplier_id": sid, "delivery_date": "2026-02-01", "note": "TEST",
+            "items": [
+                {"product_id": pid, "quantity": 4, "unit_price": 7.5},
+                {"product_id": pid, "quantity": 2, "unit_price": 10.0},
+            ],
+        })
+        assert ro.status_code == 200, ro.text
+        order = ro.json()
+        oid = order["id"]
+        assert order["status"] == "open"
+        assert order["supplier_id"] == sid
+        assert order["supplier_name"] == sname
+        # total = 4*7.5 + 2*10 = 50.0
+        assert order["total"] == 50.0
+        assert len(order["items"]) == 2
+        assert order["items"][0]["product_code"] == pcode
+
+        # Filter by status=open
+        ropen = requests.get(f"{API}/orders", headers=h, params={"status": "open"})
+        assert ropen.status_code == 200
+        assert any(o["id"] == oid for o in ropen.json())
+
+        # Filter by status=closed (should NOT contain it yet)
+        rclosed = requests.get(f"{API}/orders", headers=h, params={"status": "closed"})
+        assert not any(o["id"] == oid for o in rclosed.json())
+
+        # Close order
+        rc = requests.post(f"{API}/orders/{oid}/close", headers=h)
+        assert rc.status_code == 200, rc.text
+        closed = rc.json()
+        assert closed["status"] == "closed"
+        assert closed["closed_at"]
+
+        # Product stock incremented by 6 (4+2)
+        rprod = requests.get(f"{API}/products", headers=h)
+        prod_after = next(p for p in rprod.json() if p["id"] == pid)
+        assert prod_after["current_stock"] == initial_stock + 6
+        # unit_price updated to last positive price = 10.0
+        assert prod_after["unit_price"] == 10.0
+
+        # Movements created (2 stock-in entries)
+        rmv = requests.get(f"{API}/movements", headers=h,
+                           params={"product_id": pid, "type": "in"})
+        assert rmv.status_code == 200
+        order_movements = [m for m in rmv.json() if m.get("order_id") == oid]
+        assert len(order_movements) == 2
+        assert all(m.get("supplier") == sname for m in order_movements)
+
+        # Closing already-closed returns 400
+        rc2 = requests.post(f"{API}/orders/{oid}/close", headers=h)
+        assert rc2.status_code == 400
+
+        # DELETE order
+        rd = requests.delete(f"{API}/orders/{oid}", headers=h)
+        assert rd.status_code == 200
+
+        # Second delete = 404
+        rd2 = requests.delete(f"{API}/orders/{oid}", headers=h)
+        assert rd2.status_code == 404
+
+        # cleanup
+        requests.delete(f"{API}/products/{pid}", headers=h)
+        requests.delete(f"{API}/suppliers/{sid}", headers=h)
+
+    def test_orders_auth_required(self):
+        r = requests.get(f"{API}/orders")
+        assert r.status_code == 401
+
+
+# ==================== Iteration 2: Reports by supplier ====================
+class TestReportsBySupplier:
+    def test_by_supplier_aggregation(self, h):
+        sname = f"TEST_RepSup_{uuid.uuid4().hex[:6]}"
+        rs = requests.post(f"{API}/suppliers", headers=h, json={"name": sname})
+        assert rs.status_code == 200
+        sid = rs.json()["id"]
+
+        pcode = f"TR-{uuid.uuid4().hex[:6]}"
+        rp = requests.post(f"{API}/products", headers=h, json={
+            "code": pcode, "name": "TEST RSup", "category": "T", "unit": "adet",
+            "unit_price": 3.0, "min_stock": 1, "current_stock": 5,
+        })
+        pid = rp.json()["id"]
+
+        # Two stock-in movements attributed to this supplier
+        requests.post(f"{API}/stock/in", headers=h,
+                      json={"product_id": pid, "quantity": 4, "unit_price": 2.5,
+                            "supplier_id": sid, "supplier": sname})
+        requests.post(f"{API}/stock/in", headers=h,
+                      json={"product_id": pid, "quantity": 6, "unit_price": 3.0,
+                            "supplier_id": sid, "supplier": sname})
+
+        r = requests.get(f"{API}/reports/by-supplier", headers=h)
+        assert r.status_code == 200
+        rows = r.json()
+        row = next((x for x in rows if x["name"] == sname), None)
+        assert row is not None, f"supplier {sname} not in report rows"
+        assert row["qty"] == 10
+        assert row["count"] == 2
+        # total = 4*2.5 + 6*3.0 = 28.0
+        assert row["total"] == 28.0
+
+        # cleanup
+        requests.delete(f"{API}/products/{pid}", headers=h)
+        requests.delete(f"{API}/suppliers/{sid}", headers=h)
+
+    def test_by_supplier_auth(self):
+        r = requests.get(f"{API}/reports/by-supplier")
+        assert r.status_code == 401
+
+
+# ==================== Iteration 2: StockIn with supplier_id ====================
+class TestStockInSupplier:
+    def test_stockin_stores_supplier_fields(self, h):
+        sname = f"TEST_SiSup_{uuid.uuid4().hex[:6]}"
+        rs = requests.post(f"{API}/suppliers", headers=h, json={"name": sname})
+        sid = rs.json()["id"]
+        pcode = f"TSI-{uuid.uuid4().hex[:6]}"
+        rp = requests.post(f"{API}/products", headers=h, json={
+            "code": pcode, "name": "TEST SI", "category": "T", "unit": "adet",
+            "unit_price": 1.0, "min_stock": 1, "current_stock": 1,
+        })
+        pid = rp.json()["id"]
+        ri = requests.post(f"{API}/stock/in", headers=h,
+                          json={"product_id": pid, "quantity": 2, "unit_price": 4.0,
+                                "supplier_id": sid, "supplier": sname})
+        assert ri.status_code == 200
+        # Look up movement
+        rm = requests.get(f"{API}/movements", headers=h,
+                          params={"product_id": pid, "type": "in"})
+        assert rm.status_code == 200
+        m = rm.json()[0]
+        assert m.get("supplier") == sname
+        assert m.get("supplier_id") == sid
+        requests.delete(f"{API}/products/{pid}", headers=h)
+        requests.delete(f"{API}/suppliers/{sid}", headers=h)
+
+
+# ==================== Iteration 2: Daily digest trigger ====================
+class TestDailyDigest:
+    def test_manual_trigger(self, h):
+        r = requests.post(f"{API}/admin/send-daily-digest", headers=h)
+        assert r.status_code == 200
+        assert r.json().get("ok") is True
+
+    def test_manual_trigger_auth(self):
+        r = requests.post(f"{API}/admin/send-daily-digest")
+        assert r.status_code == 401
+
+
+# ==================== Iteration 2: New endpoint auth protection ====================
+class TestAuthProtectionV2:
+    @pytest.mark.parametrize("method,path", [
+        ("get", "/suppliers"), ("post", "/suppliers"),
+        ("get", "/orders"), ("post", "/orders"),
+        ("get", "/reports/by-supplier"),
+        ("post", "/admin/send-daily-digest"),
+    ])
+    def test_no_token(self, method, path):
+        r = getattr(requests, method)(f"{API}{path}", json={})
+        assert r.status_code == 401
+
