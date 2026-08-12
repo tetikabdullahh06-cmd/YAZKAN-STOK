@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 7 testing complete. All 14 new backend tests (test_iter7.py) pass covering /api/auth/change-password (validation, RBAC, admin+viewer flows), /api/toolholders/import (template, preview, commit, RBAC, error rows), stock_out critical email suppression (verified via source inspection — send_critical_stock_email no longer called), and /api/dashboard critical_products list. Admin password restored to 123456 in a finally block. Full regression: 108/111 passed; 3 pre-existing failures unrelated to iter7 (DB was wiped by iter6 so seed-dependent test fails; 2 parallel-test isolation flakes that pass in isolation). Frontend UI validated: YazkanLogo renders on Login/Register/ForgotPassword/Sidebar (Wrench replaced); Ana Panel shows big red dashboard-critical-alert banner at top with dashboard-critical-row-<code> rows when critical_products>0; Ayarlar (Settings) page shows form with all four data-testids, wrong-current-password shows inline 'Mevcut şifre hatalı', confirm mismatch handled inline; Takım Tutucular has th-import-btn opening the ToolHolderImport modal with 'Şablon İndir' and 'Excel Seç' buttons.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter7.py",
+    "/app/test_reports/pytest/iter7_results.xml"
+  ],
+  "action_items": [
+    "Optional: pre-existing test flakes in backend_test.py (TestOrdersManualItems.test_receive_partial_manual_creates_product) and test_toolholders.py (TestToolHolderIndependent.test_creating_toolholder_does_not_create_product) fail under -n auto parallel run because they read/count all products/orders without scoping to test-created data. They pass in isolation. Consider scoping asserts by test-created ids or serial-marking these tests.",
+    "Optional: backend_test.py::TestSeedAndSchema::test_products_no_unit_price_on_new_yzk asserts len(products) >= 1 which fails when DB was freshly wiped (iter6). Either seed data on demand in the fixture or remove/relax the assertion."
+  ],
+  "critical_code_review_comments": [
+    "server.py stock_out no longer sends critical email (comment on line 678 documents the intentional removal) — good.",
+    "toolholder_import matches on (name, brand, type) — brand/type optional in query, so name-only rows will match ANY existing holder with same name regardless of brand — acceptable but could accidentally collapse legitimate duplicates. Consider always requiring brand+type in the uniqueness key for safety.",
+    "server.py uses deprecated @app.on_event('startup'/'shutdown') — should migrate to FastAPI lifespan handlers (pre-existing, not iter7)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter7.py"],
+  "success_rate": {"backend": "100% (14/14 new + 108/111 full regression, 3 pre-existing non-iter7)", "frontend": "100% (all iter7 flows verified)"},
+  "test_credentials": "Admin: takimhane@yazkan.com.tr / 123456 — RESTORED after tests; verified with a login round-trip.",
+  "seed_data_creation": "None persisted. All test data (products, toolholders, personnel, machines, viewers, movements) created during the run was cleaned up via delete calls in try/finally blocks. One residual test product 'TEST_UI_CRIT' created by an earlier UI script iteration that errored before cleanup returned 403 on delete (likely because it had linked movements from stock ops — inspection needed but not iter7-related). Note: viewers cannot be deleted through the current API (no /api/users DELETE) so 1–2 test viewer accounts remain.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend iter7 tests live at /app/backend/tests/test_iter7.py. The change_password test uses a try/finally to restore the admin password — DO NOT skip the finally block. Frontend has data-testids: dashboard-critical-alert, dashboard-critical-row-<code>, nav-settings, settings-current/new/confirm/submit, th-import-btn. Dashboard is mounted at '/' (not '/panel'), Settings at '/ayarlar', Takım Tutucular at '/takim-tutucular'. Auth token in localStorage as 'access_token'; Bearer header works alongside httpOnly cookie."
+}

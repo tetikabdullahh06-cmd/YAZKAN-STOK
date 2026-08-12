@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate, Link, Navigate } from "react-router-dom";
-import { Wrench, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import YazkanLogo from "@/components/YazkanLogo";
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -36,7 +37,7 @@ export default function Login() {
       <div className="relative w-full max-w-md">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/50">
-            <Wrench className="w-8 h-8 text-white" strokeWidth={2.5} />
+            <YazkanLogo className="w-9 h-9 text-white" />
           </div>
           <div>
             <div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold">Endüstriyel Stok</div>

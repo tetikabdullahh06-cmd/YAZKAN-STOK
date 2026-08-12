@@ -19,6 +19,7 @@ import Reports from "@/pages/Reports";
 import Suppliers from "@/pages/Suppliers";
 import Orders from "@/pages/Orders";
 import TakimTutucular from "@/pages/TakimTutucular";
+import Settings from "@/pages/Settings";
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="hareketler" element={<Movements />} />
             <Route path="kritik-stok" element={<CriticalStock />} />
             <Route path="raporlar" element={<Reports />} />
+            <Route path="ayarlar" element={<Settings />} />
           </Route>
         </Routes>
       </BrowserRouter>

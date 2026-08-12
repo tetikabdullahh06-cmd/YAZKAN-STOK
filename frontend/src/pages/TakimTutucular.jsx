@@ -3,9 +3,10 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import {
   Plus, Pencil, Trash2, Search, Wrench, ArrowDownToLine, ArrowUpFromLine,
-  Loader2, X, History
+  Loader2, X, History, FileSpreadsheet
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import ToolHolderImport from "@/components/ToolHolderImport";
 
 const emptyForm = {
   name: "", brand: "", type: "", length: "", diameter: "",
@@ -28,6 +29,7 @@ export default function TakimTutucular() {
   const [saving, setSaving] = useState(false);
   const [movementsFor, setMovementsFor] = useState(null);
   const [movements, setMovements] = useState([]);
+  const [showImport, setShowImport] = useState(false);
 
   const load = () => Promise.all([
     api.get("/toolholders").then((r) => setItems(r.data)),
@@ -113,10 +115,16 @@ export default function TakimTutucular() {
           <p className="text-slate-400 text-sm mt-1">{items.length} tutucu</p>
         </div>
         {isAdmin && (
-          <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(true); }} data-testid="th-add-btn"
-            className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
-            <Plus className="w-5 h-5" /> Yeni Tutucu
-          </button>
+          <div className="flex gap-3 flex-wrap">
+            <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(true); }} data-testid="th-add-btn"
+              className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
+              <Plus className="w-5 h-5" /> Yeni Tutucu
+            </button>
+            <button onClick={() => setShowImport(true)} data-testid="th-import-btn"
+              className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
+              <FileSpreadsheet className="w-5 h-5" /> Excel'den İçe Aktar
+            </button>
+          </div>
         )}
       </div>
 
@@ -302,8 +310,7 @@ export default function TakimTutucular() {
 
       {movementsFor && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
               <div>
                 <div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold">Hareket Geçmişi</div>
                 <div className="font-display text-lg font-bold">{movementsFor.name}</div>
@@ -347,6 +354,7 @@ export default function TakimTutucular() {
           </div>
         </div>
       )}
+      {showImport && <ToolHolderImport onClose={() => setShowImport(false)} onCommitted={load} />}
     </div>
   );
 }

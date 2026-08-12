@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { Wrench, Loader2, ShieldCheck, AlertTriangle } from "lucide-react";
+import YazkanLogo from "@/components/YazkanLogo";
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
@@ -40,7 +41,7 @@ export default function ResetPassword() {
       <div className="relative w-full max-w-md">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/50">
-            <Wrench className="w-8 h-8 text-white" strokeWidth={2.5} />
+            <YazkanLogo className="w-9 h-9 text-white" />
           </div>
           <div>
             <div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold">Endüstriyel Stok</div>

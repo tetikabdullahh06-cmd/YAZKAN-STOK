@@ -3,8 +3,9 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Package, Users, Settings2, ArrowDownToLine,
   ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench,
-  Building2, ClipboardList, Eye, ShieldCheck
+  Building2, ClipboardList, Eye, ShieldCheck, Cog
 } from "lucide-react";
+import YazkanLogo from "@/components/YazkanLogo";
 
 const NAV = [
   { to: "/", label: "Panel", icon: LayoutDashboard, end: true, testid: "nav-dashboard" },
@@ -19,6 +20,7 @@ const NAV = [
   { to: "/hareketler", label: "Hareketler", icon: History, testid: "nav-movements" },
   { to: "/kritik-stok", label: "Kritik Stok", icon: AlertTriangle, testid: "nav-critical" },
   { to: "/raporlar", label: "Raporlar", icon: FileBarChart2, testid: "nav-reports" },
+  { to: "/ayarlar", label: "Ayarlar", icon: Cog, testid: "nav-settings" },
 ];
 
 export default function Layout() {
@@ -31,7 +33,7 @@ export default function Layout() {
       <aside className="w-72 border-r border-slate-800 bg-slate-950 hidden md:flex flex-col relative z-10">
         <div className="px-6 py-6 border-b border-slate-800 flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
-            <Wrench className="w-6 h-6 text-white" strokeWidth={2.5} />
+            <YazkanLogo className="w-7 h-7 text-white" />
           </div>
           <div>
             <div className="font-display text-base font-bold leading-tight">YAZKAN DÖKÜM</div>
@@ -91,7 +93,7 @@ export default function Layout() {
       <div className="md:hidden fixed top-0 inset-x-0 h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 z-20">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <Wrench className="w-4 h-4 text-white" />
+            <YazkanLogo className="w-5 h-5 text-white" />
           </div>
           <div className="font-display font-bold">YAZKAN DÖKÜM</div>
           {!isAdmin && (

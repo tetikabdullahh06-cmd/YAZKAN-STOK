@@ -130,6 +130,11 @@ class ResetPasswordIn(BaseModel):
     new_password: str = Field(min_length=6)
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
+
+
 class ProductIn(BaseModel):
     code: Optional[str] = ""
     name: str
@@ -476,6 +481,19 @@ async def me(user=Depends(get_current_user)):
     return user
 
 
+@api.post("/auth/change-password")
+async def change_password(body: ChangePasswordIn, user=Depends(get_current_user)):
+    """Giriş yapmış kullanıcı kendi şifresini değiştirir."""
+    current = await db.users.find_one({"id": user["id"]})
+    if not current or not verify_password(body.current_password, current.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Mevcut şifre hatalı")
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail="Yeni şifre eskisiyle aynı olamaz")
+    await db.users.update_one({"id": user["id"]},
+                              {"$set": {"password_hash": hash_password(body.new_password)}})
+    return {"ok": True, "message": "Şifreniz güncellendi"}
+
+
 # ---------- Critical (define BEFORE /products/{pid} routes) ----------
 @api.get("/products/critical")
 async def critical_products(user=Depends(get_current_user)):
@@ -657,20 +675,7 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
     }
     await db.movements.insert_one(movement)
     critical = new_stock <= product["min_stock"]
-    if critical:
-        last_flag = product.get("last_critical_alert")
-        should_send = True
-        if last_flag:
-            try:
-                dt = datetime.fromisoformat(last_flag)
-                if now_utc() - dt < timedelta(hours=6):
-                    should_send = False
-            except Exception:
-                pass
-        if should_send:
-            await db.products.update_one({"id": product["id"]},
-                                         {"$set": {"last_critical_alert": now_utc().isoformat()}})
-            await send_critical_stock_email({**product, "current_stock": new_stock})
+    # Kritik stok e-postası kullanıcı isteği üzerine devre dışı — bilgi sadece Ana Panel'de görünür.
     return {"ok": True, "new_stock": new_stock, "movement": clean(movement), "critical": critical}
 
 
@@ -991,6 +996,118 @@ async def list_toolholder_movements(user=Depends(get_current_user),
     if type:
         q["type"] = type
     return await db.toolholder_movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+
+# ==================== Tool Holder bulk import ====================
+@api.get("/toolholders/import/template")
+async def toolholder_import_template(user=Depends(get_current_user)):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tutucular"
+    ws.append(["name", "brand", "type", "length", "diameter", "min_stock", "current_stock", "location", "note"])
+    ws.append(["BT40 Örnek Tutucu", "Regofix", "BT40", "120", "32", 1, 5, "Raf A-1", ""])
+    ws.append(["HSK-A63 ER32", "Big Kaiser", "HSK-A63", "90", "25", 1, 3, "Raf A-2", "Kısa tip"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="tutucu_sablonu.xlsx"'},
+    )
+
+
+@api.post("/toolholders/import")
+async def toolholder_import(file: UploadFile = File(...), commit: bool = False,
+                            user=Depends(require_admin)):
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Sadece .xlsx dosyası yükleyin")
+    content = await file.read()
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Excel dosyası okunamadı")
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        raise HTTPException(status_code=400, detail="Dosyada veri yok")
+    header = [str(c).strip().lower() if c else "" for c in rows[0]]
+    idx = {h: i for i, h in enumerate(header) if h}
+    if "name" not in idx:
+        raise HTTPException(status_code=400, detail="Zorunlu sütun eksik: name")
+
+    def _get(row, col, default=None):
+        i = idx.get(col)
+        return row[i] if (i is not None and i < len(row)) else default
+
+    preview = []
+    for row_num, row in enumerate(rows[1:], start=2):
+        if not row or all(v is None or str(v).strip() == "" for v in row):
+            continue
+        name = str(_get(row, "name") or "").strip()
+        if not name:
+            preview.append({"row": row_num, "action": "skip", "error": "name boş olamaz",
+                            "data": {"name": name}})
+            continue
+        try:
+            min_stock = float(_get(row, "min_stock") or 0)
+            current_stock = float(_get(row, "current_stock") or 0)
+        except (TypeError, ValueError):
+            preview.append({"row": row_num, "action": "skip",
+                            "error": "min_stock/current_stock sayı olmalı",
+                            "data": {"name": name}})
+            continue
+        d = {
+            "name": name,
+            "brand": str(_get(row, "brand") or "").strip(),
+            "type": str(_get(row, "type") or "").strip(),
+            "length": str(_get(row, "length") or "").strip(),
+            "diameter": str(_get(row, "diameter") or "").strip(),
+            "min_stock": min_stock,
+            "current_stock": current_stock,
+            "location": str(_get(row, "location") or "").strip(),
+            "note": str(_get(row, "note") or "").strip(),
+        }
+        # Match on name + type + brand (best-effort uniqueness key)
+        query = {"name": d["name"]}
+        if d["brand"]:
+            query["brand"] = d["brand"]
+        if d["type"]:
+            query["type"] = d["type"]
+        existing = await db.toolholders.find_one(query)
+        preview.append({"row": row_num,
+                        "action": "update" if existing else "create",
+                        "error": None, "data": d})
+
+    stats = {
+        "total": len(preview),
+        "create": sum(1 for p in preview if p["action"] == "create"),
+        "update": sum(1 for p in preview if p["action"] == "update"),
+        "skip": sum(1 for p in preview if p["action"] == "skip"),
+    }
+    if not commit:
+        return {"committed": False, "stats": stats, "preview": preview}
+
+    created, updated = 0, 0
+    for p in preview:
+        if p["action"] == "skip":
+            continue
+        d = p["data"]
+        query = {"name": d["name"]}
+        if d["brand"]:
+            query["brand"] = d["brand"]
+        if d["type"]:
+            query["type"] = d["type"]
+        if p["action"] == "create":
+            await db.toolholders.insert_one({**d, "id": new_id(),
+                                             "created_at": now_utc().isoformat()})
+            created += 1
+        else:
+            await db.toolholders.update_one(query, {"$set": d})
+            updated += 1
+    return {"committed": True, "stats": stats, "created": created,
+            "updated": updated, "preview": preview}
 
 
 # ==================== Admin: wipe all business data ====================

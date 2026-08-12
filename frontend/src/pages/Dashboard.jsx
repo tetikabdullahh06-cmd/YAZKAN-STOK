@@ -39,6 +39,40 @@ export default function Dashboard() {
         <h1 className="font-display text-4xl md:text-5xl font-black">Takımhane Genel Bakış</h1>
       </div>
 
+      {/* Kritik stok uyarısı — ana panelde en üstte, çok belirgin (mail gönderilmiyor) */}
+      {d.critical_products && d.critical_products.length > 0 && (
+        <div data-testid="dashboard-critical-alert" className="relative bg-gradient-to-br from-red-950/60 via-red-900/40 to-red-950/60 border-2 border-red-500/50 rounded-2xl overflow-hidden shadow-lg shadow-red-950/40">
+          <div className="absolute inset-0 pointer-events-none opacity-30" style={{ backgroundImage: "repeating-linear-gradient(45deg, transparent 0 12px, rgba(239,68,68,0.08) 12px 24px)" }} />
+          <div className="relative px-6 py-4 border-b border-red-500/30 flex items-center gap-3 bg-red-500/10">
+            <div className="w-11 h-11 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center animate-pulse">
+              <AlertTriangle className="w-6 h-6 text-red-300" />
+            </div>
+            <div className="flex-1">
+              <div className="text-[10px] text-red-300 uppercase tracking-[0.3em] font-bold">Acil Dikkat</div>
+              <h3 className="font-display text-xl font-black text-red-100">Kritik Stok Uyarıları · {d.critical_products.length} kalem</h3>
+            </div>
+            <Link to="/kritik-stok" data-testid="dashboard-critical-view-all" className="hidden md:inline-flex h-10 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-bold items-center gap-2">
+              Tümünü Gör
+            </Link>
+          </div>
+          <div className="relative divide-y divide-red-900/40 max-h-80 overflow-auto">
+            {d.critical_products.map((p) => (
+              <div key={p.id} data-testid={`dashboard-critical-row-${p.code}`} className="flex items-center justify-between px-6 py-3 hover:bg-red-500/5">
+                <div className="min-w-0">
+                  <div className="font-mono-tab text-xs text-red-300">{p.code}</div>
+                  <div className="font-semibold text-red-50 truncate">{p.name}</div>
+                  {p.location && <div className="text-xs text-red-300/70">Konum: {p.location}</div>}
+                </div>
+                <div className="text-right shrink-0 ml-4">
+                  <div className="text-2xl font-black font-mono-tab text-red-300">{p.current_stock} <span className="text-sm text-red-400/60">/ {p.min_stock}</span></div>
+                  <div className="text-[10px] text-red-300/70 uppercase tracking-wider">mevcut / min · {p.unit}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <KpiCard label="Toplam Ürün" value={d.total_products} icon={Package} tone="blue" testid="kpi-total-products" />
         <KpiCard label="Kritik Stok" value={d.critical_count} icon={AlertTriangle} tone={d.critical_count > 0 ? "red" : "emerald"} testid="kpi-critical-count" />
@@ -105,7 +139,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {d.critical_products.length > 0 && (
+      {d.critical_products.length > 0 && false && (
         <div className="bg-red-950/30 border border-red-800/50 rounded-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-red-800/50 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-red-400" />
