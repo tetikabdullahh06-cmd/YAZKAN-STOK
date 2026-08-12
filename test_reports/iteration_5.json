@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 5 RBAC backend testing complete. Added /app/backend/tests/test_rbac.py (39 new tests) and updated ADMIN_EMAIL in existing backend_test.py from legacy tetikabdullahh06@gmail.com → new admin takimhane@yazkan.com.tr. Full suite: 79/79 PASS (39 RBAC + 40 iter4 regression). Coverage: (1) admin login/register/me returns role='admin' with access_token; (2) POST /api/auth/register auto-assigns role='viewer' + returns token; (3) legacy user tetikabdullahh06@gmail.com verified as demoted to viewer by startup migration; (4) viewer can GET /products, /personnel, /machines, /suppliers, /orders, /movements, /dashboard, /reports/summary, /reports/excel, /products/critical (all 200); (5) viewer receives 403 with Turkish detail containing 'yönetici yetkisi' on every mutation endpoint tested: POST/PUT/DELETE products (including nonexistent id — role check precedes 404), POST/PUT/DELETE personnel, POST/PUT/DELETE machines, POST /stock/in, POST /stock/out, POST/PUT/DELETE suppliers, POST /orders, POST /orders/{id}/close, POST /orders/{id}/receive, DELETE /orders/{id}, POST /products/import, POST /admin/send-daily-digest — 20 mutation endpoints, all correctly return 403; (6) 401-before-403: no-token POST /products = 401, no-token DELETE /products = 401, bad-token POST /products = 401 — auth check correctly precedes role check; (7) admin end-to-end mutation flow: create product (auto YZK code), update product, create personnel, create machine (with type), stock in, stock out, create+update supplier, create order, receive partial, close order — all 200 OK; cleanup performed. All iteration-4 features (auto-YZK, manual orders, close/receive auto-create products, personnel without reg_no, machines with type, product import, reports excel) continue to work under new admin.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_rbac.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter5_full.xml",
+    "/app/test_reports/pytest/rbac_iter5.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "require_admin is applied via Depends on each endpoint — correct FastAPI pattern; role is re-read from DB inside get_current_user every request (line 91-92) so a demoted admin loses privileges immediately without token invalidation — good defense-in-depth.",
+    "Startup migration ($set role='viewer' for users missing role, $set role='admin' for ADMIN_EMAIL, and demote any prior admin to viewer if ADMIN_EMAIL changed) executes idempotently on each boot — legacy admin (tetikabdullahh06) confirmed demoted to viewer.",
+    "Carry-over from iter4: server.py at 1179 lines should be split into APIRouter modules (products/orders/imports/reports/auth) for maintainability.",
+    "Carry-over: dashboard.month_total_cost and reports summary totals are still hardcoded/always-0 since unit_price removal (iter4). Consider dropping these dead fields.",
+    "Auth path returns 401 for both missing and invalid tokens (correct). Consider distinguishing token-expired vs token-invalid for better client UX, but not required."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_rbac.py (new — 39 RBAC tests)",
+    "/app/backend/tests/backend_test.py (ADMIN_EMAIL updated legacy → takimhane@yazkan.com.tr)"
+  ],
+  "success_rate": {"backend": "100% (79/79)"},
+  "test_credentials": "Admin: takimhane@yazkan.com.tr / Admin123!. Test viewers registered dynamically per session and deleted via mongosh in fixture teardown.",
+  "seed_data_creation": "Ephemeral: one testviewer_<hex>@example.com registered per pytest session and cleaned up (mongosh db.users.deleteOne). Admin flow test creates TEST_RBAC_* product/personnel/machine/supplier/order and deletes them at end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "RBAC test module lives at /app/backend/tests/test_rbac.py. Uses parametrized viewer-GET tests + explicit viewer-mutation 403 matrix + 401-before-403 tests + one end-to-end admin mutation smoke. If ADMIN_EMAIL changes again in .env, update ADMIN_EMAIL constants in BOTH backend_test.py and test_rbac.py. Legacy user check uses pytest.skip if legacy user not present, so it is safe across DB resets. Run: pytest /app/backend/tests/ -v --junitxml=/app/test_reports/pytest/pytest_results.xml",
+  "rca of the issue": "N/A — no bugs found. Only mechanical fix: existing backend_test.py hardcoded the legacy admin email which is now (correctly) demoted to viewer per iter5 requirements; updated constant to new admin email — 40/40 regression restored."
+}

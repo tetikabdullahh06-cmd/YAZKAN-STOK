@@ -17,8 +17,6 @@ export default function Movements() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [type, dateFrom, dateTo]);
 
-  const currency = (v) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(v || 0);
-
   return (
     <div className="space-y-6">
       <div>
@@ -47,13 +45,20 @@ export default function Movements() {
       <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-900/50"><tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
-              <th className="px-4 py-3">Tarih</th><th className="px-4 py-3">Tip</th><th className="px-4 py-3">Ürün</th>
-              <th className="px-4 py-3 text-right">Miktar</th><th className="px-4 py-3">Personel</th><th className="px-4 py-3">Tezgah</th>
-              <th className="px-4 py-3">Tedarikçi/Not</th><th className="px-4 py-3 text-right">Tutar</th><th className="px-4 py-3">Kullanıcı</th>
-            </tr></thead>
+            <thead className="bg-slate-900/50">
+              <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
+                <th className="px-4 py-3">Tarih</th>
+                <th className="px-4 py-3">Tip</th>
+                <th className="px-4 py-3">Ürün</th>
+                <th className="px-4 py-3 text-right">Miktar</th>
+                <th className="px-4 py-3">Personel</th>
+                <th className="px-4 py-3">Tezgah</th>
+                <th className="px-4 py-3">Tedarikçi / Not</th>
+                <th className="px-4 py-3">Kullanıcı</th>
+              </tr>
+            </thead>
             <tbody className="divide-y divide-slate-700">
-              {items.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-slate-500">Hareket yok</td></tr>}
+              {items.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-slate-500">Hareket yok</td></tr>}
               {items.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-700/40">
                   <td className="px-4 py-3 font-mono-tab text-slate-400 whitespace-nowrap">{new Date(m.created_at).toLocaleString("tr-TR")}</td>
@@ -67,7 +72,6 @@ export default function Movements() {
                   <td className="px-4 py-3 text-slate-300">{m.personnel_name || "-"}</td>
                   <td className="px-4 py-3 text-slate-300">{m.machine_name || "-"}</td>
                   <td className="px-4 py-3 text-slate-400 text-xs">{m.supplier || m.note || "-"}</td>
-                  <td className="px-4 py-3 text-right font-mono-tab">{currency(m.total)}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs">{m.user_name}</td>
                 </tr>
               ))}

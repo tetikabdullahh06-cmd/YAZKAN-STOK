@@ -3,15 +3,9 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { X, Loader2, PackageCheck } from "lucide-react";
 
-const currency = (v) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(v || 0);
-
-/**
- * Partial receive modal for an order.
- * Props: order, onClose, onReceived
- */
 export default function OrderReceive({ order, onClose, onReceived }) {
   const initial = order.items.map((it) => ({
-    product_id: it.product_id,
+    key: it.product_id || it.product_code || it.product_name,
     qty: String(Math.max(0, (it.quantity || 0) - (it.received_qty || 0))),
   }));
   const [rows, setRows] = useState(initial);
@@ -21,7 +15,10 @@ export default function OrderReceive({ order, onClose, onReceived }) {
 
   const submit = async () => {
     const items = rows
-      .map((r) => ({ product_id: r.product_id, quantity: parseFloat(r.qty) || 0 }))
+      .map((r, i) => {
+        const it = order.items[i];
+        return { product_id: it.product_id || it.product_code || it.product_name, quantity: parseFloat(r.qty) || 0 };
+      })
       .filter((r) => r.quantity > 0);
     if (items.length === 0) return toast.error("En az bir kalem için teslim miktarı girin");
     setSaving(true);
@@ -33,11 +30,6 @@ export default function OrderReceive({ order, onClose, onReceived }) {
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
     setSaving(false);
   };
-
-  const totalToReceive = rows.reduce((s, r, i) => {
-    const it = order.items[i];
-    return s + (parseFloat(r.qty) || 0) * (it.unit_price || 0);
-  }, 0);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur flex items-center justify-center p-4">
@@ -53,7 +45,7 @@ export default function OrderReceive({ order, onClose, onReceived }) {
 
         <div className="p-6 flex-1 overflow-auto">
           <div className="text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg p-3 mb-4">
-            Her kalem için bugün <strong>teslim aldığınız</strong> miktarı girin. Varsayılan olarak kalan miktar önerilir. Kalemin bir kısmını almazsanız 0 girin. Tüm kalemler tamamlanınca sipariş otomatik kapanır.
+            Her kalem için bugün <strong>teslim aldığınız</strong> miktarı girin. Varsayılan olarak kalan miktar önerilir. Almayacaklarınıza 0 yazın. Tüm kalemler tamamlanınca sipariş otomatik kapanır. Manuel eklenen ürünler stokta yoksa otomatik oluşturulur.
           </div>
 
           <div className="bg-slate-800/40 border border-slate-700 rounded-xl overflow-hidden">
@@ -74,31 +66,27 @@ export default function OrderReceive({ order, onClose, onReceived }) {
                   return (
                     <tr key={i} className={done ? "opacity-50" : ""}>
                       <td className="px-3 py-2">
-                        <div className="font-medium">{it.product_name}</div>
-                        <div className="text-xs text-slate-500 font-mono-tab">{it.product_code}</div>
+                        <div className="font-medium flex items-center gap-2">
+                          {it.manual && !it.product_id && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/30">Manuel</span>}
+                          {it.product_name}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono-tab">{it.product_code || "-"}</div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono-tab">{it.quantity}</td>
                       <td className="px-3 py-2 text-right font-mono-tab text-emerald-400">{it.received_qty || 0}</td>
                       <td className="px-3 py-2 text-right font-mono-tab text-amber-400 font-bold">{remaining}</td>
                       <td className="px-3 py-2 text-right">
-                        <input
-                          type="number" min="0" max={remaining} step="0.01"
-                          value={rows[i].qty}
-                          disabled={done}
+                        <input type="number" min="0" max={remaining} step="0.01"
+                          value={rows[i].qty} disabled={done}
                           onChange={(e) => update(i, e.target.value)}
-                          data-testid={`receive-qty-${it.product_code}`}
-                          className="w-24 h-10 bg-slate-950 border border-slate-700 rounded-lg px-2 text-right font-mono-tab font-bold focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-40"
-                        />
+                          data-testid={`receive-qty-${i}`}
+                          className="w-24 h-10 bg-slate-950 border border-slate-700 rounded-lg px-2 text-right font-mono-tab font-bold focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-40" />
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-
-          <div className="mt-4 text-right text-sm text-slate-400">
-            Bu teslimat tutarı: <span className="font-bold font-mono-tab text-emerald-400 text-base">{currency(totalToReceive)}</span>
           </div>
         </div>
 

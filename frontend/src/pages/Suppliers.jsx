@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, Building2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 const empty = { name: "", contact_person: "", phone: "", email: "", address: "", note: "" };
 
 export default function Suppliers() {
+  const { isAdmin } = useAuth();
   const [items, setItems] = useState([]);
   const [totals, setTotals] = useState([]); // by-supplier totals
   const [q, setQ] = useState("");
@@ -51,10 +53,12 @@ export default function Suppliers() {
           <h1 className="font-display text-4xl font-black">Tedarikçiler</h1>
           <p className="text-slate-400 text-sm mt-1">{items.length} tedarikçi</p>
         </div>
-        <button onClick={() => { setForm(empty); setEditId(null); setShowForm(true); }} data-testid="supplier-add-btn"
-          className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-900/30">
-          <Plus className="w-5 h-5" /> Yeni Tedarikçi
-        </button>
+        {isAdmin && (
+          <button onClick={() => { setForm(empty); setEditId(null); setShowForm(true); }} data-testid="supplier-add-btn"
+            className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-900/30">
+            <Plus className="w-5 h-5" /> Yeni Tedarikçi
+          </button>
+        )}
       </div>
 
       <div className="relative">
@@ -101,8 +105,12 @@ export default function Suppliers() {
                     {s.contact_person && <div className="text-slate-400 text-sm truncate">{s.contact_person}</div>}
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => edit(s)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400"><Pencil className="w-4 h-4" /></button>
-                    <button onClick={() => del(s)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                    {isAdmin && (
+                      <>
+                        <button onClick={() => edit(s)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => del(s)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="text-xs text-slate-500 space-y-1">

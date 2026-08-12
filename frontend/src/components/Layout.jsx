@@ -3,13 +3,13 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Package, Users, Settings2, ArrowDownToLine,
   ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench,
-  Building2, ClipboardList
+  Building2, ClipboardList, Eye, ShieldCheck
 } from "lucide-react";
 
-const nav = [
+const NAV = [
   { to: "/", label: "Panel", icon: LayoutDashboard, end: true, testid: "nav-dashboard" },
-  { to: "/stok-cikis", label: "Stok Çıkışı", icon: ArrowUpFromLine, testid: "nav-stock-out" },
-  { to: "/stok-giris", label: "Stok Girişi", icon: ArrowDownToLine, testid: "nav-stock-in" },
+  { to: "/stok-cikis", label: "Stok Çıkışı", icon: ArrowUpFromLine, testid: "nav-stock-out", adminOnly: true },
+  { to: "/stok-giris", label: "Stok Girişi", icon: ArrowDownToLine, testid: "nav-stock-in", adminOnly: true },
   { to: "/urunler", label: "Ürünler", icon: Package, testid: "nav-products" },
   { to: "/personel", label: "Personel", icon: Users, testid: "nav-personnel" },
   { to: "/tezgahlar", label: "Tezgahlar", icon: Settings2, testid: "nav-machines" },
@@ -21,8 +21,9 @@ const nav = [
 ];
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
+  const nav = NAV.filter((n) => !n.adminOnly || isAdmin);
 
   return (
     <div className="min-h-screen flex bg-slate-900 grain">
@@ -60,7 +61,18 @@ export default function Layout() {
 
         <div className="p-4 border-t border-slate-800">
           <div className="px-3 py-2 mb-2">
-            <div className="text-xs text-slate-500 uppercase tracking-widest">Oturum</div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="text-xs text-slate-500 uppercase tracking-widest">Oturum</div>
+              {isAdmin ? (
+                <span data-testid="role-badge-admin" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded px-1.5 py-0.5">
+                  <ShieldCheck className="w-3 h-3" /> Yönetici
+                </span>
+              ) : (
+                <span data-testid="role-badge-viewer" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">
+                  <Eye className="w-3 h-3" /> Görüntüleme
+                </span>
+              )}
+            </div>
             <div className="text-sm font-semibold text-slate-100 truncate">{user?.name}</div>
             <div className="text-xs text-slate-500 truncate">{user?.email}</div>
           </div>
@@ -81,6 +93,11 @@ export default function Layout() {
             <Wrench className="w-4 h-4 text-white" />
           </div>
           <div className="font-display font-bold">CNC Takımhane</div>
+          {!isAdmin && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">
+              <Eye className="w-3 h-3" /> Görüntüleme
+            </span>
+          )}
         </div>
         <button onClick={async () => { await logout(); navigate("/giris"); }} className="text-slate-400">
           <LogOut className="w-5 h-5" />
@@ -89,6 +106,15 @@ export default function Layout() {
 
       <main className="flex-1 overflow-auto relative z-10 pt-14 md:pt-0">
         <div className="p-4 md:p-8 lg:p-12 max-w-[1600px]">
+          {!isAdmin && (
+            <div data-testid="viewer-banner" className="mb-6 flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-xl px-4 py-3">
+              <Eye className="w-5 h-5 shrink-0" />
+              <div className="text-sm">
+                <span className="font-semibold">Görüntüleme modu.</span>{" "}
+                Verileri görüntüleyebilirsiniz; ekleme, düzenleme ve silme işlemleri sadece yönetici hesabında yapılabilir.
+              </div>
+            </div>
+          )}
           <Outlet />
         </div>
         {/* Mobile bottom nav */}

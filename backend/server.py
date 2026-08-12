@@ -88,11 +88,19 @@ async def get_current_user(request: Request) -> dict:
         user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="Kullanıcı bulunamadı")
+        # role is re-read from DB every request (skill: re-derive privileged authz from source of truth)
+        user["role"] = user.get("role") or "viewer"
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Oturum süresi doldu")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Geçersiz token")
+
+
+async def require_admin(user=Depends(get_current_user)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Bu işlem için yönetici yetkisi gerekli. Sadece görüntüleme yapabilirsiniz.")
+    return user
 
 
 def clean(doc: dict) -> dict:
@@ -114,21 +122,21 @@ class LoginIn(BaseModel):
 
 
 class ProductIn(BaseModel):
-    code: str
+    code: Optional[str] = ""
     name: str
     category: str
     unit: str = "adet"
-    unit_price: float = 0.0
     min_stock: float = 0.0
     current_stock: float = 0.0
+    location: Optional[str] = ""
+    quality: Optional[str] = ""
+    brand: Optional[str] = ""
 
 
 class PersonnelIn(BaseModel):
     first_name: str
     last_name: str
-    reg_no: str
     department: Optional[str] = ""
-    email: Optional[str] = ""
 
 
 class MachineIn(BaseModel):
@@ -136,13 +144,13 @@ class MachineIn(BaseModel):
     name: str
     brand: Optional[str] = ""
     model: Optional[str] = ""
+    type: Optional[str] = ""
     description: Optional[str] = ""
 
 
 class StockInIn(BaseModel):
     product_id: str
     quantity: float
-    unit_price: Optional[float] = None
     supplier: Optional[str] = ""
     supplier_id: Optional[str] = None
     note: Optional[str] = ""
@@ -166,9 +174,12 @@ class SupplierIn(BaseModel):
 
 
 class OrderItemIn(BaseModel):
-    product_id: str
+    product_id: Optional[str] = None
+    product_code: Optional[str] = ""
+    product_name: Optional[str] = ""
+    category: Optional[str] = "Diğer"
+    unit: Optional[str] = "adet"
     quantity: float
-    unit_price: float = 0.0
 
 
 class OrderIn(BaseModel):
@@ -189,29 +200,29 @@ class ReceiveIn(BaseModel):
 
 # ---------- Sample Data ----------
 SAMPLE_PRODUCTS = [
-    {"code": "KU-001", "name": "Kesici Uç CNMG 120408", "category": "Kesici Uç", "unit": "adet", "unit_price": 85.50, "min_stock": 20, "current_stock": 45},
-    {"code": "KU-002", "name": "Kesici Uç DNMG 150608", "category": "Kesici Uç", "unit": "adet", "unit_price": 95.00, "min_stock": 15, "current_stock": 8},
-    {"code": "MT-001", "name": "HSS Matkap Ucu Ø8mm", "category": "Matkap", "unit": "adet", "unit_price": 45.00, "min_stock": 25, "current_stock": 60},
-    {"code": "MT-002", "name": "Karbür Matkap Ucu Ø10mm", "category": "Matkap", "unit": "adet", "unit_price": 220.00, "min_stock": 10, "current_stock": 4},
-    {"code": "KT-001", "name": "Kater DCLNR 2525M-12", "category": "Kater", "unit": "adet", "unit_price": 850.00, "min_stock": 3, "current_stock": 7},
-    {"code": "AP-001", "name": "ER32 Pens Seti", "category": "Apparat", "unit": "set", "unit_price": 1200.00, "min_stock": 2, "current_stock": 3},
-    {"code": "OL-001", "name": "Kumpas 0-150mm Dijital", "category": "Ölçüm Aleti", "unit": "adet", "unit_price": 450.00, "min_stock": 5, "current_stock": 12},
-    {"code": "OL-002", "name": "Mikrometre 0-25mm", "category": "Ölçüm Aleti", "unit": "adet", "unit_price": 380.00, "min_stock": 4, "current_stock": 2},
+    {"code": "YZK00001", "name": "Kesici Uç CNMG 120408", "category": "Kesici Uç", "unit": "adet", "min_stock": 20, "current_stock": 45, "location": "Raf A-1", "quality": "TiAlN", "brand": "Sandvik"},
+    {"code": "YZK00002", "name": "Kesici Uç DNMG 150608", "category": "Kesici Uç", "unit": "adet", "min_stock": 15, "current_stock": 8, "location": "Raf A-2", "quality": "TiN", "brand": "Kennametal"},
+    {"code": "YZK00003", "name": "HSS Matkap Ucu Ø8mm", "category": "Matkap", "unit": "adet", "min_stock": 25, "current_stock": 60, "location": "Raf B-1", "quality": "HSS", "brand": "Bosch"},
+    {"code": "YZK00004", "name": "Karbür Matkap Ucu Ø10mm", "category": "Matkap", "unit": "adet", "min_stock": 10, "current_stock": 4, "location": "Raf B-2", "quality": "Karbür", "brand": "Guhring"},
+    {"code": "YZK00005", "name": "Kater DCLNR 2525M-12", "category": "Kater", "unit": "adet", "min_stock": 3, "current_stock": 7, "location": "Dolap C", "quality": "", "brand": "Iscar"},
+    {"code": "YZK00006", "name": "ER32 Pens Seti", "category": "Apparat", "unit": "set", "min_stock": 2, "current_stock": 3, "location": "Dolap D", "quality": "", "brand": "Regofix"},
+    {"code": "YZK00007", "name": "Kumpas 0-150mm Dijital", "category": "Ölçüm Aleti", "unit": "adet", "min_stock": 5, "current_stock": 12, "location": "Dolap E", "quality": "", "brand": "Mitutoyo"},
+    {"code": "YZK00008", "name": "Mikrometre 0-25mm", "category": "Ölçüm Aleti", "unit": "adet", "min_stock": 4, "current_stock": 2, "location": "Dolap E", "quality": "", "brand": "Mitutoyo"},
 ]
 
 SAMPLE_PERSONNEL = [
-    {"first_name": "Ahmet", "last_name": "Yılmaz", "reg_no": "P001", "department": "CNC Torna", "email": "ahmet@fabrika.com"},
-    {"first_name": "Mehmet", "last_name": "Kaya", "reg_no": "P002", "department": "CNC Freze", "email": "mehmet@fabrika.com"},
-    {"first_name": "Ali", "last_name": "Demir", "reg_no": "P003", "department": "CNC Torna", "email": "ali@fabrika.com"},
-    {"first_name": "Ayşe", "last_name": "Öztürk", "reg_no": "P004", "department": "Kalite Kontrol", "email": "ayse@fabrika.com"},
-    {"first_name": "Mustafa", "last_name": "Şahin", "reg_no": "P005", "department": "CNC Freze", "email": "mustafa@fabrika.com"},
+    {"first_name": "Ahmet", "last_name": "Yılmaz", "department": "CNC Tornacı"},
+    {"first_name": "Mehmet", "last_name": "Kaya", "department": "CNC Dik İşlemeci"},
+    {"first_name": "Ali", "last_name": "Demir", "department": "CNC Tornacı"},
+    {"first_name": "Ayşe", "last_name": "Öztürk", "department": "Üretim Mühendisi"},
+    {"first_name": "Mustafa", "last_name": "Şahin", "department": "Taşlamacı"},
 ]
 
 SAMPLE_MACHINES = [
-    {"code": "T-01", "name": "Torna 01", "brand": "Mazak", "model": "Quick Turn 250", "description": "CNC Torna Tezgahı"},
-    {"code": "T-02", "name": "Torna 02", "brand": "Doosan", "model": "Puma 2600", "description": "CNC Torna Tezgahı"},
-    {"code": "F-01", "name": "Freze 01", "brand": "Haas", "model": "VF-2", "description": "3 Eksen Dikey İşleme Merkezi"},
-    {"code": "F-02", "name": "Freze 02", "brand": "DMG Mori", "model": "DMU 50", "description": "5 Eksen İşleme Merkezi"},
+    {"code": "T-01", "name": "Torna 01", "brand": "Mazak", "model": "Quick Turn 250", "type": "CNC Torna", "description": ""},
+    {"code": "T-02", "name": "Torna 02", "brand": "Doosan", "model": "Puma 2600", "type": "CNC Torna", "description": ""},
+    {"code": "F-01", "name": "Freze 01", "brand": "Haas", "model": "VF-2", "type": "CNC Freze / Dik İşleme", "description": "3 Eksen"},
+    {"code": "F-02", "name": "Freze 02", "brand": "DMG Mori", "model": "DMU 50", "type": "CNC Freze / Dik İşleme", "description": "5 Eksen"},
 ]
 
 
@@ -219,25 +230,34 @@ SAMPLE_MACHINES = [
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.products.create_index("code", unique=True)
-    await db.personnel.create_index("reg_no", unique=True)
+    # Drop obsolete unique index on personnel.reg_no if it exists (schema simplified — user removed sicil no)
+    try:
+        await db.personnel.drop_index("reg_no_1")
+    except Exception:
+        pass
     await db.machines.create_index("code", unique=True)
     await db.movements.create_index("created_at")
 
     admin_email = os.environ.get("ADMIN_EMAIL", "").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "")
     admin_name = os.environ.get("ADMIN_NAME", "Admin")
+    # Migration: any existing user without a role becomes 'viewer' (fail-safe: least privilege)
+    await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "viewer"}})
     if admin_email and admin_pw:
         existing = await db.users.find_one({"email": admin_email})
         if not existing:
             await db.users.insert_one({
                 "id": new_id(), "email": admin_email, "name": admin_name,
                 "password_hash": hash_password(admin_pw),
+                "role": "admin",
                 "created_at": now_utc().isoformat(),
             })
             logger.info(f"Admin seeded: {admin_email}")
-        elif not verify_password(admin_pw, existing.get("password_hash", "")):
-            await db.users.update_one({"email": admin_email},
-                                      {"$set": {"password_hash": hash_password(admin_pw)}})
+        else:
+            update = {"role": "admin"}
+            if not verify_password(admin_pw, existing.get("password_hash", "")):
+                update["password_hash"] = hash_password(admin_pw)
+            await db.users.update_one({"email": admin_email}, {"$set": update})
 
     if await db.products.count_documents({}) == 0:
         for p in SAMPLE_PRODUCTS:
@@ -292,14 +312,16 @@ async def register(body: RegisterIn, response: Response):
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Bu e-posta zaten kayıtlı")
     uid = new_id()
+    # Newly registered users are viewers by default — only admin (seeded via env) can mutate data.
     await db.users.insert_one({
         "id": uid, "email": email, "name": body.name,
         "password_hash": hash_password(body.password),
+        "role": "viewer",
         "created_at": now_utc().isoformat(),
     })
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"user": {"id": uid, "email": email, "name": body.name}, "access_token": token}
+    return {"user": {"id": uid, "email": email, "name": body.name, "role": "viewer"}, "access_token": token}
 
 
 @api.post("/auth/login")
@@ -310,7 +332,8 @@ async def login(body: LoginIn, response: Response):
         raise HTTPException(status_code=401, detail="E-posta veya şifre hatalı")
     token = create_access_token(user["id"], email)
     set_auth_cookie(response, token)
-    return {"user": {"id": user["id"], "email": email, "name": user["name"]},
+    role = user.get("role") or "viewer"
+    return {"user": {"id": user["id"], "email": email, "name": user["name"], "role": role},
             "access_token": token}
 
 
@@ -332,6 +355,19 @@ async def critical_products(user=Depends(get_current_user)):
     return [d for d in docs if d.get("current_stock", 0) <= d.get("min_stock", 0)]
 
 
+async def _next_product_code() -> str:
+    import re
+    docs = await db.products.find({"code": {"$regex": r"^YZK\d+$"}}, {"code": 1}).to_list(50000)
+    max_n = 0
+    for d in docs:
+        m = re.match(r"^YZK(\d+)$", d.get("code", ""))
+        if m:
+            n = int(m.group(1))
+            if n > max_n:
+                max_n = n
+    return f"YZK{max_n + 1:05d}"
+
+
 # ---------- Products ----------
 @api.get("/products")
 async def list_products(user=Depends(get_current_user)):
@@ -339,28 +375,36 @@ async def list_products(user=Depends(get_current_user)):
 
 
 @api.post("/products")
-async def create_product(body: ProductIn, user=Depends(get_current_user)):
-    if await db.products.find_one({"code": body.code}):
+async def create_product(body: ProductIn, user=Depends(require_admin)):
+    data = body.model_dump()
+    code = (data.get("code") or "").strip()
+    if not code:
+        code = await _next_product_code()
+    if await db.products.find_one({"code": code}):
         raise HTTPException(status_code=400, detail="Bu ürün kodu zaten mevcut")
-    doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat()}
+    data["code"] = code
+    doc = {**data, "id": new_id(), "created_at": now_utc().isoformat()}
     await db.products.insert_one(doc)
     doc.pop("_id", None)
     return doc
 
 
 @api.put("/products/{pid}")
-async def update_product(pid: str, body: ProductIn, user=Depends(get_current_user)):
+async def update_product(pid: str, body: ProductIn, user=Depends(require_admin)):
     existing = await db.products.find_one({"id": pid})
     if not existing:
         raise HTTPException(status_code=404, detail="Ürün bulunamadı")
-    if body.code != existing["code"] and await db.products.find_one({"code": body.code}):
+    data = body.model_dump()
+    code = (data.get("code") or existing["code"]).strip()
+    if code != existing["code"] and await db.products.find_one({"code": code}):
         raise HTTPException(status_code=400, detail="Bu ürün kodu zaten mevcut")
-    await db.products.update_one({"id": pid}, {"$set": body.model_dump()})
+    data["code"] = code
+    await db.products.update_one({"id": pid}, {"$set": data})
     return await db.products.find_one({"id": pid}, {"_id": 0})
 
 
 @api.delete("/products/{pid}")
-async def delete_product(pid: str, user=Depends(get_current_user)):
+async def delete_product(pid: str, user=Depends(require_admin)):
     r = await db.products.delete_one({"id": pid})
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Ürün bulunamadı")
@@ -370,13 +414,11 @@ async def delete_product(pid: str, user=Depends(get_current_user)):
 # ---------- Personnel ----------
 @api.get("/personnel")
 async def list_personnel(user=Depends(get_current_user)):
-    return await db.personnel.find({}, {"_id": 0}).sort("reg_no", 1).to_list(2000)
+    return await db.personnel.find({}, {"_id": 0}).sort("first_name", 1).to_list(2000)
 
 
 @api.post("/personnel")
-async def create_personnel(body: PersonnelIn, user=Depends(get_current_user)):
-    if await db.personnel.find_one({"reg_no": body.reg_no}):
-        raise HTTPException(status_code=400, detail="Bu sicil no zaten mevcut")
+async def create_personnel(body: PersonnelIn, user=Depends(require_admin)):
     doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat()}
     await db.personnel.insert_one(doc)
     doc.pop("_id", None)
@@ -384,18 +426,16 @@ async def create_personnel(body: PersonnelIn, user=Depends(get_current_user)):
 
 
 @api.put("/personnel/{pid}")
-async def update_personnel(pid: str, body: PersonnelIn, user=Depends(get_current_user)):
+async def update_personnel(pid: str, body: PersonnelIn, user=Depends(require_admin)):
     existing = await db.personnel.find_one({"id": pid})
     if not existing:
         raise HTTPException(status_code=404, detail="Personel bulunamadı")
-    if body.reg_no != existing["reg_no"] and await db.personnel.find_one({"reg_no": body.reg_no}):
-        raise HTTPException(status_code=400, detail="Bu sicil no zaten mevcut")
     await db.personnel.update_one({"id": pid}, {"$set": body.model_dump()})
     return await db.personnel.find_one({"id": pid}, {"_id": 0})
 
 
 @api.delete("/personnel/{pid}")
-async def delete_personnel(pid: str, user=Depends(get_current_user)):
+async def delete_personnel(pid: str, user=Depends(require_admin)):
     r = await db.personnel.delete_one({"id": pid})
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Personel bulunamadı")
@@ -409,7 +449,7 @@ async def list_machines(user=Depends(get_current_user)):
 
 
 @api.post("/machines")
-async def create_machine(body: MachineIn, user=Depends(get_current_user)):
+async def create_machine(body: MachineIn, user=Depends(require_admin)):
     if await db.machines.find_one({"code": body.code}):
         raise HTTPException(status_code=400, detail="Bu tezgah kodu zaten mevcut")
     doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat()}
@@ -419,7 +459,7 @@ async def create_machine(body: MachineIn, user=Depends(get_current_user)):
 
 
 @api.put("/machines/{mid}")
-async def update_machine(mid: str, body: MachineIn, user=Depends(get_current_user)):
+async def update_machine(mid: str, body: MachineIn, user=Depends(require_admin)):
     existing = await db.machines.find_one({"id": mid})
     if not existing:
         raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
@@ -430,7 +470,7 @@ async def update_machine(mid: str, body: MachineIn, user=Depends(get_current_use
 
 
 @api.delete("/machines/{mid}")
-async def delete_machine(mid: str, user=Depends(get_current_user)):
+async def delete_machine(mid: str, user=Depends(require_admin)):
     r = await db.machines.delete_one({"id": mid})
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
@@ -439,23 +479,18 @@ async def delete_machine(mid: str, user=Depends(get_current_user)):
 
 # ---------- Stock movements ----------
 @api.post("/stock/in")
-async def stock_in(body: StockInIn, user=Depends(get_current_user)):
+async def stock_in(body: StockInIn, user=Depends(require_admin)):
     product = await db.products.find_one({"id": body.product_id})
     if not product:
         raise HTTPException(status_code=404, detail="Ürün bulunamadı")
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
     new_stock = product["current_stock"] + body.quantity
-    update = {"current_stock": new_stock}
-    if body.unit_price is not None and body.unit_price > 0:
-        update["unit_price"] = body.unit_price
-    await db.products.update_one({"id": body.product_id}, {"$set": update})
-    unit_price = body.unit_price if body.unit_price is not None else product.get("unit_price", 0)
+    await db.products.update_one({"id": body.product_id}, {"$set": {"current_stock": new_stock}})
     movement = {
         "id": new_id(), "type": "in", "product_id": product["id"],
         "product_code": product["code"], "product_name": product["name"],
-        "quantity": body.quantity, "unit_price": unit_price,
-        "total": body.quantity * unit_price,
+        "quantity": body.quantity, "unit_price": 0, "total": 0,
         "supplier": body.supplier or "", "supplier_id": body.supplier_id or "", "note": body.note or "",
         "user_id": user["id"], "user_name": user["name"],
         "created_at": now_utc().isoformat(),
@@ -465,7 +500,7 @@ async def stock_in(body: StockInIn, user=Depends(get_current_user)):
 
 
 @api.post("/stock/out")
-async def stock_out(body: StockOutIn, user=Depends(get_current_user)):
+async def stock_out(body: StockOutIn, user=Depends(require_admin)):
     product = await db.products.find_one({"id": body.product_id})
     if not product:
         raise HTTPException(status_code=404, detail="Ürün bulunamadı")
@@ -481,12 +516,10 @@ async def stock_out(body: StockOutIn, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
     new_stock = product["current_stock"] - body.quantity
     await db.products.update_one({"id": body.product_id}, {"$set": {"current_stock": new_stock}})
-    unit_price = product.get("unit_price", 0)
     movement = {
         "id": new_id(), "type": "out", "product_id": product["id"],
         "product_code": product["code"], "product_name": product["name"],
-        "quantity": body.quantity, "unit_price": unit_price,
-        "total": body.quantity * unit_price,
+        "quantity": body.quantity, "unit_price": 0, "total": 0,
         "personnel_id": personnel["id"],
         "personnel_name": f"{personnel['first_name']} {personnel['last_name']}",
         "machine_id": machine["id"], "machine_name": machine["name"],
@@ -560,8 +593,8 @@ async def dashboard(user=Depends(get_current_user)):
     for mv in month_movements:
         pn = mv.get("personnel_name", "-")
         mn = mv.get("machine_name", "-")
-        p_totals[pn] = p_totals.get(pn, 0) + mv.get("total", 0)
-        m_totals[mn] = m_totals.get(mn, 0) + mv.get("total", 0)
+        p_totals[pn] = p_totals.get(pn, 0) + mv.get("quantity", 0)
+        m_totals[mn] = m_totals.get(mn, 0) + mv.get("quantity", 0)
     top_personnel = sorted(p_totals.items(), key=lambda x: -x[1])[:5]
     top_machines = sorted(m_totals.items(), key=lambda x: -x[1])[:5]
 
@@ -570,10 +603,10 @@ async def dashboard(user=Depends(get_current_user)):
     return {
         "total_products": total_products,
         "critical_count": critical_count,
-        "month_total_cost": round(month_total, 2),
+        "month_total_cost": 0,
         "critical_products": critical[:10],
-        "top_personnel": [{"name": n, "total": round(t, 2)} for n, t in top_personnel],
-        "top_machines": [{"name": n, "total": round(t, 2)} for n, t in top_machines],
+        "top_personnel": [{"name": n, "qty": round(q, 2)} for n, q in top_personnel],
+        "top_machines": [{"name": n, "qty": round(q, 2)} for n, q in top_machines],
         "recent_movements": recent,
     }
 
@@ -630,14 +663,14 @@ async def report_excel(user=Depends(get_current_user),
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Hareketler"
-    ws1.append(["Tarih", "Tip", "Ürün Kodu", "Ürün Adı", "Miktar", "Birim Fiyat",
-                "Toplam", "Personel", "Tezgah", "Tedarikçi", "Not", "Kullanıcı"])
+    ws1.append(["Tarih", "Tip", "Ürün Kodu", "Ürün Adı", "Miktar",
+                "Personel", "Tezgah", "Tedarikçi", "Not", "Kullanıcı"])
     for m in movements:
         ws1.append([
             m.get("created_at", "")[:19].replace("T", " "),
             "GİRİŞ" if m.get("type") == "in" else "ÇIKIŞ",
             m.get("product_code", ""), m.get("product_name", ""),
-            m.get("quantity", 0), m.get("unit_price", 0), m.get("total", 0),
+            m.get("quantity", 0),
             m.get("personnel_name", ""), m.get("machine_name", ""),
             m.get("supplier", ""), m.get("note", ""), m.get("user_name", ""),
         ])
@@ -650,15 +683,13 @@ async def report_excel(user=Depends(get_current_user),
             if m.get("type") != "out":
                 continue
             k = m.get(key, "-")
-            agg.setdefault(k, {"qty": 0, "total": 0})
-            agg[k]["qty"] += m.get("quantity", 0)
-            agg[k]["total"] += m.get("total", 0)
+            agg[k] = agg.get(k, 0) + m.get("quantity", 0)
         for k, v in agg.items():
-            ws.append([k, v["qty"], round(v["total"], 2)])
+            ws.append([k, v])
 
-    _agg("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar", "Toplam Tutar"])
-    _agg("Personel Bazlı", "personnel_name", ["Personel", "Toplam Miktar", "Toplam Tutar"])
-    _agg("Tezgah Bazlı", "machine_name", ["Tezgah", "Toplam Miktar", "Toplam Tutar"])
+    _agg("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar"])
+    _agg("Personel Bazlı", "personnel_name", ["Personel", "Toplam Miktar"])
+    _agg("Tezgah Bazlı", "machine_name", ["Tezgah", "Toplam Miktar"])
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -687,7 +718,7 @@ async def list_suppliers(user=Depends(get_current_user)):
 
 
 @api.post("/suppliers")
-async def create_supplier(body: SupplierIn, user=Depends(get_current_user)):
+async def create_supplier(body: SupplierIn, user=Depends(require_admin)):
     if await db.suppliers.find_one({"name": body.name}):
         raise HTTPException(status_code=400, detail="Bu isimde tedarikçi zaten mevcut")
     doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat()}
@@ -697,7 +728,7 @@ async def create_supplier(body: SupplierIn, user=Depends(get_current_user)):
 
 
 @api.put("/suppliers/{sid}")
-async def update_supplier(sid: str, body: SupplierIn, user=Depends(get_current_user)):
+async def update_supplier(sid: str, body: SupplierIn, user=Depends(require_admin)):
     existing = await db.suppliers.find_one({"id": sid})
     if not existing:
         raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
@@ -708,7 +739,7 @@ async def update_supplier(sid: str, body: SupplierIn, user=Depends(get_current_u
 
 
 @api.delete("/suppliers/{sid}")
-async def delete_supplier(sid: str, user=Depends(get_current_user)):
+async def delete_supplier(sid: str, user=Depends(require_admin)):
     r = await db.suppliers.delete_one({"id": sid})
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
@@ -748,7 +779,7 @@ async def list_orders(user=Depends(get_current_user), status: Optional[str] = No
 
 
 @api.post("/orders")
-async def create_order(body: OrderIn, user=Depends(get_current_user)):
+async def create_order(body: OrderIn, user=Depends(require_admin)):
     supplier = await db.suppliers.find_one({"id": body.supplier_id})
     if not supplier:
         raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
@@ -756,16 +787,29 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="En az bir kalem eklemelisiniz")
     items = []
     for it in body.items:
-        prod = await db.products.find_one({"id": it.product_id})
-        if not prod:
-            raise HTTPException(status_code=404, detail=f"Ürün bulunamadı: {it.product_id}")
         if it.quantity <= 0:
             raise HTTPException(status_code=400, detail="Kalem miktarı 0'dan büyük olmalı")
-        items.append({
-            "product_id": prod["id"], "product_code": prod["code"], "product_name": prod["name"],
-            "quantity": it.quantity, "received_qty": 0, "unit_price": it.unit_price,
-            "total": round(it.quantity * it.unit_price, 2),
-        })
+        if it.product_id:
+            prod = await db.products.find_one({"id": it.product_id})
+            if not prod:
+                raise HTTPException(status_code=404, detail=f"Ürün bulunamadı: {it.product_id}")
+            items.append({
+                "product_id": prod["id"], "product_code": prod["code"], "product_name": prod["name"],
+                "category": prod.get("category", "Diğer"), "unit": prod.get("unit", "adet"),
+                "quantity": it.quantity, "received_qty": 0, "manual": False,
+            })
+        else:
+            name = (it.product_name or "").strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Manuel kalem için ürün adı gerekli")
+            items.append({
+                "product_id": None,
+                "product_code": (it.product_code or "").strip(),
+                "product_name": name,
+                "category": (it.category or "Diğer").strip() or "Diğer",
+                "unit": (it.unit or "adet").strip() or "adet",
+                "quantity": it.quantity, "received_qty": 0, "manual": True,
+            })
     order = {
         "id": new_id(),
         "supplier_id": supplier["id"], "supplier_name": supplier["name"],
@@ -773,7 +817,7 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
         "note": body.note or "",
         "status": "open",
         "items": items,
-        "total": _compute_order_totals(items),
+        "total": 0,
         "created_by": user["name"],
         "created_at": now_utc().isoformat(),
         "closed_at": None,
@@ -783,33 +827,63 @@ async def create_order(body: OrderIn, user=Depends(get_current_user)):
     return order
 
 
+async def _ensure_product_for_item(item: dict) -> dict:
+    """Return the product doc for an order item, creating it if manual + missing."""
+    if item.get("product_id"):
+        p = await db.products.find_one({"id": item["product_id"]})
+        if p:
+            return p
+    # Try lookup by code
+    code = (item.get("product_code") or "").strip()
+    if code:
+        p = await db.products.find_one({"code": code})
+        if p:
+            return p
+    # Create a new product
+    if not code:
+        code = await _next_product_code()
+    doc = {
+        "id": new_id(),
+        "code": code,
+        "name": item.get("product_name") or code,
+        "category": item.get("category") or "Diğer",
+        "unit": item.get("unit") or "adet",
+        "min_stock": 0.0, "current_stock": 0.0,
+        "location": "", "quality": "", "brand": "",
+        "created_at": now_utc().isoformat(),
+    }
+    await db.products.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
 @api.post("/orders/{oid}/close")
-async def close_order(oid: str, user=Depends(get_current_user)):
+async def close_order(oid: str, user=Depends(require_admin)):
     order = await db.orders.find_one({"id": oid})
     if not order:
         raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
     if order.get("status") == "closed":
         raise HTTPException(status_code=400, detail="Sipariş zaten kapalı")
-    # Convert each item to a stock-in movement and update product stock
-    for it in order.get("items", []):
+    # Convert each item to a stock-in movement and update product stock.
+    # For manual items missing a product, auto-create one.
+    new_items = [dict(it) for it in order.get("items", [])]
+    for it in new_items:
         remaining = it["quantity"] - it.get("received_qty", 0)
         if remaining <= 0:
             continue
-        prod = await db.products.find_one({"id": it["product_id"]})
-        if not prod:
-            continue
+        prod = await _ensure_product_for_item(it)
+        it["product_id"] = prod["id"]
+        it["product_code"] = prod["code"]
+        it["product_name"] = prod["name"]
+        it["manual"] = False
         new_stock = prod.get("current_stock", 0) + remaining
-        update = {"current_stock": new_stock}
-        if it.get("unit_price", 0) > 0:
-            update["unit_price"] = it["unit_price"]
-        await db.products.update_one({"id": prod["id"]}, {"$set": update})
+        await db.products.update_one({"id": prod["id"]}, {"$set": {"current_stock": new_stock}})
         await db.movements.insert_one({
             "id": new_id(), "type": "in", "product_id": prod["id"],
             "product_code": prod["code"], "product_name": prod["name"],
-            "quantity": remaining, "unit_price": it["unit_price"],
-            "total": round(remaining * it["unit_price"], 2),
+            "quantity": remaining, "unit_price": 0, "total": 0,
             "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
-            "note": f"Sipariş #{order['id'][:8]}",
+            "note": f"Sipariş #{order['id'][:8]} kapatma",
             "order_id": order["id"],
             "user_id": user["id"], "user_name": user["name"],
             "created_at": now_utc().isoformat(),
@@ -818,12 +892,12 @@ async def close_order(oid: str, user=Depends(get_current_user)):
     await db.orders.update_one({"id": oid},
                                {"$set": {"status": "closed",
                                          "closed_at": now_utc().isoformat(),
-                                         "items": order["items"]}})
+                                         "items": new_items}})
     return await db.orders.find_one({"id": oid}, {"_id": 0})
 
 
 @api.delete("/orders/{oid}")
-async def delete_order(oid: str, user=Depends(get_current_user)):
+async def delete_order(oid: str, user=Depends(require_admin)):
     r = await db.orders.delete_one({"id": oid})
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
@@ -831,7 +905,7 @@ async def delete_order(oid: str, user=Depends(get_current_user)):
 
 
 @api.post("/orders/{oid}/receive")
-async def receive_order(oid: str, body: ReceiveIn, user=Depends(get_current_user)):
+async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
     order = await db.orders.find_one({"id": oid})
     if not order:
         raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
@@ -846,7 +920,13 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(get_current_user
     for rcv in body.items:
         if rcv.quantity <= 0:
             continue
-        it = next((x for x in new_items if x["product_id"] == rcv.product_id), None)
+        it = None
+        if rcv.product_id:
+            it = next((x for x in new_items if x.get("product_id") == rcv.product_id
+                       or (x.get("product_id") is None and x.get("product_code") == rcv.product_id)), None)
+        if it is None:
+            # rcv.product_id may actually be the code for manual items
+            it = next((x for x in new_items if x.get("product_code") == rcv.product_id), None)
         if not it:
             raise HTTPException(status_code=400, detail="Kalem sipariste yok")
         remaining = it["quantity"] - it.get("received_qty", 0)
@@ -856,24 +936,23 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(get_current_user
         it["received_qty"] = it.get("received_qty", 0) + rcv.quantity
         any_received_now = True
 
-        prod = await db.products.find_one({"id": it["product_id"]})
-        if prod:
-            new_stock = prod.get("current_stock", 0) + rcv.quantity
-            update = {"current_stock": new_stock}
-            if it.get("unit_price", 0) > 0:
-                update["unit_price"] = it["unit_price"]
-            await db.products.update_one({"id": prod["id"]}, {"$set": update})
-            await db.movements.insert_one({
-                "id": new_id(), "type": "in", "product_id": prod["id"],
-                "product_code": prod["code"], "product_name": prod["name"],
-                "quantity": rcv.quantity, "unit_price": it.get("unit_price", 0),
-                "total": round(rcv.quantity * it.get("unit_price", 0), 2),
-                "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
-                "note": f"Sipariş #{order['id'][:8]} kısmi teslimat",
-                "order_id": order["id"],
-                "user_id": user["id"], "user_name": user["name"],
-                "created_at": now_utc().isoformat(),
-            })
+        prod = await _ensure_product_for_item(it)
+        it["product_id"] = prod["id"]
+        it["product_code"] = prod["code"]
+        it["product_name"] = prod["name"]
+        it["manual"] = False
+        new_stock = prod.get("current_stock", 0) + rcv.quantity
+        await db.products.update_one({"id": prod["id"]}, {"$set": {"current_stock": new_stock}})
+        await db.movements.insert_one({
+            "id": new_id(), "type": "in", "product_id": prod["id"],
+            "product_code": prod["code"], "product_name": prod["name"],
+            "quantity": rcv.quantity, "unit_price": 0, "total": 0,
+            "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
+            "note": f"Sipariş #{order['id'][:8]} kısmi teslimat",
+            "order_id": order["id"],
+            "user_id": user["id"], "user_name": user["name"],
+            "created_at": now_utc().isoformat(),
+        })
 
     if not any_received_now:
         raise HTTPException(status_code=400, detail="Geçerli teslim miktarı yok")
@@ -893,9 +972,9 @@ async def product_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ürünler"
-    ws.append(["code", "name", "category", "unit", "unit_price", "min_stock", "current_stock"])
-    ws.append(["KU-999", "Örnek Kesici Uç", "Kesici Uç", "adet", 100.00, 10, 25])
-    ws.append(["MT-999", "Örnek Matkap Ø8", "Matkap", "adet", 50.00, 5, 15])
+    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand"])
+    ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik"])
+    ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch"])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -908,7 +987,7 @@ async def product_import_template(user=Depends(get_current_user)):
 
 @api.post("/products/import")
 async def product_import(file: UploadFile = File(...), commit: bool = False,
-                         user=Depends(get_current_user)):
+                         user=Depends(require_admin)):
     if not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Sadece .xlsx dosyası yükleyin")
     content = await file.read()
@@ -924,7 +1003,7 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
 
     header = [str(c).strip().lower() if c else "" for c in rows[0]]
     idx = {h: i for i, h in enumerate(header) if h}
-    for r in ("code", "name", "category"):
+    for r in ("name", "category"):
         if r not in idx:
             raise HTTPException(status_code=400, detail=f"Zorunlu sütun eksik: {r}")
 
@@ -939,28 +1018,30 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
         code = str(_get(row, "code") or "").strip()
         name = str(_get(row, "name") or "").strip()
         category = str(_get(row, "category") or "").strip()
-        if not code or not name or not category:
+        if not name or not category:
             preview.append({"row": row_num, "action": "skip",
-                            "error": "code/name/category boş olamaz",
+                            "error": "name/category boş olamaz",
                             "data": {"code": code, "name": name, "category": category}})
             continue
         try:
             unit = str(_get(row, "unit") or "adet").strip() or "adet"
-            unit_price = float(_get(row, "unit_price") or 0)
             min_stock = float(_get(row, "min_stock") or 0)
             current_stock = float(_get(row, "current_stock") or 0)
         except (TypeError, ValueError):
             preview.append({"row": row_num, "action": "skip",
-                            "error": "unit_price / min_stock / current_stock sayı olmalı",
+                            "error": "min_stock / current_stock sayı olmalı",
                             "data": {"code": code}})
             continue
-        existing = await db.products.find_one({"code": code})
+        location = str(_get(row, "location") or "").strip()
+        quality = str(_get(row, "quality") or "").strip()
+        brand = str(_get(row, "brand") or "").strip()
+        existing = await db.products.find_one({"code": code}) if code else None
         action = "update" if existing else "create"
         preview.append({
             "row": row_num, "action": action, "error": None,
             "data": {"code": code, "name": name, "category": category, "unit": unit,
-                     "unit_price": unit_price, "min_stock": min_stock,
-                     "current_stock": current_stock},
+                     "min_stock": min_stock, "current_stock": current_stock,
+                     "location": location, "quality": quality, "brand": brand},
         })
 
     stats = {
@@ -979,6 +1060,8 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
             continue
         d = p["data"]
         if p["action"] == "create":
+            if not d.get("code"):
+                d["code"] = await _next_product_code()
             await db.products.insert_one({**d, "id": new_id(),
                                           "created_at": now_utc().isoformat()})
             created += 1
@@ -1080,7 +1163,7 @@ async def send_daily_digest():
 
 
 @api.post("/admin/send-daily-digest")
-async def trigger_daily_digest(user=Depends(get_current_user)):
+async def trigger_daily_digest(user=Depends(require_admin)):
     """Manual trigger for daily digest — useful for testing."""
     await send_daily_digest()
     return {"ok": True}

@@ -9,7 +9,6 @@ export default function StockIn() {
   const [suppliers, setSuppliers] = useState([]);
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [unitPrice, setUnitPrice] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [supplierManual, setSupplierManual] = useState("");
   const [note, setNote] = useState("");
@@ -25,13 +24,9 @@ export default function StockIn() {
 
   const onScan = (code) => {
     const c = String(code).trim().toUpperCase();
-    const match = products.find((p) => p.code.toUpperCase() === c);
-    if (match) {
-      setProductId(match.id);
-      toast.success(`Ürün seçildi: ${match.name}`);
-    } else {
-      toast.error(`Kod bulunamadı: ${code}`);
-    }
+    const match = products.find((p) => (p.code || "").toUpperCase() === c);
+    if (match) { setProductId(match.id); toast.success(`Ürün seçildi: ${match.name}`); }
+    else toast.error(`Kod bulunamadı: ${code}`);
   };
 
   const submit = async (e) => {
@@ -43,13 +38,12 @@ export default function StockIn() {
       const r = await api.post("/stock/in", {
         product_id: productId,
         quantity: parseFloat(quantity),
-        unit_price: unitPrice ? parseFloat(unitPrice) : null,
         supplier: supplierName,
         supplier_id: supplierId || null,
         note,
       });
       toast.success(`Stok girişi kaydedildi. Yeni stok: ${r.data.new_stock}`);
-      setProductId(""); setQuantity(""); setUnitPrice(""); setSupplierId(""); setSupplierManual(""); setNote("");
+      setProductId(""); setQuantity(""); setSupplierId(""); setSupplierManual(""); setNote("");
       reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
     setLoading(false);
@@ -70,24 +64,16 @@ export default function StockIn() {
         <div>
           <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ürün</label>
           <select required value={productId} onChange={(e) => setProductId(e.target.value)} data-testid="si-product"
-            className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-base focus:ring-2 focus:ring-emerald-500 outline-none">
+            className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-emerald-500 outline-none">
             <option value="">-- Ürün seçin --</option>
             {products.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name} (Mevcut: {p.current_stock} {p.unit})</option>)}
           </select>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Miktar {selected ? `(${selected.unit})` : ""}</label>
-            <input required type="number" step="0.01" min="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} data-testid="si-qty"
-              className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-lg font-bold font-mono-tab focus:ring-2 focus:ring-emerald-500 outline-none" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Birim Fiyat (₺) — opsiyonel</label>
-            <input type="number" step="0.01" min="0" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} data-testid="si-price"
-              placeholder={selected ? String(selected.unit_price) : ""}
-              className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-lg font-mono-tab focus:ring-2 focus:ring-emerald-500 outline-none" />
-          </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Miktar {selected ? `(${selected.unit})` : ""}</label>
+          <input required type="number" step="0.01" min="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} data-testid="si-qty"
+            className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-2xl font-bold font-mono-tab focus:ring-2 focus:ring-emerald-500 outline-none" />
         </div>
 
         <div>
@@ -99,7 +85,7 @@ export default function StockIn() {
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           ) : (
-            <div className="text-xs text-slate-500 mb-2">Henüz kayıtlı tedarikçi yok — aşağıya elle yazın veya Tedarikçiler sayfasından ekleyin.</div>
+            <div className="text-xs text-slate-500 mb-2">Kayıtlı tedarikçi yok — elle yazın veya Tedarikçiler sayfasından ekleyin.</div>
           )}
           {!supplierId && (
             <input value={supplierManual} onChange={(e) => setSupplierManual(e.target.value)} placeholder="veya elle yazın..."
@@ -114,7 +100,7 @@ export default function StockIn() {
         </div>
 
         <button type="submit" disabled={loading} data-testid="si-submit"
-          className="w-full h-16 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-lg shadow-emerald-900/40">
+          className="w-full h-16 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xl flex items-center justify-center gap-3 active:scale-[0.98] shadow-lg shadow-emerald-900/40">
           {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ArrowDownToLine className="w-6 h-6" />}
           Girişi Kaydet
         </button>

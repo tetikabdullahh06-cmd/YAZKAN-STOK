@@ -41,7 +41,10 @@ export default function Register() {
 
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
           <h1 className="font-display text-2xl font-bold mb-1">Kayıt Ol</h1>
-          <p className="text-slate-400 text-sm mb-6">Yeni bir kullanıcı hesabı oluştur.</p>
+          <p className="text-slate-400 text-sm mb-4">Yeni bir kullanıcı hesabı oluştur.</p>
+          <div className="mb-6 text-xs bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-lg p-3">
+            Yeni kayıtlar <strong>görüntüleme (viewer)</strong> yetkisi ile açılır. Verileri okuyabilirsiniz; ekleme/düzenleme/silme yalnızca yönetici tarafından yapılır.
+          </div>
 
           <form onSubmit={onSubmit} className="space-y-5">
             <div>

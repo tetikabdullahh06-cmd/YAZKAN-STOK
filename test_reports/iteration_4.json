@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 4 backend testing complete post schema-pivot. Rewrote backend_test.py from scratch (old tests referenced removed fields: unit_price on products/orders/stock, reg_no/email on personnel). All 40/40 pytest tests PASS. Covered: (1) admin login returns JWT; (2) auto-YZK code generation when POST /api/products has empty code — verified strictly increments (YZK00009→YZK00010), duplicate code returns 400, provided code respected; (3) products expose location/quality/brand and PUT updates them; (4) personnel accepts {first_name,last_name,department} only with any department string (custom + predefined); (5) machines accept `type` field (CNC Torna/Taşlama), duplicate code 400, PUT updates type; (6) stock/in with no unit_price works; stock/out returns critical=true when new_stock<=min_stock, requires valid personnel_id+machine_id (404 otherwise), rejects insufficient stock with 400; (7) suppliers full CRUD + duplicate check; (8) orders: SELECT items store product_code with manual=false, MANUAL items store product_name/category/unit with manual=true and product_id=null, both start with received_qty=0 & status=open; (9) close_order on manual-only order AUTO-CREATES the product with next YZK code (verified new product exists, manual→false, correct name/category, current_stock=quantity) — confirms the recently-fixed _ensure_product_for_item wiring; (10) partial receive on manual item creates product on first partial (received_qty=3, product_code becomes YZK#####), then close stocks remaining 7 to same product for total +10; (11) SELECT partial-receive → status=partial, close remaining → status=closed, final stock delta = full order qty; (12) dashboard returns all expected keys; (13) reports/summary shape has by_product/by_personnel/by_machine lists; (14) reports/excel returns valid xlsx; (15) products/import/template has correct headers WITHOUT unit_price column; (16) products/import preview+commit round-trip with empty-code row getting auto-YZK on commit — verified persisted YZK code in DB; (17) all 10 protected endpoints return 401 without token.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/products", "issue": "Stale legacy products (e.g. AP-001 ER32 Pens Seti) still carry the removed `unit_price` field in stored docs from pre-pivot seed runs. Pivot did not migrate/clean existing docs. Not a code bug per se, but users see mixed schema. Consider a one-shot migration script that $unsets unit_price on all products and normalizes location/quality/brand keys."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter4_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Ship a one-off migration on startup that $unsets unit_price on products, and $unsets reg_no/email on personnel — to fully purge legacy pivot cruft from the DB.",
+    "(Optional) Personnel POST has NO duplicate-detection. Two people with identical first_name+last_name+department can be inserted. Confirm this is intentional (probably yes since reg_no was dropped).",
+    "(Optional carry-over) server.py is 1179 lines — split into APIRouter modules (products.py, orders.py, imports.py, reports.py) for maintainability."
+  ],
+  "critical_code_review_comments": [
+    "receive_order matches manual items by `product_code == rcv.product_id` — for manual items with EMPTY product_code, any incoming product_id='' would match, potentially the wrong line if the order has multiple manual items with no code. Recommend matching manual items by a stable client-generated line id or by index, not by (empty) code.",
+    "close_order and receive_order perform sequential inserts/updates without a transaction; a mid-loop crash can double-count stock on retry. Same pattern flagged in iter3, still present.",
+    "product_import commit path does sequential awaits per row — fine for <100 rows, but no upper cap on rows means a large xlsx could DoS. Add max_rows guard (e.g. 5000).",
+    "PersonnelIn has no uniqueness constraint — with reg_no removed there's nothing preventing duplicates. If duplicates are undesirable, add unique index or app-level check on (first_name+last_name).",
+    "Dashboard `month_total_cost` is hardcoded to 0 (dead field). Either compute it (would require unit_price which was removed) or drop the field from the response.",
+    "reports/summary aggregates `total` from movements but movements now always have total=0 (no unit_price). The `total` fields in by_product/by_personnel/by_machine will always be 0 — either compute a meaningful total or drop the field."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (fully rewritten for post-pivot schema; 40 tests covering auto-YZK codes, manual order lifecycle, close-auto-creates-product, personnel without reg_no, machines with type, stock without unit_price, product import)"
+  ],
+  "success_rate": {"backend": "100% (40/40)"},
+  "test_credentials": "Admin: tetikabdullahh06@gmail.com / Admin123!",
+  "seed_data_creation": "All test-created data (TEST_-prefixed) is cleaned up in-line via requests.delete at each test's end. No residual test data expected.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Old backend_test.py referenced removed fields; iter4 rewrote it. Run: `pytest /app/backend/tests/backend_test.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. Legacy AP-001/KU-001 etc. products still exist in DB with old schema — that's expected per problem statement. All new products from API use YZK codes correctly. Manual-order lifecycle (create→partial receive→close) verified end-to-end; close_order does auto-create products for manual items with next YZK code (the recently-fixed pathway).",
+  "rca of the issue": "N/A — no bugs found in iter4 features. Only one legacy-data note (stale unit_price on pre-pivot products); pivot didn't run a migration."
+}

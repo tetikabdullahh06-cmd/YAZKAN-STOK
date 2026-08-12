@@ -1,9 +1,7 @@
 import { useState } from "react";
 import api, { API } from "@/lib/api";
 import { toast } from "sonner";
-import { FileDown, Loader2 } from "lucide-react";
-
-const currency = (v) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(v || 0);
+import { FileDown, Loader2, Package, Users, Settings2 } from "lucide-react";
 
 function isoDay(offsetDays = 0) {
   const d = new Date();
@@ -11,24 +9,28 @@ function isoDay(offsetDays = 0) {
   return d.toISOString().slice(0, 10);
 }
 
+const REPORT_TYPES = [
+  { key: "by_product", label: "Ürün Bazlı", icon: Package, tone: "text-blue-400 border-blue-500/40 bg-blue-500/10" },
+  { key: "by_personnel", label: "Personel Bazlı", icon: Users, tone: "text-emerald-400 border-emerald-500/40 bg-emerald-500/10" },
+  { key: "by_machine", label: "Tezgah Bazlı", icon: Settings2, tone: "text-amber-400 border-amber-500/40 bg-amber-500/10" },
+];
+
 export default function Reports() {
   const [dateFrom, setDateFrom] = useState(isoDay(-30));
   const [dateTo, setDateTo] = useState(isoDay(0));
+  const [reportType, setReportType] = useState("by_product");
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
-  const applyPreset = (days) => {
-    setDateFrom(isoDay(-days));
-    setDateTo(isoDay(0));
-  };
+  const applyPreset = (days) => { setDateFrom(isoDay(-days)); setDateTo(isoDay(0)); };
 
   const run = async () => {
     setLoading(true);
     try {
       const r = await api.get("/reports/summary", { params: { date_from: dateFrom, date_to: dateTo } });
       setSummary(r.data);
-    } catch (e) { toast.error("Rapor alınamadı"); }
+    } catch { toast.error("Rapor alınamadı"); }
     setLoading(false);
   };
 
@@ -52,6 +54,10 @@ export default function Reports() {
     setDownloading(false);
   };
 
+  const rows = summary?.[reportType] || [];
+  const sorted = [...rows].sort((a, b) => (b.qty || 0) - (a.qty || 0));
+  const active = REPORT_TYPES.find((t) => t.key === reportType);
+
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-4">
@@ -60,13 +66,30 @@ export default function Reports() {
           <h1 className="font-display text-4xl font-black">Raporlar</h1>
         </div>
         <button onClick={downloadExcel} disabled={downloading} data-testid="reports-excel"
-          className="h-14 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-900/40 disabled:opacity-50">
+          className="h-14 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-emerald-900/40 disabled:opacity-50">
           {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
           Excel İndir
         </button>
       </div>
 
       <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 space-y-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Rapor Türü</label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {REPORT_TYPES.map((t) => (
+              <button key={t.key} onClick={() => setReportType(t.key)} data-testid={`rep-type-${t.key}`}
+                className={`h-16 px-4 rounded-lg border-2 flex items-center gap-3 transition-all ${
+                  reportType === t.key
+                    ? `${t.tone} border-current`
+                    : "bg-slate-900/40 border-slate-700 text-slate-400 hover:border-slate-600"
+                }`}>
+                <t.icon className="w-5 h-5 shrink-0" strokeWidth={2.2} />
+                <span className="font-semibold">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => applyPreset(0)} className="h-10 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold">Bugün</button>
           <button onClick={() => applyPreset(7)} className="h-10 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold">Son 7 Gün</button>
@@ -74,10 +97,14 @@ export default function Reports() {
           <button onClick={() => applyPreset(90)} className="h-10 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold">Son 90 Gün</button>
         </div>
         <div className="flex gap-4 flex-wrap items-end">
-          <div><label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Başlangıç</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} data-testid="rep-from" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div>
-          <div><label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Bitiş</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} data-testid="rep-to" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Başlangıç</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} data-testid="rep-from" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Bitiş</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} data-testid="rep-to" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
           <button onClick={run} disabled={loading} data-testid="rep-run"
             className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 disabled:opacity-50">
             {loading && <Loader2 className="w-4 h-4 animate-spin" />} Raporu Getir
@@ -86,25 +113,34 @@ export default function Reports() {
       </div>
 
       {summary && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {[
-            { title: "Ürün Bazlı", data: summary.by_product, testid: "rep-by-product" },
-            { title: "Personel Bazlı", data: summary.by_personnel, testid: "rep-by-personnel" },
-            { title: "Tezgah Bazlı", data: summary.by_machine, testid: "rep-by-machine" },
-          ].map((s) => (
-            <div key={s.title} data-testid={s.testid} className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-700"><h3 className="font-display text-lg font-bold">{s.title}</h3></div>
-              <div className="divide-y divide-slate-700 max-h-[420px] overflow-auto">
-                {s.data.length === 0 && <div className="p-6 text-slate-500 text-sm">Veri yok</div>}
-                {s.data.sort((a, b) => b.total - a.total).map((row, i) => (
-                  <div key={i} className="flex justify-between items-center px-6 py-3">
-                    <div className="min-w-0"><div className="font-medium truncate">{row.name}</div><div className="text-xs text-slate-500 font-mono-tab">{row.qty} adet</div></div>
-                    <div className="font-mono-tab font-bold text-emerald-400 whitespace-nowrap">{currency(row.total)}</div>
-                  </div>
+        <div data-testid="rep-result" className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2">
+            <active.icon className="w-5 h-5 text-blue-400" />
+            <h3 className="font-display text-lg font-bold">{active.label}</h3>
+            <div className="ml-auto text-xs text-slate-500">{sorted.length} kayıt</div>
+          </div>
+          {sorted.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">Seçili aralıkta çıkış hareketi yok.</div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-slate-900/50">
+                <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
+                  <th className="px-6 py-3">#</th>
+                  <th className="px-6 py-3">İsim</th>
+                  <th className="px-6 py-3 text-right">Toplam Miktar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {sorted.map((row, i) => (
+                  <tr key={i} className="h-14 hover:bg-slate-700/40">
+                    <td className="px-6 font-mono-tab text-slate-500">{i + 1}</td>
+                    <td className="px-6 font-medium">{row.name}</td>
+                    <td className="px-6 text-right font-mono-tab font-bold text-emerald-400">{row.qty}</td>
+                  </tr>
                 ))}
-              </div>
-            </div>
-          ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

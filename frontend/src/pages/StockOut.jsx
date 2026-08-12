@@ -94,7 +94,7 @@ export default function StockOut() {
             <select required value={personnelId} onChange={(e) => setPersonnelId(e.target.value)} data-testid="so-personnel"
               className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-red-500 outline-none">
               <option value="">-- Seçin --</option>
-              {personnel.map((p) => <option key={p.id} value={p.id}>{p.reg_no} — {p.first_name} {p.last_name}</option>)}
+              {personnel.map((p) => <option key={p.id} value={p.id}>{p.first_name} {p.last_name}{p.department ? ` — ${p.department}` : ""}</option>)}
             </select>
           </div>
           <div>

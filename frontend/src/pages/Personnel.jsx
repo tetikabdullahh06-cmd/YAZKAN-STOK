@@ -2,22 +2,46 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
-const empty = { first_name: "", last_name: "", reg_no: "", department: "", email: "" };
+const emptyForm = { first_name: "", last_name: "", department: "" };
+const DEFAULT_DEPTS = ["CNC Dik İşlemeci", "CNC Tornacı", "Üniversal Tornacı", "Taşlamacı", "Üretim Mühendisi"];
+const DEPT_STORAGE_KEY = "cnc_extra_departments";
 
 export default function Personnel() {
+  const { isAdmin } = useAuth();
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
+  const [extraDepts, setExtraDepts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(DEPT_STORAGE_KEY)) || []; } catch { return []; }
+  });
+  const [newDept, setNewDept] = useState("");
+  const [showNewDept, setShowNewDept] = useState(false);
 
   const load = () => api.get("/personnel").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
 
+  const allDepts = Array.from(new Set([...DEFAULT_DEPTS, ...extraDepts, ...items.map((p) => p.department).filter(Boolean)]));
+
+  const addDept = () => {
+    const d = newDept.trim();
+    if (!d) return;
+    if (!allDepts.includes(d)) {
+      const next = [...extraDepts, d];
+      setExtraDepts(next);
+      localStorage.setItem(DEPT_STORAGE_KEY, JSON.stringify(next));
+    }
+    setForm({ ...form, department: d });
+    setNewDept(""); setShowNewDept(false);
+    toast.success(`"${d}" görevi eklendi`);
+  };
+
   const filtered = items.filter((p) => {
     const s = q.toLowerCase();
-    return !s || `${p.first_name} ${p.last_name}`.toLowerCase().includes(s) || p.reg_no.toLowerCase().includes(s) || (p.department || "").toLowerCase().includes(s);
+    return !s || `${p.first_name} ${p.last_name}`.toLowerCase().includes(s) || (p.department || "").toLowerCase().includes(s);
   });
 
   const submit = async (e) => {
@@ -26,10 +50,10 @@ export default function Personnel() {
       if (editId) await api.put(`/personnel/${editId}`, form);
       else await api.post("/personnel", form);
       toast.success(editId ? "Güncellendi" : "Eklendi");
-      setShowForm(false); setEditId(null); setForm(empty); load();
+      setShowForm(false); setEditId(null); setForm(emptyForm); load();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
   };
-  const edit = (p) => { setForm(p); setEditId(p.id); setShowForm(true); };
+  const edit = (p) => { setForm({ first_name: p.first_name, last_name: p.last_name, department: p.department || "" }); setEditId(p.id); setShowForm(true); };
   const del = async (p) => {
     if (!window.confirm(`${p.first_name} ${p.last_name} silinsin mi?`)) return;
     try { await api.delete(`/personnel/${p.id}`); toast.success("Silindi"); load(); }
@@ -44,33 +68,54 @@ export default function Personnel() {
           <h1 className="font-display text-4xl font-black">Personel</h1>
           <p className="text-slate-400 text-sm mt-1">{items.length} personel</p>
         </div>
-        <button onClick={() => { setForm(empty); setEditId(null); setShowForm(true); }} data-testid="personnel-add-btn"
-          className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-900/30">
-          <Plus className="w-5 h-5" /> Yeni Personel
-        </button>
+        {isAdmin && (
+          <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(true); }} data-testid="personnel-add-btn"
+            className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
+            <Plus className="w-5 h-5" /> Yeni Personel
+          </button>
+        )}
       </div>
 
       <div className="relative">
         <Search className="w-5 h-5 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ad, sicil, departman ara..."
-          className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg pl-12 pr-4 text-base focus:ring-2 focus:ring-blue-500 outline-none" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ad veya görev ara..."
+          className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg pl-12 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" />
       </div>
 
       {showForm && (
         <form onSubmit={submit} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ad</label>
-            <input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} data-testid="perf-first" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div>
-          <div><label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Soyad</label>
-            <input required value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} data-testid="perf-last" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div>
-          <div><label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Sicil No</label>
-            <input required value={form.reg_no} onChange={(e) => setForm({ ...form, reg_no: e.target.value })} data-testid="perf-reg" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div>
-          <div><label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Departman</label>
-            <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div>
-          <div className="md:col-span-2"><label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">E-posta</label>
-            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ad</label>
+            <input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} data-testid="perf-first" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Soyad</label>
+            <input required value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} data-testid="perf-last" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Görev</label>
+            {!showNewDept ? (
+              <div className="flex gap-2">
+                <select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} data-testid="perf-dept" className="flex-1 h-12 bg-slate-950 border border-slate-700 rounded-lg px-3">
+                  <option value="">-- Görev seçin --</option>
+                  {allDepts.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <button type="button" onClick={() => setShowNewDept(true)} data-testid="perf-add-dept" title="Yeni görev ekle"
+                  className="h-12 px-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-600/50 text-xl font-bold">+</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input autoFocus value={newDept} onChange={(e) => setNewDept(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDept(); } }}
+                  placeholder="Yeni görev adı" className="flex-1 h-12 bg-slate-950 border border-blue-500 rounded-lg px-3" />
+                <button type="button" onClick={addDept} className="h-12 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold">Ekle</button>
+                <button type="button" onClick={() => { setShowNewDept(false); setNewDept(""); }} className="h-12 px-3 rounded-lg bg-slate-700">İptal</button>
+              </div>
+            )}
+          </div>
           <div className="md:col-span-2 flex gap-3">
             <button type="submit" data-testid="perf-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">Kaydet</button>
-            <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600">İptal</button>
+            <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">İptal</button>
           </div>
         </form>
       )}
@@ -79,25 +124,29 @@ export default function Personnel() {
         <table className="w-full">
           <thead className="bg-slate-900/50">
             <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
-              <th className="px-4 py-3">Sicil</th><th className="px-4 py-3">Ad Soyad</th><th className="px-4 py-3">Departman</th><th className="px-4 py-3">E-posta</th><th className="px-4 py-3"></th>
+              <th className="px-4 py-3">Ad Soyad</th>
+              <th className="px-4 py-3">Görev</th>
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700">
             {filtered.map((p) => (
               <tr key={p.id} className="h-16 hover:bg-slate-700/40">
-                <td className="px-4 font-mono-tab font-semibold">{p.reg_no}</td>
                 <td className="px-4 font-medium">{p.first_name} {p.last_name}</td>
-                <td className="px-4 text-slate-400">{p.department}</td>
-                <td className="px-4 text-slate-400 text-sm">{p.email}</td>
+                <td className="px-4 text-slate-400">{p.department || <span className="text-slate-600">-</span>}</td>
                 <td className="px-4">
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => edit(p)} data-testid={`personnel-edit-${p.reg_no}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400"><Pencil className="w-4 h-4" /></button>
-                    <button onClick={() => del(p)} data-testid={`personnel-delete-${p.reg_no}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                    {isAdmin && (
+                      <>
+                        <button onClick={() => edit(p)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => del(p)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-500">Personel bulunamadı</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={3} className="p-8 text-center text-slate-500">Personel bulunamadı</td></tr>}
           </tbody>
         </table>
       </div>
