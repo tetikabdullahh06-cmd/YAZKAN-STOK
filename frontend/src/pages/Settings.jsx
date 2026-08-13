@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { ShieldCheck, Loader2, KeyRound, Eye, EyeOff } from "lucide-react";
+import { ShieldCheck, Loader2, KeyRound, Eye, EyeOff, Users } from "lucide-react";
 
 export default function Settings() {
   const { user, isAdmin, logout } = useAuth();
@@ -12,6 +12,39 @@ export default function Settings() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [show, setShow] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
+  const [usersLoading, setUsersLoading] = useState(false);
+    useEffect(() => {
+    if (!isAdmin) return;
+    setUsersLoading(true);
+    api.get("/admin/users")
+      .then((res) => setUsers(res.data))
+      .catch((e) => setErr(e.response?.data?.detail || "Kullanıcılar yüklenemedi"))
+      .finally(() => setUsersLoading(false));
+  }, [isAdmin]);
+
+  const resetUserPassword = async (e) => {
+    e.preventDefault();
+    if (!selectedUser || tempPassword.length < 6) {
+      return setErr("Kullanıcı seçin ve en az 6 karakterlik geçici şifre yazın");
+    }
+    setUsersLoading(true);
+    setErr("");
+    try {
+      await api.post("/admin/users/reset-password", {
+        user_id: selectedUser,
+        new_password: tempPassword,
+      });
+      toast.success("Kullanıcı şifresi güncellendi");
+      setTempPassword("");
+    } catch (e) {
+      setErr(e.response?.data?.detail || "Kullanıcı şifresi güncellenemedi");
+    }
+    setUsersLoading(false);
+  };
+
 
   const submit = async (e) => {
     e.preventDefault();
@@ -93,6 +126,50 @@ export default function Settings() {
           Şifreyi Güncelle
         </button>
       </form>
+            {isAdmin && (
+        <div className="bg-slate-800/60 border border-emerald-700/50 rounded-2xl p-6 space-y-5">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-emerald-400" />
+            <h2 className="font-display text-xl font-bold">Kullanıcı Şifre Yönetimi</h2>
+          </div>
+          <p className="text-sm text-slate-400">
+            Şifresini unutan görüntüleme kullanıcısı için geçici şifre belirleyebilirsiniz.
+          </p>
+          <select
+            value={selectedUser}
+            onChange={(e) => setSelectedUser(e.target.value)}
+            className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-4 outline-none"
+          >
+            <option value="">Kullanıcı seçin</option>
+            {users
+              .filter((item) => item.id !== user?.id)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} — {item.email} ({item.role === "admin" ? "Yönetici" : "Görüntüleme"})
+                </option>
+              ))}
+          </select>
+          <form onSubmit={resetUserPassword} className="flex gap-3 flex-wrap">
+            <input
+              type="password"
+              minLength={6}
+              required
+              value={tempPassword}
+              onChange={(e) => setTempPassword(e.target.value)}
+              placeholder="Yeni geçici şifre"
+              className="flex-1 min-w-[220px] h-12 bg-slate-950 border border-slate-700 rounded-lg px-4 outline-none"
+            />
+            <button
+              type="submit"
+              disabled={usersLoading}
+              className="h-12 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold"
+            >
+              Geçici Şifre Belirle
+            </button>
+          </form>
+        </div>
+      )}
+
     </div>
   );
 }
