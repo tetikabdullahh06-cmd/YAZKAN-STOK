@@ -494,6 +494,30 @@ async def change_password(body: ChangePasswordIn, user=Depends(get_current_user)
                               {"$set": {"password_hash": hash_password(body.new_password)}})
     return {"ok": True, "message": "Şifreniz güncellendi"}
 
+    class AdminResetPasswordIn(BaseModel):
+    user_id: str
+    new_password: str = Field(min_length=6)
+
+@api.get("/admin/users")
+async def admin_list_users(user=Depends(require_admin)):
+    return await db.users.find(
+        {}, {"_id": 0, "password_hash": 0}
+    ).sort("name", 1).to_list(1000)
+
+@api.post("/admin/users/reset-password")
+async def admin_reset_user_password(body: AdminResetPasswordIn, user=Depends(require_admin)):
+    target = await db.users.find_one({"id": body.user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    if target.get("role") == "admin" and target.get("id") != user.get("id"):
+        raise HTTPException(status_code=403, detail="Başka bir yöneticinin şifresi bu ekrandan değiştirilemez")
+    await db.users.update_one(
+        {"id": body.user_id},
+        {"$set": {"password_hash": hash_password(body.new_password)}}
+    )
+    return {"ok": True, "message": "Kullanıcı şifresi güncellendi"}
+
+
 
 # ---------- Critical (define BEFORE /products/{pid} routes) ----------
 @api.get("/products/critical")
