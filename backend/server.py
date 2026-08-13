@@ -35,7 +35,7 @@ api = APIRouter(prefix="/api")
 JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.environ["JWT_SECRET"]
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "CNC Takımhane")
 OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "")
 
@@ -402,8 +402,8 @@ def _hash_token(t: str) -> str:
 
 
 async def send_password_reset_email(to_email: str, reset_url: str, user_name: str):
-    if not EMAIL_KEY:
-        logger.warning("EMERGENT_EMAIL_KEY not configured — cannot send password reset")
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not configured — cannot send password reset")
         return False
     subject = "Yazkan Döküm Takımhane — Şifre Sıfırlama"
     html = f"""
@@ -418,11 +418,12 @@ async def send_password_reset_email(to_email: str, reset_url: str, user_name: st
       <p style="color:#64748b; font-size:11px; margin-top:24px; word-break:break-all;">Bağlantı çalışmıyorsa: {reset_url}</p>
     </div>
     """
-    payload = {"to": [to_email], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    payload = {"from": f"{EMAIL_FROM_NAME} <onboarding@resend.dev>", "to": [to_email], "subject": subject, "html": html}
     try:
         async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
-                             headers={"X-Email-Key": EMAIL_KEY}, json=payload)
+            r = await c.post("https://api.resend.com/emails",
+                 headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                 json=payload )
             r.raise_for_status()
         return True
     except Exception as e:
