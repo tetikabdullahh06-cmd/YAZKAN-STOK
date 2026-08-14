@@ -131,8 +131,10 @@ export default function Products() {
         className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95"
       >
         <FileSpreadsheet className="w-5 h-5" /> Excel'e Dışa Aktar
-      </button>
+            </button>
     </div>
+  </div>
+
 
       <div className="relative">
         <Search className="w-5 h-5 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
