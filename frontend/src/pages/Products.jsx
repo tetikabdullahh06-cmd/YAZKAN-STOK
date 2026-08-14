@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } from "lucide-react";
@@ -25,6 +26,32 @@ export default function Products() {
 
   const load = () => api.get("/products").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
+  
+  const exportExcel = () => {
+    if (!filtered.length) {
+      toast.info("Dışa aktarılacak ürün bulunamadı");
+      return;
+    }
+
+    const rows = filtered.map((p) => ({
+      "Kod": p.code || "",
+      "Ürün Adı": p.name || "",
+      "Kategori": p.category || "",
+      "Birim": p.unit || "",
+      "Marka": p.brand || "",
+      "Kalite": p.quality || "",
+      "Konum": p.location || "",
+      "Minimum Stok": p.min_stock ?? 0,
+      "Mevcut Stok": p.current_stock ?? 0,
+      "Özel Takım": p.is_special ? "Evet" : "Hayır",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Ürünler");
+    XLSX.writeFile(workbook, `YAZKAN-urunler-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success(`${rows.length} ürün Excel dosyasına aktarıldı`);
+  };
 
   const allCats = Array.from(new Set([...DEFAULT_CATS, ...extraCats, ...items.map((p) => p.category).filter(Boolean)]));
 
@@ -96,10 +123,16 @@ export default function Products() {
                 className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
                 <FileSpreadsheet className="w-5 h-5" /> Excel'den İçe Aktar
               </button>
-            </>
-          )}
-        </div>
-      </div>
+        </>
+      )}
+      <button
+        onClick={exportExcel}
+        data-testid="product-export-btn"
+        className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95"
+      >
+        <FileSpreadsheet className="w-5 h-5" /> Excel'e Dışa Aktar
+      </button>
+    </div>
 
       <div className="relative">
         <Search className="w-5 h-5 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
