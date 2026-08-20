@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -11,6 +12,9 @@ import {
   RefreshCw,
   Search,
   Wrench,
+  Download,
+  FileSpreadsheet,
+  Upload,
 } from "lucide-react";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -58,6 +62,63 @@ export default function Sharpening() {
   }, [products, search]);
   const openRecords = records.filter((r) => r.status !== "returned" && Number(r.remaining_quantity || 0) > 0);
 
+  const exportExcel = () => {
+    const rows = records.map((r) => ({
+      "Hareket Tipi": "giden",
+      "Kayıt ID": r.id || "",
+      "Ürün ID": r.product_id || "",
+      "Ürün Kodu": r.product_code || "",
+      "Ürün Adı": r.product_name || "",
+      "Miktar": r.quantity || 0,
+      "Helis Boyu": r.helix_length || "",
+      "Çap": r.diameter || "",
+      "Tam Boy": r.full_length || "",
+      "Yapılacak İşlem": r.process_type || "alın bileme",
+      "Firma": r.company || "",
+      "Gidiş Tarihi": r.sent_date || "",
+      "Gelen Miktar": r.returned_quantity || 0,
+      "İrsaliye No": r.waybill_number || "",
+      "Geliş Tarihi": r.received_date || "",
+      "Not": r.note || "",
+      "Durum": r.status || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bileme Kayıtları");
+    XLSX.writeFile(wb, `bileme-kayitlari-${today()}.xlsx`);
+    toast.success(`${rows.length} bileme kaydı Excel'e aktarıldı`);
+  };
+  const downloadTemplate = () => {
+    const rows = [
+      { hareket_tipi: "giden", kayit_id: "", urun_id: "ÜRÜN_ID", urun_kodu: "UÇ-001", urun_adi: "Örnek Uç", miktar: 1, helis_boyu: "35 mm", cap: "Ø12", tam_boy: "100 mm", yapilacak_islem: "alın bileme", firma: "Örnek Bileme", gidis_tarihi: today(), gelen_miktar: "", irsaliye_no: "", gelis_tarihi: "", not: "Şablon satırı" },
+      { hareket_tipi: "gelen", kayit_id: "BİLEME_KAYIT_ID", urun_id: "", urun_kodu: "", urun_adi: "", miktar: "", helis_boyu: "", cap: "", tam_boy: "", yapilacak_islem: "", firma: "Gelen Firma", gidis_tarihi: "", gelen_miktar: 1, irsaliye_no: "IRS-001", gelis_tarihi: today(), not: "Gelen kayıt için mevcut bileme kayıt ID'si zorunludur" },
+    ];
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bileme Şablonu");
+    XLSX.writeFile(wb, "bileme-giden-gelen-sablonu.xlsx");
+    toast.success("Bileme Excel şablonu indirildi");
+  };
+  const importExcel = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
+    try {
+      const data = await file.arrayBuffer(); const book = XLSX.read(data, { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: "" });
+      if (!rows.length) return toast.error("Excel dosyasında kayıt bulunamadı");
+      setSaving(true); let count = 0;
+      for (const row of rows) {
+        const type = String(row["Hareket Tipi"] || row.hareket_tipi || "giden").toLowerCase();
+        if (type === "gelen") {
+          const recordId = row["Kayıt ID"] || row.kayit_id; if (!recordId) continue;
+          await api.post("/sharpening/in", { record_id: recordId, quantity: row["Gelen Miktar"] === "" ? null : Number(row["Gelen Miktar"] || row.gelen_miktar), company: row.Firma || row.firma || "", waybill_number: row["İrsaliye No"] || row.irsaliye_no || "", received_date: row["Geliş Tarihi"] || row.gelis_tarihi || today(), note: row.Not || row.not || "" });
+        } else {
+          const productId = row["Ürün ID"] || row.urun_id; if (!productId) continue;
+          await api.post("/sharpening/out", { product_id: productId, quantity: Number(row.Miktar || row.miktar) || 0, helix_length: row["Helis Boyu"] || row.helis_boyu || "", diameter: row.Çap || row.cap || "", full_length: row["Tam Boy"] || row.tam_boy || "", process_type: row["Yapılacak İşlem"] || row.yapilacak_islem || "alın bileme", company: row.Firma || row.firma || "", sent_date: row["Gidiş Tarihi"] || row.gidis_tarihi || today(), note: row.Not || row.not || "" });
+        }
+        count += 1;
+      }
+      toast.success(`${count} bileme hareketi içe aktarıldı`); await load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Bileme Excel'i içe aktarılamadı"); } finally { setSaving(false); }
+  };
+
   const setOut = (key, value) => setOutForm((f) => ({ ...f, [key]: value }));
   const setIn = (key, value) => setInForm((f) => ({ ...f, [key]: value }));
 
@@ -99,7 +160,7 @@ export default function Sharpening() {
           <h1 className="font-display text-4xl font-black">Bilemeye Gidenler / Bilemeden Gelenler</h1>
           <p className="text-slate-400 mt-2">Bilemeye gönderilen ürünleri stoktan düşürün, geri gelenleri irsaliye bilgisiyle tekrar stoğa alın.</p>
         </div>
-        <button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button>
+          <div className="flex gap-2 flex-wrap"><button onClick={downloadTemplate} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-200"><FileSpreadsheet className="w-4 h-4" /> Örnek Şablon</button><button onClick={exportExcel} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Dışa Aktar</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white cursor-pointer"><Upload className="w-4 h-4" /> İçe Aktar<input type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden" /></label><button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

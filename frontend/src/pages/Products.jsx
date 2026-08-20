@@ -54,6 +54,17 @@ export default function Products() {
     toast.success(`${rows.length} ürün Excel dosyasına aktarıldı`);
   };
 
+  const downloadImportTemplate = () => {
+    const rows = [
+      { code: "", name: "Örnek Kesici Uç", category: "Kesici Uç", unit: "adet", brand: "Örnek Marka", quality: "P25", location: "A-01", min_stock: 2, current_stock: 10, is_special: "Hayır" },
+      { code: "MEVCUT_ÜRÜN_KODU", name: "Mevcut ürüne stok ekleme", category: "Kesici Uç", unit: "adet", brand: "Aynı marka", quality: "Aynı kalite", location: "", min_stock: "", current_stock: 5, is_special: "Hayır" },
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(rows); const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Ürün Şablonu");
+    XLSX.writeFile(workbook, "urunler-ice-aktarma-sablonu.xlsx");
+    toast.success("Ürün içe aktarma şablonu indirildi");
+  };
+
   const allCats = Array.from(new Set([...DEFAULT_CATS, ...extraCats, ...items.map((p) => p.category).filter(Boolean)]));
 
   const addCategory = () => {
@@ -142,6 +153,10 @@ export default function Products() {
               <button onClick={() => setShowImport(true)} data-testid="product-import-btn"
                 className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
                 <FileSpreadsheet className="w-5 h-5" /> Excel'den İçe Aktar
+              </button>
+              <button onClick={downloadImportTemplate} data-testid="product-import-template-btn"
+                className="h-14 px-5 rounded-lg bg-slate-800/70 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
+                <FileSpreadsheet className="w-5 h-5" /> Örnek İçe Aktar Şablonu
               </button>
         </>
       )}
