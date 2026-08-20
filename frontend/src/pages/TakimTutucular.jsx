@@ -15,6 +15,33 @@ const emptyForm = {
 
 const DEFAULT_TYPES = ["BT30", "BT40", "BT50", "HSK-A63", "HSK-A100", "ER Pens Tutucu", "Shrink Fit", "Weldon", "Diğer"];
 
+const TURNING_CATALOG = [
+  { label: "Dış tornalama — PCLNR 2525M12", name: "PCLNR 2525M12 Dış Tornalama Kateri", type: "CNC Torna Kateri / Dış Tornalama", length: "150", diameter: "25x25" },
+  { label: "Dış tornalama — PDJNR 2525M15", name: "PDJNR 2525M15 Dış Tornalama Kateri", type: "CNC Torna Kateri / Dış Tornalama", length: "150", diameter: "25x25" },
+  { label: "Pozitif dış tornalama — SCLCR 1616H09", name: "SCLCR 1616H09 Pozitif Kater", type: "CNC Torna Kateri / Pozitif Tornalama", length: "100", diameter: "16x16" },
+  { label: "İç tornalama — SSSCR 1616H09", name: "SSSCR 1616H09 İç Tornalama Kateri", type: "CNC Torna Kateri / İç Tornalama", length: "125", diameter: "16" },
+  { label: "İç boring bar — A16Q SCLCR09", name: "A16Q SCLCR09 Boring Bar", type: "CNC Torna Kateri / Boring Bar", length: "180", diameter: "16" },
+  { label: "Dış vida — SER 2525M16", name: "SER 2525M16 Dış Vida Kateri", type: "CNC Torna Kateri / Vida Açma", length: "150", diameter: "25x25" },
+  { label: "İç vida — SIR 1616H11", name: "SIR 1616H11 İç Vida Kateri", type: "CNC Torna Kateri / İç Vida", length: "125", diameter: "16" },
+  { label: "Kanal açma — MGEHR 2525-3", name: "MGEHR 2525-3 Kanal Kateri", type: "CNC Torna Kateri / Kanal Açma", length: "150", diameter: "25x25" },
+  { label: "Kesme — MGEHR 2020-2", name: "MGEHR 2020-2 Kesme Kateri", type: "CNC Torna Kateri / Kesme", length: "125", diameter: "20x20" },
+  { label: "Profil/kopya — SVJBR 2525M16", name: "SVJBR 2525M16 Profil Kateri", type: "CNC Torna Kateri / Profil", length: "150", diameter: "25x25" },
+];
+
+const MILLING_CATALOG = [
+  { label: "BT40 ER32 pens aynası", name: "BT40 ER32 Pens Aynası", type: "CNC Dik İşleme / BT40 ER32", length: "100", diameter: "50" },
+  { label: "BT40 ER20 pens aynası", name: "BT40 ER20 Pens Aynası", type: "CNC Dik İşleme / BT40 ER20", length: "100", diameter: "42" },
+  { label: "BT40 Weldon Ø20", name: "BT40 Weldon Parmak Freze Tutucusu Ø20", type: "CNC Dik İşleme / Weldon", length: "100", diameter: "50" },
+  { label: "BT40 shrink-fit Ø16", name: "BT40 Shrink-Fit Tutucu Ø16", type: "CNC Dik İşleme / Shrink-Fit", length: "100", diameter: "50" },
+  { label: "BT40 hidrolik Ø20", name: "BT40 Hidrolik Tutucu Ø20", type: "CNC Dik İşleme / Hidrolik", length: "110", diameter: "50" },
+  { label: "BT40 yüzey freze arboru", name: "BT40 Yüzey Freze Arboru", type: "CNC Dik İşleme / Face Mill Arbor", length: "80", diameter: "63" },
+  { label: "BT40 kılavuz çekme tutucusu", name: "BT40 Kılavuz Çekme Tutucusu", type: "CNC Dik İşleme / Kılavuz", length: "100", diameter: "50" },
+  { label: "BT50 boring head adaptörü", name: "BT50 Boring Head Adaptörü", type: "CNC Dik İşleme / Boring", length: "150", diameter: "75" },
+  { label: "HSK-A63 ER32 pens aynası", name: "HSK-A63 ER32 Pens Aynası", type: "CNC Dik İşleme / HSK-A63 ER32", length: "100", diameter: "50" },
+  { label: "CAT40 ER25 pens aynası", name: "CAT40 ER25 Pens Aynası", type: "CNC Dik İşleme / CAT40 ER25", length: "100", diameter: "45" },
+  { label: "BT30 ER16 pens aynası", name: "BT30 ER16 Pens Aynası", type: "CNC Dik İşleme / BT30 ER16", length: "80", diameter: "35" },
+];
+
 export default function TakimTutucular() {
   const { isAdmin } = useAuth();
   const [items, setItems] = useState([]);
@@ -30,6 +57,7 @@ export default function TakimTutucular() {
   const [movementsFor, setMovementsFor] = useState(null);
   const [movements, setMovements] = useState([]);
   const [showImport, setShowImport] = useState(false);
+  const [catalogKind, setCatalogKind] = useState("");
 
   const load = () => Promise.all([
     api.get("/toolholders").then((r) => setItems(r.data)),
@@ -64,7 +92,14 @@ export default function TakimTutucular() {
     } catch (err) { toast.error(err.response?.data?.detail || "Hata"); }
   };
 
-  const edit = (t) => { setForm({ ...emptyForm, ...t }); setEditId(t.id); setShowForm(true); };
+  const edit = (t) => { setForm({ ...emptyForm, ...t }); setCatalogKind(""); setEditId(t.id); setShowForm(true); };
+  const applyCatalogPreset = (value) => {
+    setCatalogKind(value);
+    if (!value || value === "manual") return;
+    const [group, index] = value.split(":");
+    const preset = (group === "turning" ? TURNING_CATALOG : MILLING_CATALOG)[Number(index)];
+    if (preset) setForm((old) => ({ ...old, name: preset.name, type: preset.type, length: preset.length, diameter: preset.diameter }));
+  };
   const del = async (t) => {
     if (!window.confirm(`"${t.name}" tutucusu silinsin mi?`)) return;
     try { await api.delete(`/toolholders/${t.id}`); toast.success("Silindi"); load(); }
@@ -116,7 +151,7 @@ export default function TakimTutucular() {
         </div>
         {isAdmin && (
           <div className="flex gap-3 flex-wrap">
-            <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(true); }} data-testid="th-add-btn"
+            <button onClick={() => { setForm(emptyForm); setCatalogKind(""); setEditId(null); setShowForm(true); }} data-testid="th-add-btn"
               className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
               <Plus className="w-5 h-5" /> Yeni Tutucu
             </button>
@@ -137,8 +172,21 @@ export default function TakimTutucular() {
 
       {showForm && (
         <form onSubmit={submit} data-testid="th-form" className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-3 bg-blue-950/30 border border-blue-800/40 rounded-lg p-4 space-y-3">
+            <div className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Standart kater / tutucu seçimi</div>
+            <p className="text-xs text-slate-400">Aşağıdan hazır bir tip seçtiğinde ad, tip, boy ve çap önerilir. Aşağıdaki tüm alanlar manuel olarak değiştirilebilir.</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <select value={catalogKind} onChange={(e) => applyCatalogPreset(e.target.value)} data-testid="th-f-catalog" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3 md:col-span-2">
+                <option value="">Katalogdan seçin veya Manuel Değiştir</option>
+                <optgroup label="CNC Torna Katerleri">{TURNING_CATALOG.map((p, i) => <option key={`turning-${i}`} value={`turning:${i}`}>{p.label}</option>)}</optgroup>
+                <optgroup label="CNC Dik İşleme Takım Tutucuları">{MILLING_CATALOG.map((p, i) => <option key={`milling-${i}`} value={`milling:${i}`}>{p.label}</option>)}</optgroup>
+                <option value="manual">Manuel Değiştir</option>
+              </select>
+              <div className="h-12 rounded-lg border border-slate-700 bg-slate-950/60 px-3 flex items-center text-xs text-slate-400">Seçim sonrası alanları değiştirebilirsin.</div>
+            </div>
+          </div>
           <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tutucu Adı</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tutucu Adı <span className="text-blue-400 normal-case">(manuel değiştirilebilir)</span></label>
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="th-f-name" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
           </div>
           <div>
@@ -146,7 +194,7 @@ export default function TakimTutucular() {
             <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} data-testid="th-f-brand" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" placeholder="ör. Regofix, Big Kaiser" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tipi</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tipi <span className="text-blue-400 normal-case">(manuel değiştirilebilir)</span></label>
             <input list="th-types" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} data-testid="th-f-type" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" placeholder="ör. BT40, HSK-A63" />
             <datalist id="th-types">{DEFAULT_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
           </div>
