@@ -32,10 +32,10 @@ export default function Layout() {
   const nav = NAV.filter((n) => !n.adminOnly || isAdmin);
 
   return (
-    <div className="min-h-screen flex bg-slate-900 grain">
-      <aside className="w-72 border-r border-slate-800 bg-slate-950 hidden md:flex flex-col relative z-10">
+    <div className="min-h-screen flex app-shell grain">
+      <aside className="w-72 border-r app-sidebar hidden md:flex flex-col relative z-10">
         <div className="px-6 py-6 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
+          <div className="w-11 h-11 rounded-xl app-brand flex items-center justify-center">
             <YazkanLogo className="w-7 h-7 text-white" />
           </div>
           <div>
@@ -54,8 +54,8 @@ export default function Layout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 h-14 rounded-lg transition-all duration-200 font-medium text-base ${
                   isActive
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                    ? "bg-gradient-to-r from-blue-600 via-cyan-500 to-teal-500 text-white shadow-lg shadow-cyan-900/20"
+                    : "text-slate-500 hover:bg-cyan-50 hover:text-blue-700"
                 }`
               }
             >
@@ -93,9 +93,9 @@ export default function Layout() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 z-20">
+      <div className="md:hidden fixed top-0 inset-x-0 h-14 app-mobile-bar border-b flex items-center justify-between px-4 z-20">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg app-brand flex items-center justify-center">
             <YazkanLogo className="w-5 h-5 text-white" />
           </div>
           <div className="font-display font-bold">YAZKAN DÖKÜM</div>
@@ -124,7 +124,7 @@ export default function Layout() {
           <Outlet />
         </div>
         {/* Mobile bottom nav */}
-        <div className="md:hidden fixed bottom-0 inset-x-0 bg-slate-950 border-t border-slate-800 grid grid-cols-5 z-20">
+        <div className="md:hidden fixed bottom-0 inset-x-0 app-mobile-nav border-t grid grid-cols-5 z-20">
           {nav.slice(0, 5).map((n) => (
             <NavLink
               key={n.to}
@@ -132,7 +132,7 @@ export default function Layout() {
               end={n.end}
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center h-16 gap-1 text-xs ${
-                  isActive ? "text-blue-400" : "text-slate-500"
+                  isActive ? "text-blue-600 font-bold" : "text-slate-500"
                 }`
               }
             >

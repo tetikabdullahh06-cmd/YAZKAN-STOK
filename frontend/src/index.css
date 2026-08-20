@@ -5,37 +5,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700;800;900&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --background: 222 47% 5%;
-    --foreground: 210 40% 98%;
-    --card: 217 33% 12%;
-    --card-foreground: 210 40% 98%;
-    --popover: 217 33% 12%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 217 91% 60%;
-    --radius: 0.75rem;
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 224 76% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 189 94% 43%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 224 76% 48%;
+    --radius: 0.85rem;
 }
 
 html, body, #root {
-    height: 100%;
-    background: #020617;
+    min-height: 100%;
+    background: #eef4fb;
 }
 
 body {
     margin: 0;
     font-family: 'IBM Plex Sans', system-ui, sans-serif;
-    color: #f8fafc;
+    color: #172033;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -45,27 +45,58 @@ h1, h2, h3, h4, .font-display {
     letter-spacing: -0.02em;
 }
 
-.font-mono-tab {
-    font-variant-numeric: tabular-nums;
-}
+.font-mono-tab { font-variant-numeric: tabular-nums; }
+::selection { background: #06b6d4; color: #fff; }
 
-::selection {
-    background: #2563eb;
-    color: #f8fafc;
-}
-
+/* Bright, energetic application surface */
 .grain::before {
     content: '';
     position: fixed;
     inset: 0;
     pointer-events: none;
-    opacity: 0.03;
+    opacity: 0.24;
     z-index: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background:
+      radial-gradient(circle at 15% 10%, rgba(14, 165, 233, .15), transparent 28%),
+      radial-gradient(circle at 86% 8%, rgba(20, 184, 166, .13), transparent 24%),
+      radial-gradient(circle at 78% 86%, rgba(99, 102, 241, .12), transparent 28%);
 }
 
+.app-shell { background: linear-gradient(135deg, #eef6ff 0%, #f8fbff 48%, #eafaf8 100%); }
+.app-sidebar { background: rgba(255, 255, 255, .88); border-color: #dbe7f3 !important; box-shadow: 12px 0 34px rgba(30, 64, 175, .07); backdrop-filter: blur(18px); }
+.app-brand { background: linear-gradient(135deg, #2563eb, #06b6d4 58%, #14b8a6); box-shadow: 0 12px 24px rgba(37, 99, 235, .25); }
+.app-mobile-bar, .app-mobile-nav { background: rgba(255,255,255,.94); border-color: #dbe7f3 !important; backdrop-filter: blur(18px); }
+
+/* Existing pages use slate utilities. Re-skin their common surfaces without changing behavior. */
+.bg-slate-900 { background-color: #f8fbff !important; }
+.bg-slate-950 { background-color: #ffffff !important; }
+.bg-slate-800 { background-color: #f4f8fd !important; }
+.bg-slate-800\/60 { background-color: rgba(255,255,255,.88) !important; }
+.bg-slate-900\/50, .bg-slate-900\/60 { background-color: #edf4fb !important; }
+.border-slate-800, .border-slate-700, .border-slate-600 { border-color: #d8e4f0 !important; }
+.text-slate-100, .text-slate-200 { color: #172033 !important; }
+.text-slate-300 { color: #334155 !important; }
+.text-slate-400 { color: #64748b !important; }
+.text-slate-500 { color: #718096 !important; }
+.text-slate-600 { color: #94a3b8 !important; }
+.hover\:bg-slate-800:hover, .hover\:bg-slate-700:hover { background-color: #e8f1fb !important; }
+
+input, select, textarea {
+    color: #172033 !important;
+    background-color: rgba(255,255,255,.96) !important;
+    border-color: #cbdbea !important;
+}
+input::placeholder, textarea::placeholder { color: #94a3b8 !important; }
+input:focus, select:focus, textarea:focus { border-color: #38bdf8 !important; box-shadow: 0 0 0 3px rgba(56,189,248,.18); }
+button { transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease; }
+button:hover { transform: translateY(-1px); }
+table thead { background: linear-gradient(90deg, #eff6ff, #ecfeff) !important; }
+table tbody tr:hover { background-color: #f0f9ff !important; }
+
 @layer base {
-    * {
-        @apply border-border;
-    }
+    * { @apply border-border; }
+}
+
+@media (max-width: 768px) {
+    .app-shell main { padding-bottom: 5rem; }
 }
