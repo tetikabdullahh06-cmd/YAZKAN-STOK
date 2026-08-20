@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
   Plus, Pencil, Trash2, Search, Wrench, ArrowDownToLine, ArrowUpFromLine,
-  Loader2, X, History, FileSpreadsheet
+  Loader2, X, History, FileSpreadsheet, Download
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import ToolHolderImport from "@/components/ToolHolderImport";
@@ -187,6 +188,31 @@ export default function TakimTutucular() {
     } catch { toast.error("Hareketler yüklenemedi"); }
   };
 
+  const exportExcel = () => {
+    const rows = filtered.map((t) => ({
+      "Tutucu Adı": t.name || "",
+      "Marka": t.brand || "",
+      "Tipi": t.type || "",
+      "Boy (mm)": t.length || "",
+      "Çap (mm)": t.diameter || "",
+      "Konum": t.location || "",
+      "Minimum Stok": t.min_stock ?? 0,
+      "Mevcut Stok": t.current_stock ?? 0,
+      "Stok Durumu": Number(t.current_stock || 0) <= Number(t.min_stock || 0) ? "Kritik" : "Normal",
+      "Not": t.note || "",
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet["!cols"] = [
+      { wch: 32 }, { wch: 18 }, { wch: 34 }, { wch: 12 }, { wch: 12 },
+      { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 36 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Takım Tutucular");
+    const suffix = q.trim() ? "filtreli" : "tam-liste";
+    XLSX.writeFile(workbook, `takim-tutucular-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success(`${rows.length} takım tutucu Excel'e aktarıldı`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-4">
@@ -202,6 +228,10 @@ export default function TakimTutucular() {
             <button onClick={() => { setForm(emptyForm); setCatalogKind(""); setEditId(null); setShowForm(true); }} data-testid="th-add-btn"
               className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
               <Plus className="w-5 h-5" /> Yeni Tutucu
+            </button>
+            <button onClick={exportExcel} data-testid="th-export-btn"
+              className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95">
+              <Download className="w-5 h-5" /> Excel'e Dışa Aktar
             </button>
             <button onClick={() => setShowImport(true)} data-testid="th-import-btn"
               className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
