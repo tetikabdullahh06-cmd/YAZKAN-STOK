@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { BarChart3, Loader2, Plus, Search, Trash2, Trophy } from "lucide-react";
+import { BarChart3, Download, FileSpreadsheet, Loader2, Plus, Search, Trash2, Trophy, Upload } from "lucide-react";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const input = "w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-3 outline-none focus:ring-2 focus:ring-blue-500";
@@ -24,7 +25,67 @@ export default function ToolTrials() {
   const submit = async (e) => { e.preventDefault(); setSaving(true); try { await api.post("/tool-trials", { ...form, product_brand: selected?.brand || form.product_brand, product_code: selected?.code || form.product_code, quantity_used: Number(form.quantity_used) || 0, price: Number(form.price) || 0, runtime_minutes: Number(form.runtime_minutes) || 0, parts_machined: Number(form.parts_machined) || 0, machine_id: form.machine_id || null, product_id: form.product_id || null }); toast.success("Deneme raporu kaydedildi"); setForm(blank); await load(); } catch (e) { toast.error(e.response?.data?.detail || "Deneme kaydedilemedi"); } finally { setSaving(false); } };
   const remove = async (id) => { if (!window.confirm("Bu deneme silinsin mi?")) return; try { await api.delete(`/tool-trials/${id}`); load(); } catch (e) { toast.error(e.response?.data?.detail || "Silinemedi"); } };
   const grouped = Object.values(filtered.reduce((a, t) => { const k = t.comparison_name || "Grupsuz"; (a[k] ||= []).push(t); return a; }, {}));
-  return <div className="space-y-6"><div><div className="text-xs text-blue-400 uppercase tracking-[.2em] font-semibold mb-2">Kesici Takım Performansı</div><h1 className="font-display text-4xl font-black">Deneme ve Marka Karşılaştırma</h1><p className="text-slate-400 mt-1">Matkap, freze ve kesici elmas uç denemelerini aynı iş ve parametre grubu içinde karşılaştırın.</p></div>
+  const exportRows = (rows) => rows.map((t) => ({
+    "Karşılaştırma Grubu": t.comparison_name || "",
+    "Tarih": t.trial_date || "",
+    "İşlenen Ürün / Parça": t.part_name || "",
+    "Malzeme": t.material || "",
+    "Sertlik": t.hardness || "",
+    "Tezgâh": t.machine_name || t.machine_id || "",
+    "İş Türü": t.operation_type || "",
+    "Ürün ID": t.product_id || "",
+    "Marka": t.product_brand || "",
+    "Ürün / Uç Kodu": t.product_code || "",
+    "Uç Kodu ve Kalite": t.insert_grade || "",
+    "Takım Çapı": t.tool_diameter || "",
+    "Devir N": t.spindle_speed || "",
+    "Kesme Hızı Vc": t.cutting_speed || "",
+    "İlerleme F": t.feed_rate || "",
+    "Paso ap": t.depth_of_cut || "",
+    "Matkap Çapı": t.drill_diameter || "",
+    "Diş Başı fz": t.feed_per_tooth || "",
+    "Soğutma": t.coolant || "",
+    "Kullanılan Miktar": t.quantity_used ?? 0,
+    "Birim Fiyat": t.price ?? 0,
+    "Çalışma Süresi (dk)": t.runtime_minutes ?? 0,
+    "İşlenen Parça Adedi": t.parts_machined ?? 0,
+    "Aşınma / Takım Ömrü": t.wear_result || "",
+    "Test Sonucu": t.result || "",
+    "Teknik Yorum": t.technical_comment || "",
+  }));
+  const downloadWorkbook = (rows, filename) => {
+    const ws = XLSX.utils.json_to_sheet(exportRows(rows));
+    ws["!cols"] = Object.keys(exportRows(rows)[0] || {}).map((key) => ({ wch: Math.max(14, Math.min(32, key.length + 4)) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Deneme Raporları");
+    XLSX.writeFile(wb, filename);
+  };
+  const exportExcel = () => {
+    downloadWorkbook(filtered, `kesici-takim-denemeleri-${query.trim() ? "filtreli" : "tam-liste"}-${today()}.xlsx`);
+    toast.success(`${filtered.length} deneme Excel'e aktarıldı`);
+  };
+  const downloadTemplate = () => {
+    const sample = { comparison_name: "Örnek Karşılaştırma", trial_date: today(), part_name: "Örnek Parça", material: "GG25", hardness: "180 HB", operation_type: "Tornalama", product_brand: "Örnek Marka", product_code: "UÇ-001", insert_grade: "CNMG 120408", tool_diameter: "20 mm", spindle_speed: "1200 dev/dk", cutting_speed: "150 m/dk", feed_rate: "0.20 mm/dev", depth_of_cut: "2 mm", coolant: "Emülsiyon", quantity_used: 1, price: 0, runtime_minutes: 30, parts_machined: 10, wear_result: "Örnek aşınma", result: "Başarılı", technical_comment: "Şablon satırı; kendi verilerinle değiştir.", machine_id: "" };
+    const ws = XLSX.utils.json_to_sheet([sample]);
+    ws["!cols"] = Object.keys(sample).map((key) => ({ wch: Math.max(14, Math.min(30, key.length + 4)) }));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Deneme Şablonu");
+    XLSX.writeFile(wb, "kesici-takim-deneme-sablonu.xlsx");
+    toast.success("Örnek Excel şablonu indirildi");
+  };
+  const importExcel = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
+    try {
+      const data = await file.arrayBuffer();
+      const rows = XLSX.utils.sheet_to_json(XLSX.read(data, { type: "array" }).Sheets[XLSX.read(data, { type: "array" }).SheetNames[0]], { defval: "" });
+      if (!rows.length) return toast.error("Excel dosyasında kayıt bulunamadı");
+      setSaving(true);
+      const keyMap = { "Karşılaştırma Grubu":"comparison_name", "Tarih":"trial_date", "İşlenen Ürün / Parça":"part_name", "Malzeme":"material", "Sertlik":"hardness", "Tezgâh":"machine_id", "İş Türü":"operation_type", "Ürün ID":"product_id", "Marka":"product_brand", "Ürün / Uç Kodu":"product_code", "Uç Kodu ve Kalite":"insert_grade", "Takım Çapı":"tool_diameter", "Devir N":"spindle_speed", "Kesme Hızı Vc":"cutting_speed", "İlerleme F":"feed_rate", "Paso ap":"depth_of_cut", "Matkap Çapı":"drill_diameter", "Diş Başı fz":"feed_per_tooth", "Soğutma":"coolant", "Kullanılan Miktar":"quantity_used", "Birim Fiyat":"price", "Çalışma Süresi (dk)":"runtime_minutes", "İşlenen Parça Adedi":"parts_machined", "Aşınma / Takım Ömrü":"wear_result", "Test Sonucu":"result", "Teknik Yorum":"technical_comment" };
+      let count = 0;
+      for (const row of rows) { const payload = {}; Object.entries(row).forEach(([k, v]) => { const target = keyMap[k] || k; payload[target] = v; }); payload.quantity_used = Number(payload.quantity_used) || 0; payload.price = Number(payload.price) || 0; payload.runtime_minutes = Number(payload.runtime_minutes) || 0; payload.parts_machined = Number(payload.parts_machined) || 0; payload.machine_id = payload.machine_id || null; payload.product_id = payload.product_id || null; await api.post("/tool-trials", payload); count += 1; }
+      toast.success(`${count} deneme kaydı içe aktarıldı`); await load();
+    } catch (err) { toast.error(err.response?.data?.detail || "Excel içe aktarılamadı"); } finally { setSaving(false); }
+  };
+  return <div className="space-y-6"><div className="flex items-end justify-between flex-wrap gap-4"><div><div className="text-xs text-blue-400 uppercase tracking-[.2em] font-semibold mb-2">Kesici Takım Performansı</div><h1 className="font-display text-4xl font-black">Deneme ve Marka Karşılaştırma</h1><p className="text-slate-400 mt-1">Matkap, freze ve kesici elmas uç denemelerini aynı iş ve parametre grubu içinde karşılaştırın.</p></div><div className="flex gap-2 flex-wrap"><button type="button" onClick={downloadTemplate} className="h-11 px-4 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2"><FileSpreadsheet className="w-4 h-4"/> Örnek Şablon</button><button type="button" onClick={exportExcel} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-semibold flex items-center gap-2"><Download className="w-4 h-4"/> Dışa Aktar</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 text-white font-semibold flex items-center gap-2 cursor-pointer"><Upload className="w-4 h-4"/> İçe Aktar<input id="tool-trials-excel-input" type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden"/></label></div></div>
     <form onSubmit={submit} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 space-y-5"><div className="flex items-center gap-2 text-blue-300 font-semibold"><BarChart3 className="w-5 h-5" />Deneme raporu kartı</div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">{[["comparison_name","Karşılaştırma grubu","Örn. DNMG 150608 - Döküm"],["trial_date","Tarih",""],["part_name","İşlenen ürün / parça",""],["material","Malzeme ve sertlik","Örn. GG25 / 180 HB"]].map(([k,l,p])=><div key={k}><label className={label}>{l}</label><input required={k !== "comparison_name"} type={k === "trial_date" ? "date" : "text"} value={form[k]} placeholder={p} onChange={e=>set(k,e.target.value)} className={input}/></div>)}</div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label className={label}>Tezgâh</label><select value={form.machine_id} onChange={e=>set("machine_id",e.target.value)} className={input}><option value="">Seçin</option>{machines.map(m=><option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}</select></div><div><label className={label}>İş türü</label><select value={form.operation_type} onChange={e=>{set("operation_type",e.target.value);setPresetId("")}} className={input}>{["Tornalama","Frezeleme","Delme","Diş açma","Diğer"].map(x=><option key={x}>{x}</option>)}</select></div><div><label className={label}>Hazır parametre seti</label><select value={presetId} onChange={e=>applyPreset(e.target.value)} className={input}><option value="">Elle gireceğim</option>{(PRESET_SETS[form.operation_type] || []).map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></div><div><label className={label}>Stoktaki ürün / uç</label><div className="flex gap-2"><input value={productQuery} onChange={e=>setProductQuery(e.target.value)} placeholder="Kod, ad, marka veya kalite ara..." className={input}/>{isAdmin && <button type="button" onClick={()=>setShowNewProduct((v)=>!v)} title="Stokta yoksa yeni uç ekle" className="h-11 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold"><Plus className="w-5 h-5"/></button>}</div><select value={form.product_id} onChange={e=>{ const id=e.target.value; set("product_id",id); const p=products.find(x=>x.id===id); if(p){setProductQuery(`${p.code || ""} — ${p.name}`); set("product_brand",p.brand || ""); set("product_code",p.code || "");} }} className={`${input} mt-2`}><option value="">Ürün seçmeden elle gireceğim</option>{productOptions.map(p=><option key={p.id} value={p.id}>{p.code} — {p.name} | Stok: {p.current_stock}</option>)}</select>{showNewProduct && isAdmin && <div className="mt-2 p-3 rounded-lg border border-emerald-500/40 bg-emerald-950/20 space-y-2"><div className="text-xs text-emerald-300 font-semibold">Stokta olmayan uç için ürün ekle</div><div className="grid grid-cols-2 gap-2"><input value={newProduct.name} onChange={e=>setNewProduct({...newProduct,name:e.target.value})} placeholder="Uç / ürün adı" className={input}/><input value={newProduct.code} onChange={e=>setNewProduct({...newProduct,code:e.target.value})} placeholder="Kod (opsiyonel)" className={input}/><input value={newProduct.brand} onChange={e=>setNewProduct({...newProduct,brand:e.target.value})} placeholder="Marka" className={input}/><input value={newProduct.quality} onChange={e=>setNewProduct({...newProduct,quality:e.target.value})} placeholder="Kalite" className={input}/><input type="number" min="0" value={newProduct.current_stock} onChange={e=>setNewProduct({...newProduct,current_stock:e.target.value})} placeholder="Mevcut stok" className={input}/></div><button type="button" onClick={addNewProduct} className="h-9 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-bold">Ürünü Ekle ve Seç</button></div>}</div><div><label className={label}>Marka</label><input value={selected?.brand || form.product_brand} onChange={e=>set("product_brand",e.target.value)} className={input}/></div></div>
