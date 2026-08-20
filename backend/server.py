@@ -151,6 +151,7 @@ class ProductIn(BaseModel):
 class ToolHolderIn_Model(BaseModel):
     name: str
     brand: Optional[str] = ""
+    cutting_tool_code_name: Optional[str] = ""
     type: Optional[str] = ""
     length: Optional[str] = ""
     diameter: Optional[str] = ""
@@ -1280,9 +1281,9 @@ async def toolholder_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Tutucular"
-    ws.append(["name", "brand", "type", "length", "diameter", "min_stock", "current_stock", "location", "note"])
-    ws.append(["BT40 Örnek Tutucu", "Regofix", "BT40", "120", "32", 1, 5, "Raf A-1", ""])
-    ws.append(["HSK-A63 ER32", "Big Kaiser", "HSK-A63", "90", "25", 1, 3, "Raf A-2", "Kısa tip"])
+    ws.append(["name", "brand", "cutting_tool_code_name", "type", "length", "diameter", "min_stock", "current_stock", "location", "note"])
+    ws.append(["BT40 Örnek Tutucu", "Regofix", "WNMG 080412-PM", "BT40", "120", "32", 1, 5, "Raf A-1", ""])
+    ws.append(["HSK-A63 ER32", "Big Kaiser", "ER32 pens seti", "HSK-A63", "90", "25", 1, 3, "Raf A-2", "Kısa tip"])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1362,6 +1363,7 @@ async def toolholder_import(file: UploadFile = File(...), commit: bool = False,
         d = {
             "name": name,
             "brand": _safe_str(_get(row, "brand")),
+            "cutting_tool_code_name": _safe_str(_get(row, "cutting_tool_code_name")),
             "type": _safe_str(_get(row, "type")),
             "length": _safe_str(_get(row, "length")),
             "diameter": _safe_str(_get(row, "diameter")),

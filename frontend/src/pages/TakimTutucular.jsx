@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import ToolHolderImport from "@/components/ToolHolderImport";
 
 const emptyForm = {
-  name: "", brand: "", type: "", length: "", diameter: "",
+  name: "", brand: "", cutting_tool_code_name: "", type: "", length: "", diameter: "",
   min_stock: 0, current_stock: 0, location: "", note: ""
 };
 
@@ -120,6 +120,7 @@ export default function TakimTutucular() {
     if (!s) return true;
     return (t.name || "").toLowerCase().includes(s)
       || (t.brand || "").toLowerCase().includes(s)
+      || (t.cutting_tool_code_name || "").toLowerCase().includes(s)
       || (t.type || "").toLowerCase().includes(s)
       || (t.length || "").toLowerCase().includes(s)
       || (t.diameter || "").toLowerCase().includes(s)
@@ -192,6 +193,7 @@ export default function TakimTutucular() {
     const rows = filtered.map((t) => ({
       "Tutucu Adı": t.name || "",
       "Marka": t.brand || "",
+      "Kesici Uç Kodu / İsmi": t.cutting_tool_code_name || "",
       "Tipi": t.type || "",
       "Boy (mm)": t.length || "",
       "Çap (mm)": t.diameter || "",
@@ -203,7 +205,7 @@ export default function TakimTutucular() {
     }));
     const worksheet = XLSX.utils.json_to_sheet(rows);
     worksheet["!cols"] = [
-      { wch: 32 }, { wch: 18 }, { wch: 34 }, { wch: 12 }, { wch: 12 },
+      { wch: 32 }, { wch: 18 }, { wch: 28 }, { wch: 34 }, { wch: 12 }, { wch: 12 },
       { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 36 },
     ];
     const workbook = XLSX.utils.book_new();
@@ -272,6 +274,10 @@ export default function TakimTutucular() {
             <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} data-testid="th-f-brand" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" placeholder="ör. Regofix, Big Kaiser" />
           </div>
           <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Kesici Uç Kodu / İsmi</label>
+            <input value={form.cutting_tool_code_name} onChange={(e) => setForm({ ...form, cutting_tool_code_name: e.target.value })} data-testid="th-f-cutting-tool" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" placeholder="ör. WNMG 080412-PM" />
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tipi <span className="text-blue-400 normal-case">(manuel değiştirilebilir)</span></label>
             <input list="th-types" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} data-testid="th-f-type" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" placeholder="ör. BT40, HSK-A63" />
             <datalist id="th-types">{DEFAULT_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
@@ -310,6 +316,7 @@ export default function TakimTutucular() {
               <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
                 <th className="px-4 py-3">Adı</th>
                 <th className="px-4 py-3">Markası</th>
+                <th className="px-4 py-3">Kesici Uç Kodu / İsmi</th>
                 <th className="px-4 py-3">Tipi</th>
                 <th className="px-4 py-3 text-right">Boy</th>
                 <th className="px-4 py-3 text-right">Çap</th>
@@ -325,6 +332,7 @@ export default function TakimTutucular() {
                   <tr key={t.id} data-testid={`th-row-${t.id}`} className={`h-16 hover:bg-slate-700/40 ${crit ? "bg-red-950/20" : ""}`}>
                     <td className="px-4 font-medium">{t.name}</td>
                     <td className="px-4 text-slate-300">{t.brand || <span className="text-slate-600">-</span>}</td>
+                    <td className="px-4 text-slate-300">{t.cutting_tool_code_name || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-slate-300">{t.type || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-right font-mono-tab text-slate-300">{t.length || "-"}</td>
                     <td className="px-4 text-right font-mono-tab text-slate-300">{t.diameter || "-"}</td>
@@ -357,7 +365,7 @@ export default function TakimTutucular() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-slate-500">Tutucu yok. Yukarıdan ekleyin.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-slate-500">Tutucu yok. Yukarıdan ekleyin.</td></tr>}
             </tbody>
           </table>
         </div>
