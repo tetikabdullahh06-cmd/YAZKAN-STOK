@@ -295,8 +295,7 @@ export default function Products() {
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Marka / Kalite</th>
                 <th className="px-4 py-3">Konum</th>
-                <th className="px-4 py-3 text-right">Stok</th>
-                <th className="px-4 py-3 text-right">Bilemede</th>
+                <th className="px-4 py-3 text-right">Stok / Bilemede</th>
                 <th className="px-4 py-3 text-right">Min</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -325,13 +324,7 @@ export default function Products() {
                       {!p.brand && !p.quality && <span className="text-slate-600">-</span>}
                     </td>
                     <td className="px-4 text-slate-400 text-sm">{p.location || <span className="text-slate-600">-</span>}</td>
-                    <td className="px-4 text-right font-mono-tab font-bold">
-                      <div className="inline-flex items-center gap-2">
-                        {crit && <AlertTriangle className="w-4 h-4 text-red-400" />}
-                        <span className={crit ? "text-red-400" : ""}>{p.current_stock} {p.unit}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 text-right font-mono-tab font-bold"><span className={Number(p.in_sharpening || 0) > 0 ? "text-amber-700 bg-amber-100 border border-amber-300 px-2 py-1 rounded-md" : "text-slate-400"}>{p.in_sharpening || 0} {p.unit}</span></td>
+                    <td className="px-4 text-right font-mono-tab font-bold"><div>{p.current_stock} {p.unit}</div><div className={Number(p.in_sharpening || 0) > 0 ? "mt-1 inline-block text-amber-800 bg-amber-100 border border-amber-300 px-2 py-1 rounded-md text-xs font-black" : "mt-1 text-slate-400 text-xs font-semibold"}>Bilemede: {p.in_sharpening || 0} {p.unit}</div></td>
                     <td className="px-4 text-right font-mono-tab text-slate-400">{p.min_stock}</td>
                     <td className="px-4 min-w-[260px]">
                       {isAdmin && <>
