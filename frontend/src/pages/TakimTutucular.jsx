@@ -127,6 +127,17 @@ export default function TakimTutucular() {
       || (t.location || "").toLowerCase().includes(s);
   });
 
+  const holderNameMatches = !editId && form.name.trim().length >= 2
+    ? items.filter((t) => (t.name || "").toLowerCase().includes(form.name.trim().toLowerCase())).slice(0, 8)
+    : [];
+
+  const selectExistingHolder = (holder) => {
+    setForm({ ...emptyForm, ...holder });
+    setEditId(holder.id);
+    setCatalogKind("");
+    toast.info(`Mevcut tutucu seçildi: ${holder.name}`);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     const payload = {
@@ -268,6 +279,19 @@ export default function TakimTutucular() {
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tutucu Adı <span className="text-blue-400 normal-case">(manuel değiştirilebilir)</span></label>
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="th-f-name" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+            {holderNameMatches.length > 0 && (
+              <div className="mt-2 rounded-lg border border-amber-700/60 bg-amber-950/30 overflow-hidden">
+                <div className="px-3 py-2 text-xs text-amber-300 font-semibold">Bu isimle mevcut tutucular bulundu. Yeni kart açmamak için mevcut kaydı seç:</div>
+                {holderNameMatches.map((holder) => (
+                  <button type="button" key={holder.id} onClick={() => selectExistingHolder(holder)}
+                    className="w-full text-left px-3 py-2 border-t border-amber-800/40 hover:bg-amber-900/40 text-sm">
+                    <span className="font-semibold text-slate-100">{holder.name}</span>
+                    <span className="ml-2 text-slate-400">Marka: {holder.brand || "-"} · Kesici uç: {holder.cutting_tool_code_name || "-"} · Tip: {holder.type || "-"} · Stok: {holder.current_stock ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {editId && <div className="mt-2 text-xs text-emerald-400">Mevcut kayıt seçildi; Kaydet düğmesi yeni kart oluşturmak yerine bu tutucuyu güncelleyecek.</div>}
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Marka</label>
@@ -303,7 +327,7 @@ export default function TakimTutucular() {
             <input type="number" step="1" min="0" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} data-testid="th-f-current" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3 font-mono-tab" />
           </div>
           <div className="md:col-span-3 flex gap-3">
-            <button type="submit" data-testid="th-f-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">Kaydet</button>
+              <button type="submit" data-testid="th-f-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">{editId ? "Mevcut Tutucuyu Güncelle" : "Yeni Tutucu Kaydet"}</button>
             <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">İptal</button>
           </div>
         </form>
