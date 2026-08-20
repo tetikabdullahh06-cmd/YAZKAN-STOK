@@ -46,3 +46,20 @@ Derin araştırma kaynakları:
 8. Ingersoll Parting & Grooving Tools: https://www.ingersoll-imc.com/product/category/parting-grooving
 
 Araştırma notu: Bunlar genel katalog sınıflarıdır. Uygulamada takım boyu, şank kesiti, insert kodu, makine taret/iş mili arayüzü ve üretici datası ayrı kontrol edilmelidir; seçim formunda her hazır değer manuel değiştirilebilir bırakılacaktır.
+
+
+## Kanal ve kesme takımları araştırma ekleri
+
+Kanal/kesme aileleri ayrı operasyonlar olarak modellenmeli: dış kanal (OD grooving), iç kanal (ID grooving), alın kanalı (face grooving), kanal-dönüş/profil (groove turning), kesme/parting-off, derin kanal, hassas kanal ve modüler kanal/kesme. Dış kanal için MGEHR/MGEHL ve sağ/sol varyantlar; MGMN uç ailesiyle birlikte farklı kanal genişlikleri için 1.5, 2, 2.5, 3, 4 ve 5 mm örnekleri; kare şank 16x16, 20x20, 25x25, 32x32 seçenekleri eklenmeli. Kesme tarafında MGEHR/MGEHL, MGIVR/MGIVL, N123 ve modüler blade/adaptör sınıfları; iç/alın kanalı için S/G tipi ve özel face-grooving holder sınıfları; insert genişliği ve maksimum kanal derinliği manuel alan olarak tutulmalı.
+
+Kaynaklar:
+1. Sandvik parting and grooving tools: https://www.sandvik.coromant.com/en-us/tools/parting-and-grooving-tools
+2. Sandvik face grooving: https://www.sandvik.coromant.com/en-us/knowledge/parting-and-grooving/face-grooving
+3. Walter overview: https://www.walter-tools.com/en-us/products/turning
+4. Ingersoll parting and grooving: https://www.ingersoll-imc.com/product/category/parting-grooving
+5. Kennametal grooving and cut-off: https://www.kennametal.com/us/en/products/metalworking-tools/turning/grooving-and-cut-off.html
+6. WIDIA grooving and cut-off: https://www.widia.com/de/en/products/turning/grooving-and-cut-off.html
+7. Seco grooving and parting-off: https://www.secotools.com/article/grooving_and_parting_off?language=en
+8. ARNO NC face grooving: https://arnousa.com/solutions/nc-face-grooving
+
+Araştırma notu: Üretici katalogları dış/iç/alın kanalını ayrı uygulamalar olarak ele alıyor; kanal genişliği, kesme derinliği, takımın sağ/sol yönü ve bağlama kesiti tutucu seçiminde belirleyici. Bu yüzden uygulama listesinde yalnızca tek bir MGEHR maddesi yerine operasyon, yön, şank ve insert genişliği görünür olmalı.
