@@ -20,6 +20,8 @@ import Suppliers from "@/pages/Suppliers";
 import Orders from "@/pages/Orders";
 import TakimTutucular from "@/pages/TakimTutucular";
 import Sharpening from "@/pages/Sharpening";
+import ToolTrials from "@/pages/ToolTrials";
+import Recipes from "@/pages/Recipes";
 import Settings from "@/pages/Settings";
 
 export default function App() {
@@ -41,6 +43,8 @@ export default function App() {
             <Route path="siparisler" element={<Orders />} />
             <Route path="stok-giris" element={<StockIn />} />
             <Route path="bileme" element={<Sharpening />} />
+            <Route path="denemeler" element={<ToolTrials />} />
+            <Route path="receteler" element={<Recipes />} />
             <Route path="stok-cikis" element={<StockOut />} />
             <Route path="hareketler" element={<Movements />} />
             <Route path="kritik-stok" element={<CriticalStock />} />

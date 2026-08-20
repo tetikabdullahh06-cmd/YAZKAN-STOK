@@ -226,6 +226,53 @@ class SharpeningInIn(BaseModel):
     note: Optional[str] = ""
 
 
+class ToolTrialIn(BaseModel):
+    comparison_name: str = ""
+    trial_date: str
+    part_name: str
+    material: Optional[str] = ""
+    hardness: Optional[str] = ""
+    machine_id: Optional[str] = None
+    operation_type: str = "Tornalama"
+    product_id: Optional[str] = None
+    product_brand: Optional[str] = ""
+    product_code: Optional[str] = ""
+    insert_grade: Optional[str] = ""
+    tool_diameter: Optional[str] = ""
+    quantity_used: float = 0
+    price: float = 0
+    spindle_speed: Optional[str] = ""
+    cutting_speed: Optional[str] = ""
+    feed_rate: Optional[str] = ""
+    depth_of_cut: Optional[str] = ""
+    drill_diameter: Optional[str] = ""
+    feed_per_tooth: Optional[str] = ""
+    runtime_minutes: float = 0
+    parts_machined: float = 0
+    wear_result: Optional[str] = ""
+    result: Optional[str] = ""
+    technical_comment: Optional[str] = ""
+    coolant: Optional[str] = ""
+
+
+class RecipeLineIn(BaseModel):
+    kind: str
+    reference_id: str
+    quantity: float
+    note: Optional[str] = ""
+
+
+class RecipeIn(BaseModel):
+    name: str
+    workpiece_name: str
+    note: Optional[str] = ""
+    lines: List[RecipeLineIn]
+
+
+class RecipeBindIn(BaseModel):
+    machine_id: str
+
+
 class SupplierIn(BaseModel):
     name: str
     contact_person: Optional[str] = ""
@@ -302,6 +349,9 @@ async def startup():
     await db.toolholder_movements.create_index("created_at")
     await db.sharpening_records.create_index("created_at")
     await db.sharpening_records.create_index("status")
+    await db.tool_trials.create_index("trial_date")
+    await db.tool_trials.create_index("comparison_name")
+    await db.recipes.create_index("status")
 
     admin_email = os.environ.get("ADMIN_EMAIL", "").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "")
@@ -831,6 +881,107 @@ async def sharpening_in(body: SharpeningInIn, user=Depends(require_admin)):
     await db.sharpening_records.update_one({"id": record["id"]}, {"$set": update})
     updated = await db.sharpening_records.find_one({"id": record["id"]}, {"_id": 0})
     return {"ok": True, "new_stock": new_stock, "record": updated}
+
+
+# ---------- Tool trials / Kesici takım denemeleri ----------
+@api.get("/tool-trials")
+async def list_tool_trials(user=Depends(get_current_user), comparison_name: Optional[str] = None):
+    q = {"comparison_name": comparison_name} if comparison_name else {}
+    return await db.tool_trials.find(q, {"_id": 0}).sort("trial_date", -1).to_list(5000)
+
+
+@api.post("/tool-trials")
+async def create_tool_trial(body: ToolTrialIn, user=Depends(require_admin)):
+    if not body.part_name.strip():
+        raise HTTPException(status_code=400, detail="İşlenen ürün/parça adı zorunludur")
+    if body.operation_type not in {"Tornalama", "Frezeleme", "Delme", "Diş açma", "Diğer"}:
+        raise HTTPException(status_code=400, detail="Geçersiz iş türü")
+    doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat(), "created_by": user.get("name", "")}
+    if body.machine_id:
+        machine = await db.machines.find_one({"id": body.machine_id})
+        if not machine:
+            raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
+        doc["machine_name"] = machine.get("name", "")
+    await db.tool_trials.insert_one(doc)
+    return clean(doc)
+
+
+@api.delete("/tool-trials/{tid}")
+async def delete_tool_trial(tid: str, user=Depends(require_admin)):
+    r = await db.tool_trials.delete_one({"id": tid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Deneme kaydı bulunamadı")
+    return {"ok": True}
+
+
+@api.get("/tool-trials/compare")
+async def compare_tool_trials(user=Depends(get_current_user), comparison_name: str = ""):
+    q = {"comparison_name": comparison_name} if comparison_name else {}
+    rows = await db.tool_trials.find(q, {"_id": 0}).sort("parts_machined", -1).to_list(5000)
+    return {"comparison_name": comparison_name, "count": len(rows), "rows": rows}
+
+
+# ---------- Machining recipes / İşleme reçeteleri ----------
+@api.get("/recipes")
+async def list_recipes(user=Depends(get_current_user)):
+    return await db.recipes.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+
+
+@api.post("/recipes")
+async def create_recipe(body: RecipeIn, user=Depends(require_admin)):
+    if not body.name.strip() or not body.workpiece_name.strip():
+        raise HTTPException(status_code=400, detail="Reçete adı ve işlenecek ürün zorunludur")
+    if not body.lines:
+        raise HTTPException(status_code=400, detail="Reçeteye en az bir takım veya tutucu ekleyin")
+    lines = []
+    for line in body.lines:
+        if line.kind not in {"product", "toolholder"} or line.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Geçersiz reçete satırı")
+        collection = db.products if line.kind == "product" else db.toolholders
+        item = await collection.find_one({"id": line.reference_id})
+        if not item:
+            raise HTTPException(status_code=404, detail="Reçete satırındaki stok kaydı bulunamadı")
+        lines.append({"kind": line.kind, "reference_id": item["id"], "name": item.get("name", ""), "code": item.get("code", ""), "quantity": line.quantity, "note": line.note or ""})
+    doc = {"id": new_id(), "name": body.name.strip(), "workpiece_name": body.workpiece_name.strip(), "note": body.note or "", "lines": lines, "status": "draft", "created_at": now_utc().isoformat(), "created_by": user.get("name", "")}
+    await db.recipes.insert_one(doc)
+    return clean(doc)
+
+
+@api.post("/recipes/{rid}/bind")
+async def bind_recipe(rid: str, body: RecipeBindIn, user=Depends(require_admin)):
+    recipe = await db.recipes.find_one({"id": rid})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Reçete bulunamadı")
+    if recipe.get("status") == "bound":
+        raise HTTPException(status_code=400, detail="Bu reçete daha önce tezgâha bağlanmış")
+    machine = await db.machines.find_one({"id": body.machine_id})
+    if not machine:
+        raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
+    resolved = []
+    for line in recipe.get("lines", []):
+        collection = db.products if line.get("kind") == "product" else db.toolholders
+        item = await collection.find_one({"id": line.get("reference_id")})
+        if not item:
+            raise HTTPException(status_code=404, detail=f"Stok kaydı bulunamadı: {line.get('name', '')}")
+        if line.get("quantity", 0) > item.get("current_stock", 0):
+            raise HTTPException(status_code=400, detail=f"Yetersiz stok: {line.get('name', '')}")
+        resolved.append((line, collection, item))
+    movements = []
+    for line, collection, item in resolved:
+        new_stock = item.get("current_stock", 0) - line["quantity"]
+        await collection.update_one({"id": item["id"]}, {"$set": {"current_stock": new_stock}})
+        movement = {"id": new_id(), "type": "recipe_bind", "recipe_id": rid, "recipe_name": recipe["name"], "kind": line["kind"], "reference_id": item["id"], "product_code": item.get("code", ""), "product_name": item.get("name", ""), "quantity": line["quantity"], "machine_id": machine["id"], "machine_name": machine.get("name", ""), "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat()}
+        await db.recipe_movements.insert_one(movement)
+        movements.append(clean(movement))
+    await db.recipes.update_one({"id": rid}, {"$set": {"status": "bound", "machine_id": machine["id"], "machine_name": machine.get("name", ""), "bound_at": now_utc().isoformat(), "bound_by": user.get("name", "")}})
+    updated = await db.recipes.find_one({"id": rid}, {"_id": 0})
+    return {"ok": True, "recipe": updated, "movements": movements}
+
+
+@api.get("/recipe-movements")
+async def list_recipe_movements(user=Depends(get_current_user), recipe_id: Optional[str] = None):
+    q = {"recipe_id": recipe_id} if recipe_id else {}
+    return await db.recipe_movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
 
 
 # ---------- Dashboard ----------
