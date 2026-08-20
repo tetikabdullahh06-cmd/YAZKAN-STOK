@@ -164,3 +164,24 @@ main button { font-weight: 800; }
 main input, main select, main textarea { font-size: .93rem; }
 main .text-xs { font-weight: 700; }
 main .text-sm { font-weight: 600; }
+
+/* Keep the critical-stock panel bold without sacrificing contrast */
+main [data-testid="dashboard-critical-alert"] {
+    background: linear-gradient(135deg, #fff1f2 0%, #fff7ed 100%) !important;
+    border-color: #fda4af !important;
+    color: #172033 !important;
+    box-shadow: 0 14px 30px rgba(190, 24, 93, .12) !important;
+}
+main [data-testid="dashboard-critical-alert"] .text-red-100,
+main [data-testid="dashboard-critical-alert"] .text-red-50,
+main [data-testid="dashboard-critical-alert"] .text-red-300,
+main [data-testid="dashboard-critical-alert"] .text-red-400,
+main [data-testid="dashboard-critical-alert"] .text-red-300\/70,
+main [data-testid="dashboard-critical-alert"] .text-red-400\/60 {
+    color: #9f1239 !important;
+    font-weight: 700;
+}
+main [data-testid="dashboard-critical-alert"] .font-semibold,
+main [data-testid="dashboard-critical-alert"] .font-black { color: #4c0519 !important; }
+main [data-testid="dashboard-critical-alert"] .border-red-500\/30,
+main [data-testid="dashboard-critical-alert"] .divide-red-900\/40 { border-color: #fecdd3 !important; }
