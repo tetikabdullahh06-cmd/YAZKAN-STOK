@@ -19,6 +19,7 @@ import Reports from "@/pages/Reports";
 import Suppliers from "@/pages/Suppliers";
 import Orders from "@/pages/Orders";
 import TakimTutucular from "@/pages/TakimTutucular";
+import Sharpening from "@/pages/Sharpening";
 import Settings from "@/pages/Settings";
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="tedarikciler" element={<Suppliers />} />
             <Route path="siparisler" element={<Orders />} />
             <Route path="stok-giris" element={<StockIn />} />
+            <Route path="bileme" element={<Sharpening />} />
             <Route path="stok-cikis" element={<StockOut />} />
             <Route path="hareketler" element={<Movements />} />
             <Route path="kritik-stok" element={<CriticalStock />} />

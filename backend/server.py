@@ -205,6 +205,27 @@ class StockOutIn(BaseModel):
     note: Optional[str] = ""
 
 
+class SharpeningOutIn(BaseModel):
+    product_id: str
+    quantity: float
+    helix_length: Optional[str] = ""
+    diameter: Optional[str] = ""
+    full_length: Optional[str] = ""
+    process_type: str
+    company: str
+    sent_date: str
+    note: Optional[str] = ""
+
+
+class SharpeningInIn(BaseModel):
+    record_id: str
+    company: str
+    waybill_number: str
+    received_date: str
+    quantity: Optional[float] = None
+    note: Optional[str] = ""
+
+
 class SupplierIn(BaseModel):
     name: str
     contact_person: Optional[str] = ""
@@ -279,6 +300,8 @@ async def startup():
     await db.machines.create_index("code", unique=True)
     await db.movements.create_index("created_at")
     await db.toolholder_movements.create_index("created_at")
+    await db.sharpening_records.create_index("created_at")
+    await db.sharpening_records.create_index("status")
 
     admin_email = os.environ.get("ADMIN_EMAIL", "").lower()
     admin_pw = os.environ.get("ADMIN_PASSWORD", "")
@@ -737,6 +760,77 @@ async def list_movements(
         if date_to:
             q["created_at"]["$lte"] = date_to + "T23:59:59"
     return await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+
+# ---------- Sharpening / Bileme ----------
+@api.get("/sharpening/records")
+async def list_sharpening_records(user=Depends(get_current_user), status: Optional[str] = None):
+    q = {}
+    if status in {"sent", "partial", "returned"}:
+        q["status"] = status
+    return await db.sharpening_records.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+
+@api.post("/sharpening/out")
+async def sharpening_out(body: SharpeningOutIn, user=Depends(require_admin)):
+    product = await db.products.find_one({"id": body.product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
+    if body.quantity > product.get("current_stock", 0):
+        raise HTTPException(status_code=400, detail="Yetersiz stok")
+    if body.process_type not in {"alın bileme", "tam bileme"}:
+        raise HTTPException(status_code=400, detail="Geçersiz bileme işlemi")
+    company = body.company.strip()
+    if not company:
+        raise HTTPException(status_code=400, detail="Bileme firması zorunludur")
+    new_stock = product.get("current_stock", 0) - body.quantity
+    record = {
+        "id": new_id(), "status": "sent", "product_id": product["id"],
+        "product_code": product.get("code", ""), "product_name": product.get("name", ""),
+        "unit": product.get("unit", "adet"), "quantity": body.quantity,
+        "remaining_quantity": body.quantity, "returned_quantity": 0,
+        "helix_length": body.helix_length or "", "diameter": body.diameter or "",
+        "full_length": body.full_length or "", "process_type": body.process_type,
+        "company": company, "sent_date": body.sent_date, "note": body.note or "",
+        "sent_by": user.get("name", ""), "created_at": now_utc().isoformat(),
+    }
+    await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+    await db.sharpening_records.insert_one(record)
+    return {"ok": True, "new_stock": new_stock, "record": clean(record)}
+
+
+@api.post("/sharpening/in")
+async def sharpening_in(body: SharpeningInIn, user=Depends(require_admin)):
+    record = await db.sharpening_records.find_one({"id": body.record_id})
+    if not record:
+        raise HTTPException(status_code=404, detail="Bileme kaydı bulunamadı")
+    if record.get("status") == "returned" or record.get("remaining_quantity", 0) <= 0:
+        raise HTTPException(status_code=400, detail="Bu kayıt tamamen stoğa alınmış")
+    if not body.company.strip() or not body.waybill_number.strip():
+        raise HTTPException(status_code=400, detail="Firma ve irsaliye numarası zorunludur")
+    remaining = float(record.get("remaining_quantity", record.get("quantity", 0)))
+    qty = remaining if body.quantity is None else body.quantity
+    if qty <= 0 or qty > remaining:
+        raise HTTPException(status_code=400, detail="Gelen miktar kalan miktar aralığında olmalıdır")
+    product = await db.products.find_one({"id": record["product_id"]})
+    if not product:
+        raise HTTPException(status_code=404, detail="Bağlı ürün bulunamadı")
+    left = round(remaining - qty, 6)
+    new_status = "returned" if left <= 0 else "partial"
+    new_stock = product.get("current_stock", 0) + qty
+    update = {
+        "remaining_quantity": left, "returned_quantity": record.get("returned_quantity", 0) + qty,
+        "status": new_status, "return_company": body.company.strip(),
+        "waybill_number": body.waybill_number.strip(), "received_date": body.received_date,
+        "received_by": user.get("name", ""), "return_note": body.note or "",
+        "updated_at": now_utc().isoformat(),
+    }
+    await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+    await db.sharpening_records.update_one({"id": record["id"]}, {"$set": update})
+    updated = await db.sharpening_records.find_one({"id": record["id"]}, {"_id": 0})
+    return {"ok": True, "new_stock": new_stock, "record": updated}
 
 
 # ---------- Dashboard ----------

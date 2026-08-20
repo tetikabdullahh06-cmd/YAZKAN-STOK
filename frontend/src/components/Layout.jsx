@@ -11,6 +11,7 @@ const NAV = [
   { to: "/", label: "Panel", icon: LayoutDashboard, end: true, testid: "nav-dashboard" },
   { to: "/stok-cikis", label: "Stok Çıkışı", icon: ArrowUpFromLine, testid: "nav-stock-out", adminOnly: true },
   { to: "/stok-giris", label: "Stok Girişi", icon: ArrowDownToLine, testid: "nav-stock-in", adminOnly: true },
+  { to: "/bileme", label: "Bilemeye Giden / Gelen", icon: Wrench, testid: "nav-sharpening", adminOnly: true },
   { to: "/urunler", label: "Ürünler", icon: Package, testid: "nav-products" },
   { to: "/personel", label: "Personel", icon: Users, testid: "nav-personnel" },
   { to: "/tezgahlar", label: "Tezgahlar", icon: Settings2, testid: "nav-machines" },
