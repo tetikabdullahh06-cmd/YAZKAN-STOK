@@ -31,9 +31,8 @@ export default function ToolTrials() {
     "İşlenen Ürün / Parça": t.part_name || "",
     "Malzeme": t.material || "",
     "Sertlik": t.hardness || "",
-    "Tezgâh": t.machine_name || t.machine_id || "",
+    "Tezgâh": t.machine_name || "",
     "İş Türü": t.operation_type || "",
-    "Ürün ID": t.product_id || "",
     "Marka": t.product_brand || "",
     "Ürün / Uç Kodu": t.product_code || "",
     "Uç Kodu ve Kalite": t.insert_grade || "",
@@ -65,7 +64,7 @@ export default function ToolTrials() {
     toast.success(`${filtered.length} deneme Excel'e aktarıldı`);
   };
   const downloadTemplate = () => {
-    const sample = { comparison_name: "Örnek Karşılaştırma", trial_date: today(), part_name: "Örnek Parça", material: "GG25", hardness: "180 HB", operation_type: "Tornalama", product_brand: "Örnek Marka", product_code: "UÇ-001", insert_grade: "CNMG 120408", tool_diameter: "20 mm", spindle_speed: "1200 dev/dk", cutting_speed: "150 m/dk", feed_rate: "0.20 mm/dev", depth_of_cut: "2 mm", coolant: "Emülsiyon", quantity_used: 1, price: 0, runtime_minutes: 30, parts_machined: 10, wear_result: "Örnek aşınma", result: "Başarılı", technical_comment: "Şablon satırı; kendi verilerinle değiştir.", machine_id: "" };
+    const sample = { "Karşılaştırma Grubu": "Örnek Karşılaştırma", "Tarih": today(), "İşlenen Ürün / Parça": "Örnek Parça", "Malzeme": "GG25", "Sertlik": "180 HB", "Tezgâh": "Tezgâh kodu veya adı", "İş Türü": "Tornalama", "Marka": "Örnek Marka", "Ürün / Uç Kodu": "UÇ-001", "Uç Kodu ve Kalite": "CNMG 120408", "Takım Çapı": "20 mm", "Devir N": "1200 dev/dk", "Kesme Hızı Vc": "150 m/dk", "İlerleme F": "0.20 mm/dev", "Paso ap": "2 mm", "Soğutma": "Emülsiyon", "Kullanılan Miktar": 1, "Birim Fiyat": 0, "Çalışma Süresi (dk)": 30, "İşlenen Parça Adedi": 10, "Aşınma / Takım Ömrü": "Örnek aşınma", "Test Sonucu": "Başarılı", "Teknik Yorum": "Şablon satırı; kendi verilerinle değiştir." };
     const ws = XLSX.utils.json_to_sheet([sample]);
     ws["!cols"] = Object.keys(sample).map((key) => ({ wch: Math.max(14, Math.min(30, key.length + 4)) }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Deneme Şablonu");
@@ -79,9 +78,9 @@ export default function ToolTrials() {
       const rows = XLSX.utils.sheet_to_json(XLSX.read(data, { type: "array" }).Sheets[XLSX.read(data, { type: "array" }).SheetNames[0]], { defval: "" });
       if (!rows.length) return toast.error("Excel dosyasında kayıt bulunamadı");
       setSaving(true);
-      const keyMap = { "Karşılaştırma Grubu":"comparison_name", "Tarih":"trial_date", "İşlenen Ürün / Parça":"part_name", "Malzeme":"material", "Sertlik":"hardness", "Tezgâh":"machine_id", "İş Türü":"operation_type", "Ürün ID":"product_id", "Marka":"product_brand", "Ürün / Uç Kodu":"product_code", "Uç Kodu ve Kalite":"insert_grade", "Takım Çapı":"tool_diameter", "Devir N":"spindle_speed", "Kesme Hızı Vc":"cutting_speed", "İlerleme F":"feed_rate", "Paso ap":"depth_of_cut", "Matkap Çapı":"drill_diameter", "Diş Başı fz":"feed_per_tooth", "Soğutma":"coolant", "Kullanılan Miktar":"quantity_used", "Birim Fiyat":"price", "Çalışma Süresi (dk)":"runtime_minutes", "İşlenen Parça Adedi":"parts_machined", "Aşınma / Takım Ömrü":"wear_result", "Test Sonucu":"result", "Teknik Yorum":"technical_comment" };
+      const keyMap = { "Karşılaştırma Grubu":"comparison_name", "Tarih":"trial_date", "İşlenen Ürün / Parça":"part_name", "Malzeme":"material", "Sertlik":"hardness", "Tezgâh":"machine_id", "İş Türü":"operation_type", "Marka":"product_brand", "Ürün / Uç Kodu":"product_code", "Uç Kodu ve Kalite":"insert_grade", "Takım Çapı":"tool_diameter", "Devir N":"spindle_speed", "Kesme Hızı Vc":"cutting_speed", "İlerleme F":"feed_rate", "Paso ap":"depth_of_cut", "Matkap Çapı":"drill_diameter", "Diş Başı fz":"feed_per_tooth", "Soğutma":"coolant", "Kullanılan Miktar":"quantity_used", "Birim Fiyat":"price", "Çalışma Süresi (dk)":"runtime_minutes", "İşlenen Parça Adedi":"parts_machined", "Aşınma / Takım Ömrü":"wear_result", "Test Sonucu":"result", "Teknik Yorum":"technical_comment" };
       let count = 0;
-      for (const row of rows) { const payload = {}; Object.entries(row).forEach(([k, v]) => { const target = keyMap[k] || k; payload[target] = v; }); payload.quantity_used = Number(payload.quantity_used) || 0; payload.price = Number(payload.price) || 0; payload.runtime_minutes = Number(payload.runtime_minutes) || 0; payload.parts_machined = Number(payload.parts_machined) || 0; payload.machine_id = payload.machine_id || null; payload.product_id = payload.product_id || null; await api.post("/tool-trials", payload); count += 1; }
+      for (const row of rows) { const payload = {}; Object.entries(row).forEach(([k, v]) => { const target = keyMap[k] || k; payload[target] = v; }); payload.quantity_used = Number(payload.quantity_used) || 0; payload.price = Number(payload.price) || 0; payload.runtime_minutes = Number(payload.runtime_minutes) || 0; payload.parts_machined = Number(payload.parts_machined) || 0; const matchedMachine = machines.find((m) => payload.machine_id && (m.id === payload.machine_id || m.code === payload.machine_id || m.name === payload.machine_id)); payload.machine_id = matchedMachine?.id || null; const matchedProduct = products.find((p) => payload.product_code && p.code === payload.product_code); payload.product_id = matchedProduct?.id || null; await api.post("/tool-trials", payload); count += 1; }
       toast.success(`${count} deneme kaydı içe aktarıldı`); await load();
     } catch (err) { toast.error(err.response?.data?.detail || "Excel içe aktarılamadı"); } finally { setSaving(false); }
   };
