@@ -23,6 +23,7 @@ export default function Products() {
   const [newCat, setNewCat] = useState("");
   const [showNewCat, setShowNewCat] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [stockAdd, setStockAdd] = useState({ query: "", productId: "", quantity: "" });
 
   const load = () => api.get("/products").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -68,6 +69,21 @@ export default function Products() {
     toast.success(`"${c}" kategorisi eklendi`);
   };
 
+  const existingMatches = items.filter((p) => { const s = stockAdd.query.toLowerCase().trim(); return !s || `${p.code || ""} ${p.name || ""} ${p.brand || ""} ${p.quality || ""}`.toLowerCase().includes(s); });
+
+  const addExistingStock = async () => {
+    const qty = Number(stockAdd.quantity);
+    if (!stockAdd.productId) return toast.error("Önce stoktaki ürünü seçin");
+    if (!Number.isFinite(qty) || qty <= 0) return toast.error("Eklenecek adet 0'dan büyük olmalıdır");
+    try {
+      const r = await api.post("/stock/in", { product_id: stockAdd.productId, quantity: qty, supplier: "Ürünler sayfası stok artırma" });
+      toast.success(`Stok artırıldı. Yeni stok: ${r.data.new_stock}`);
+      setStockAdd({ query: "", productId: "", quantity: "" });
+      setShowForm(false);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Stok artırılamadı"); }
+  };
+
   const filtered = items.filter((p) => {
     const s = q.toLowerCase().trim();
     if (!s) return true;
@@ -83,6 +99,10 @@ export default function Products() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!editId) {
+      const duplicate = items.find((p) => (p.name || "").trim().toLowerCase() === form.name.trim().toLowerCase());
+      if (duplicate) { toast.error("Bu isimde ürün zaten var. Mevcut ürüne adet ekleme panelini kullanın."); return; }
+    }
     const payload = {
       ...form,
       min_stock: parseFloat(form.min_stock) || 0,
@@ -115,7 +135,7 @@ export default function Products() {
         <div className="flex gap-3 flex-wrap">
           {isAdmin && (
             <>
-              <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(true); }} data-testid="product-add-btn"
+              <button onClick={() => { setForm(emptyForm); setEditId(null); setStockAdd({ query: "", productId: "", quantity: "" }); setShowForm(true); }} data-testid="product-add-btn"
                 className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
                 <Plus className="w-5 h-5" /> Yeni Ürün
               </button>
@@ -142,6 +162,18 @@ export default function Products() {
           placeholder="Kod, isim, kategori, konum, marka, kalite ara..."
           className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg pl-12 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" />
       </div>
+
+      {showForm && (
+        <div className="bg-emerald-950/30 border border-emerald-700/50 rounded-2xl p-6 space-y-4">
+          <div><div className="text-xs text-emerald-300 uppercase tracking-wider font-semibold">Mevcut stok kartına ekle</div><p className="text-sm text-slate-400 mt-1">Ürün zaten kayıtlıysa yeni kart oluşturma; ürünü seçip yalnızca eklenecek adedi gir.</p></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input value={stockAdd.query} onChange={(e) => setStockAdd({ ...stockAdd, query: e.target.value, productId: "" })} placeholder="Kod, ürün adı, marka veya kalite ara..." className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+            <select value={stockAdd.productId} onChange={(e) => setStockAdd({ ...stockAdd, productId: e.target.value })} className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3"><option value="">Stoktaki ürünü seçin</option>{existingMatches.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name} | Mevcut: {p.current_stock}</option>)}</select>
+            <input type="number" min="0.01" step="0.01" value={stockAdd.quantity} onChange={(e) => setStockAdd({ ...stockAdd, quantity: e.target.value })} placeholder="Eklenecek adet" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
+          <div className="flex gap-3"><button type="button" onClick={addExistingStock} className="h-11 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Adedi Stoka Ekle</button><span className="text-xs text-slate-500 self-center">Ürün bulunamazsa aşağıdaki yeni stok kartı formunu kullan.</span></div>
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={submit} data-testid="product-form" className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
