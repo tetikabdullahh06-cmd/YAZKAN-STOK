@@ -136,3 +136,31 @@ main a:hover { color: #0e7490; }
 main table th { color: #1e3a5f !important; letter-spacing: .04em; }
 main table td { color: #334155; }
 main .bg-blue-950\/30, main .bg-amber-950\/30 { color: #1e293b; }
+
+/* Typography pass: modern, heavier and clearer type */
+body {
+    font-family: 'Plus Jakarta Sans', 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.55;
+}
+
+h1, h2, h3, h4, .font-display {
+    font-family: 'Space Grotesk', 'Chivo', system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+}
+
+h1 { font-size: clamp(2rem, 3vw, 3rem); line-height: 1.08; }
+h2 { font-size: clamp(1.45rem, 2vw, 2rem); line-height: 1.15; }
+h3 { font-size: 1.2rem; line-height: 1.25; }
+
+.app-sidebar nav a { font-size: 0.98rem; font-weight: 700; letter-spacing: -0.01em; }
+.app-sidebar .font-display { font-weight: 800; }
+main p, main label, main td, main th, main button, main input, main select, main textarea { font-weight: 600; }
+main label, main th { font-size: .78rem; letter-spacing: .045em; }
+main table td { font-size: .9rem; }
+main button { font-weight: 800; }
+main input, main select, main textarea { font-size: .93rem; }
+main .text-xs { font-weight: 700; }
+main .text-sm { font-weight: 600; }
