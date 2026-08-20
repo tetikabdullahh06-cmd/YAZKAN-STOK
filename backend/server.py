@@ -644,7 +644,19 @@ async def _next_product_code() -> str:
 # ---------- Products ----------
 @api.get("/products")
 async def list_products(user=Depends(get_current_user)):
-    return await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
+    products = await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
+    sharpening_totals = {}
+    open_records = await db.sharpening_records.find({"status": {"$in": ["sent", "partial"]}}, {"_id": 0, "product_id": 1, "quantity": 1, "returned_quantity": 1, "remaining_quantity": 1}).to_list(5000)
+    for record in open_records:
+        remaining = record.get("remaining_quantity")
+        if remaining is None:
+            remaining = float(record.get("quantity", 0)) - float(record.get("returned_quantity", 0))
+        if float(remaining or 0) > 0:
+            product_id = record.get("product_id")
+            sharpening_totals[product_id] = sharpening_totals.get(product_id, 0) + float(remaining)
+    for product in products:
+        product["in_sharpening"] = round(sharpening_totals.get(product.get("id"), 0), 6)
+    return products
 
 
 @api.post("/products")

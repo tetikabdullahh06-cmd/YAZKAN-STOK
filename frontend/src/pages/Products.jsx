@@ -45,6 +45,7 @@ export default function Products() {
       "Konum": p.location || "",
       "Minimum Stok": p.min_stock ?? 0,
       "Mevcut Stok": p.current_stock ?? 0,
+      "Bilemede": p.in_sharpening ?? 0,
       "Özel Takım": p.is_special ? "Evet" : "Hayır",
     }));
 
@@ -295,6 +296,7 @@ export default function Products() {
                 <th className="px-4 py-3">Marka / Kalite</th>
                 <th className="px-4 py-3">Konum</th>
                 <th className="px-4 py-3 text-right">Stok</th>
+                <th className="px-4 py-3 text-right">Bilemede</th>
                 <th className="px-4 py-3 text-right">Min</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -329,6 +331,7 @@ export default function Products() {
                         <span className={crit ? "text-red-400" : ""}>{p.current_stock} {p.unit}</span>
                       </div>
                     </td>
+                    <td className="px-4 text-right font-mono-tab font-bold"><span className={Number(p.in_sharpening || 0) > 0 ? "text-amber-700 bg-amber-100 border border-amber-300 px-2 py-1 rounded-md" : "text-slate-400"}>{p.in_sharpening || 0} {p.unit}</span></td>
                     <td className="px-4 text-right font-mono-tab text-slate-400">{p.min_stock}</td>
                     <td className="px-4 min-w-[260px]">
                       {isAdmin && <>
@@ -349,7 +352,7 @@ export default function Products() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-slate-500">Ürün bulunamadı</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-slate-500">Ürün bulunamadı</td></tr>}
             </tbody>
           </table>
         </div>
