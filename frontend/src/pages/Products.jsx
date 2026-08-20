@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } from "lucide-react";
+import { Plus, Minus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } from "lucide-react";
 import ProductImport from "@/components/ProductImport";
 import { useAuth } from "@/context/AuthContext";
 
@@ -24,6 +24,7 @@ export default function Products() {
   const [showNewCat, setShowNewCat] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [stockAdd, setStockAdd] = useState({ query: "", productId: "", quantity: "" });
+  const [quickStock, setQuickStock] = useState({ productId: "", direction: "in", quantity: "", note: "" });
 
   const load = () => api.get("/products").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -93,6 +94,18 @@ export default function Products() {
       setShowForm(false);
       load();
     } catch (e) { toast.error(e.response?.data?.detail || "Stok artırılamadı"); }
+  };
+
+  const quickAdjust = async (e, productId) => {
+    e.preventDefault();
+    const qty = Number(quickStock.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return toast.error("Miktar 0'dan büyük olmalıdır");
+    try {
+      const r = await api.post(`/products/${productId}/quick-stock`, { quantity: qty, direction: quickStock.direction, note: quickStock.note || "Ürünler sayfası hızlı stok işlemi" });
+      toast.success(`${quickStock.direction === "in" ? "Stok artırıldı" : "Stok eksiltildi"}. Yeni stok: ${r.data.new_stock}`);
+      setQuickStock({ productId: "", direction: "in", quantity: "", note: "" });
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Hızlı stok işlemi yapılamadı"); }
   };
 
   const filtered = items.filter((p) => {
@@ -317,15 +330,21 @@ export default function Products() {
                       </div>
                     </td>
                     <td className="px-4 text-right font-mono-tab text-slate-400">{p.min_stock}</td>
-                    <td className="px-4">
-                      <div className="flex justify-end gap-2">
-                        {isAdmin && (
-                          <>
-                            <button onClick={() => edit(p)} data-testid={`product-edit-${p.code}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400"><Pencil className="w-4 h-4" /></button>
-                            <button onClick={() => del(p)} data-testid={`product-delete-${p.code}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
-                          </>
-                        )}
-                      </div>
+                    <td className="px-4 min-w-[260px]">
+                      {isAdmin && <>
+                        <div className="flex items-center justify-end gap-2">
+                          <button type="button" onClick={() => setQuickStock({ productId: p.id, direction: "in", quantity: "", note: "" })} data-testid={`product-quick-in-${p.code}`} className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs"><Plus className="w-4 h-4" /> Hızlı +</button>
+                          <button type="button" onClick={() => setQuickStock({ productId: p.id, direction: "out", quantity: "", note: "" })} data-testid={`product-quick-out-${p.code}`} className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-900 font-bold text-xs"><Minus className="w-4 h-4" /> Hızlı -</button>
+                          <button type="button" onClick={() => edit(p)} data-testid={`product-edit-${p.code}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400" title="Ürünü düzelt"><Pencil className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => del(p)} data-testid={`product-delete-${p.code}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400" title="Ürünü sil"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                        {quickStock.productId === p.id && <form onSubmit={(e) => quickAdjust(e, p.id)} className="mt-2 flex items-center justify-end gap-2 flex-wrap">
+                          <input autoFocus required type="number" min="0.01" step="0.01" value={quickStock.quantity} onChange={(e) => setQuickStock({ ...quickStock, quantity: e.target.value })} placeholder="Miktar" className="w-24 h-9 bg-white border border-slate-300 rounded-lg px-2 text-sm text-slate-900" />
+                          <input value={quickStock.note} onChange={(e) => setQuickStock({ ...quickStock, note: e.target.value })} placeholder="Kısa not (ops.)" className="w-36 h-9 bg-white border border-slate-300 rounded-lg px-2 text-sm text-slate-900" />
+                          <button type="submit" className={`h-9 px-3 rounded-lg text-white font-bold text-xs ${quickStock.direction === "in" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}`}>{quickStock.direction === "in" ? "Artır" : "Eksilt"}</button>
+                          <button type="button" onClick={() => setQuickStock({ productId: "", direction: "in", quantity: "", note: "" })} className="h-9 px-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs">İptal</button>
+                        </form>}
+                      </>}
                     </td>
                   </tr>
                 );

@@ -148,6 +148,12 @@ class ProductIn(BaseModel):
     is_special: bool = False
 
 
+class QuickStockAdjustmentIn(BaseModel):
+    quantity: float
+    direction: str
+    note: Optional[str] = ""
+
+
 class ToolHolderIn_Model(BaseModel):
     name: str
     brand: Optional[str] = ""
@@ -668,6 +674,32 @@ async def update_product(pid: str, body: ProductIn, user=Depends(require_admin))
     data["code"] = code
     await db.products.update_one({"id": pid}, {"$set": data})
     return await db.products.find_one({"id": pid}, {"_id": 0})
+
+
+@api.post("/products/{pid}/quick-stock")
+async def quick_stock_adjustment(pid: str, body: QuickStockAdjustmentIn, user=Depends(require_admin)):
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
+    if body.direction not in {"in", "out"}:
+        raise HTTPException(status_code=400, detail="Geçersiz stok yönü")
+    product = await db.products.find_one({"id": pid})
+    if not product:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    current = float(product.get("current_stock", 0))
+    delta = body.quantity if body.direction == "in" else -body.quantity
+    new_stock = round(current + delta, 6)
+    if new_stock < 0:
+        raise HTTPException(status_code=400, detail="Stok eksiye düşemez")
+    movement = {
+        "id": new_id(), "type": "quick_in" if body.direction == "in" else "quick_out",
+        "product_id": product["id"], "product_code": product.get("code", ""),
+        "product_name": product.get("name", ""), "quantity": body.quantity,
+        "unit_price": 0, "total": 0, "note": body.note or "Ürünler sayfası hızlı stok işlemi",
+        "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
+    }
+    await db.products.update_one({"id": pid}, {"$set": {"current_stock": new_stock}})
+    await db.movements.insert_one(movement)
+    return {"ok": True, "new_stock": new_stock, "movement": clean(movement)}
 
 
 @api.delete("/products/{pid}")
