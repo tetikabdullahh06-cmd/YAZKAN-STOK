@@ -100,3 +100,39 @@ table tbody tr:hover { background-color: #f0f9ff !important; }
 @media (max-width: 768px) {
     .app-shell main { padding-bottom: 5rem; }
 }
+
+/* Contrast pass: stronger navigation and text hierarchy */
+.app-sidebar {
+    background: #102238 !important;
+    border-color: #203b5c !important;
+    box-shadow: 14px 0 36px rgba(15, 23, 42, .16);
+}
+.app-sidebar .border-slate-800 { border-color: #203b5c !important; }
+.app-sidebar .text-slate-100, .app-sidebar .text-slate-200 { color: #f8fafc !important; }
+.app-sidebar .text-slate-400, .app-sidebar .text-slate-500 { color: #cbd5e1 !important; }
+.app-sidebar .text-slate-500 { font-weight: 600; }
+.app-sidebar .hover\:bg-cyan-50:hover { background: #1d3b5e !important; color: #ffffff !important; }
+.app-sidebar .bg-gradient-to-r { color: #ffffff !important; font-weight: 700; }
+.app-sidebar .text-emerald-300 { color: #86efac !important; }
+.app-sidebar .text-amber-300 { color: #fde68a !important; }
+.app-mobile-bar, .app-mobile-nav { background: #102238 !important; border-color: #203b5c !important; color: #f8fafc; }
+.app-mobile-bar .text-slate-400, .app-mobile-nav .text-slate-500 { color: #dbeafe !important; }
+.app-mobile-nav .text-blue-600 { color: #67e8f9 !important; }
+
+main { color: #172033; }
+main .text-slate-400, main .text-slate-500 { color: #475569 !important; }
+main .text-slate-300 { color: #334155 !important; }
+main label, main th { color: #334155 !important; font-weight: 700; }
+main input, main select, main textarea { color: #0f172a !important; font-weight: 500; }
+main input::placeholder, main textarea::placeholder { color: #64748b !important; opacity: 1; }
+main button.bg-slate-700, main button.bg-slate-800 { background: #334155 !important; color: #ffffff !important; }
+main button.bg-slate-700:hover, main button.bg-slate-800:hover { background: #1e293b !important; color: #ffffff !important; }
+main .text-blue-400, main .text-blue-300 { color: #075985 !important; }
+main .text-emerald-300, main .text-emerald-400 { color: #047857 !important; }
+main .text-amber-300, main .text-amber-200 { color: #92400e !important; }
+main .text-red-300, main .text-red-400 { color: #b91c1c !important; }
+main a { color: #1d4ed8; }
+main a:hover { color: #0e7490; }
+main table th { color: #1e3a5f !important; letter-spacing: .04em; }
+main table td { color: #334155; }
+main .bg-blue-950\/30, main .bg-amber-950\/30 { color: #1e293b; }
