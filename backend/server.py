@@ -230,6 +230,10 @@ class SharpeningInIn(BaseModel):
     waybill_number: str
     received_date: str
     quantity: Optional[float] = None
+    target_product_id: Optional[str] = None
+    return_helix_length: Optional[str] = ""
+    return_diameter: Optional[str] = ""
+    return_full_length: Optional[str] = ""
     note: Optional[str] = ""
 
 
@@ -247,6 +251,10 @@ class SharpeningUpdateIn(BaseModel):
     waybill_number: str = ""
     received_date: str = ""
     return_note: str = ""
+    return_product_id: Optional[str] = None
+    return_helix_length: str = ""
+    return_diameter: str = ""
+    return_full_length: str = ""
 
 
 class ToolTrialIn(BaseModel):
@@ -917,28 +925,35 @@ async def sharpening_in(body: SharpeningInIn, user=Depends(require_admin)):
     record = await db.sharpening_records.find_one({"id": body.record_id})
     if not record:
         raise HTTPException(status_code=404, detail="Bileme kaydı bulunamadı")
-    if record.get("status") == "returned" or record.get("remaining_quantity", 0) <= 0:
+    remaining = float(record.get("remaining_quantity", record.get("quantity", 0)))
+    if record.get("status") == "returned" or remaining <= 0:
         raise HTTPException(status_code=400, detail="Bu kayıt tamamen stoğa alınmış")
     if not body.company.strip() or not body.waybill_number.strip():
         raise HTTPException(status_code=400, detail="Firma ve irsaliye numarası zorunludur")
-    remaining = float(record.get("remaining_quantity", record.get("quantity", 0)))
     qty = remaining if body.quantity is None else body.quantity
     if qty <= 0 or qty > remaining:
         raise HTTPException(status_code=400, detail="Gelen miktar kalan miktar aralığında olmalıdır")
-    product = await db.products.find_one({"id": record["product_id"]})
-    if not product:
-        raise HTTPException(status_code=404, detail="Bağlı ürün bulunamadı")
+    return_product_id = body.target_product_id or record.get("return_product_id") or record["product_id"]
+    return_product = await db.products.find_one({"id": return_product_id})
+    if not return_product:
+        raise HTTPException(status_code=404, detail="Stoğa alınacak ürün kartı bulunamadı")
+    previous_return_product_id = record.get("return_product_id")
+    if previous_return_product_id and previous_return_product_id != return_product_id and float(record.get("returned_quantity", 0)) > 0:
+        raise HTTPException(status_code=400, detail="Daha önce stoğa alınmış kaydın ürün kartı değiştirilemez")
     left = round(remaining - qty, 6)
     new_status = "returned" if left <= 0 else "partial"
-    new_stock = product.get("current_stock", 0) + qty
+    new_stock = round(float(return_product.get("current_stock", 0)) + qty, 6)
     update = {
-        "remaining_quantity": left, "returned_quantity": record.get("returned_quantity", 0) + qty,
-        "status": new_status, "return_company": body.company.strip(),
-        "waybill_number": body.waybill_number.strip(), "received_date": body.received_date,
-        "received_by": user.get("name", ""), "return_note": body.note or "",
-        "updated_at": now_utc().isoformat(),
+        "remaining_quantity": left, "returned_quantity": float(record.get("returned_quantity", 0)) + qty,
+        "status": new_status, "return_product_id": return_product_id,
+        "return_product_code": return_product.get("code", ""), "return_product_name": return_product.get("name", ""),
+        "return_helix_length": body.return_helix_length or record.get("return_helix_length", "") or record.get("helix_length", ""),
+        "return_diameter": body.return_diameter or record.get("return_diameter", "") or record.get("diameter", ""),
+        "return_full_length": body.return_full_length or record.get("return_full_length", "") or record.get("full_length", ""),
+        "return_company": body.company.strip(), "waybill_number": body.waybill_number.strip(), "received_date": body.received_date,
+        "received_by": user.get("name", ""), "return_note": body.note or "", "updated_at": now_utc().isoformat(),
     }
-    await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+    await db.products.update_one({"id": return_product_id}, {"$set": {"current_stock": new_stock}})
     await db.sharpening_records.update_one({"id": record["id"]}, {"$set": update})
     updated = await db.sharpening_records.find_one({"id": record["id"]}, {"_id": 0})
     return {"ok": True, "new_stock": new_stock, "record": updated}
@@ -963,24 +978,42 @@ async def update_sharpening_record(record_id: str, body: SharpeningUpdateIn, use
         raise HTTPException(status_code=404, detail="Bağlı ürün bulunamadı")
     old_quantity = float(record.get("quantity", 0))
     old_returned = float(record.get("returned_quantity", 0))
-    current_stock = float(product.get("current_stock", 0))
-    new_stock = round(current_stock - (body.quantity - old_quantity) + (returned - old_returned), 6)
-    if new_stock < 0:
+    old_return_product_id = record.get("return_product_id") or record["product_id"]
+    new_return_product_id = body.return_product_id or old_return_product_id
+    return_product = await db.products.find_one({"id": new_return_product_id})
+    if not return_product:
+        raise HTTPException(status_code=404, detail="Stoğa alınacak ürün kartı bulunamadı")
+    if old_returned > 0 and new_return_product_id != old_return_product_id:
+        raise HTTPException(status_code=400, detail="Daha önce stoğa alınmış kaydın ürün kartı değiştirilemez")
+    original_stock = round(float(product.get("current_stock", 0)) - (body.quantity - old_quantity), 6)
+    if original_stock < 0:
         raise HTTPException(status_code=400, detail="Bu düzeltme stok miktarını eksiye düşürüyor")
+    if new_return_product_id == record["product_id"]:
+        original_stock = round(original_stock + returned - old_returned, 6)
+        if original_stock < 0:
+            raise HTTPException(status_code=400, detail="Bu düzeltme stok miktarını eksiye düşürüyor")
+        await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": original_stock}})
+    else:
+        await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": original_stock}})
+        target_stock = round(float(return_product.get("current_stock", 0)) + returned, 6)
+        await db.products.update_one({"id": return_product["id"]}, {"$set": {"current_stock": target_stock}})
     remaining = round(body.quantity - returned, 6)
     status = "returned" if remaining <= 0 else ("partial" if returned > 0 else "sent")
     update = {
         "quantity": body.quantity, "remaining_quantity": remaining, "returned_quantity": returned,
         "helix_length": body.helix_length or "", "diameter": body.diameter or "", "full_length": body.full_length or "",
         "process_type": body.process_type, "company": body.company.strip(), "sent_date": body.sent_date,
-        "note": body.note or "", "status": status, "return_company": body.return_company.strip(),
-        "waybill_number": body.waybill_number.strip(), "received_date": body.received_date,
+        "note": body.note or "", "status": status, "return_product_id": new_return_product_id,
+        "return_product_code": return_product.get("code", ""), "return_product_name": return_product.get("name", ""),
+        "return_helix_length": body.return_helix_length or record.get("return_helix_length", "") or body.helix_length or "",
+        "return_diameter": body.return_diameter or record.get("return_diameter", "") or body.diameter or "",
+        "return_full_length": body.return_full_length or record.get("return_full_length", "") or body.full_length or "",
+        "return_company": body.return_company.strip(), "waybill_number": body.waybill_number.strip(), "received_date": body.received_date,
         "return_note": body.return_note or "", "updated_at": now_utc().isoformat(),
     }
-    await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
     await db.sharpening_records.update_one({"id": record_id}, {"$set": update})
     updated = await db.sharpening_records.find_one({"id": record_id}, {"_id": 0})
-    return {"ok": True, "new_stock": new_stock, "record": updated}
+    return {"ok": True, "new_stock": original_stock, "record": updated}
 
 
 @api.delete("/sharpening/records/{record_id}")
@@ -991,9 +1024,25 @@ async def delete_sharpening_record(record_id: str, user=Depends(require_admin)):
     product = await db.products.find_one({"id": record["product_id"]})
     if not product:
         raise HTTPException(status_code=404, detail="Bağlı ürün bulunamadı")
-    restore = float(record.get("quantity", 0)) - float(record.get("returned_quantity", 0))
-    new_stock = round(float(product.get("current_stock", 0)) + restore, 6)
-    await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+    returned = float(record.get("returned_quantity", 0))
+    restore = float(record.get("quantity", 0)) - returned
+    return_product_id = record.get("return_product_id") or record["product_id"]
+    if return_product_id == record["product_id"]:
+        new_stock = round(float(product.get("current_stock", 0)) + restore, 6)
+        if new_stock < 0:
+            raise HTTPException(status_code=400, detail="Kayıt silinemiyor; stok dengesi eksiye düşüyor")
+        await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+    else:
+        new_original_stock = round(float(product.get("current_stock", 0)) + restore, 6)
+        return_product = await db.products.find_one({"id": return_product_id})
+        if not return_product:
+            raise HTTPException(status_code=404, detail="Stoğa alınan ürün kartı bulunamadı")
+        new_return_stock = round(float(return_product.get("current_stock", 0)) - returned, 6)
+        if new_return_stock < 0:
+            raise HTTPException(status_code=400, detail="Kayıt silinemiyor; stoğa alınan kartta yeterli miktar yok")
+        await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_original_stock}})
+        await db.products.update_one({"id": return_product_id}, {"$set": {"current_stock": new_return_stock}})
+        new_stock = new_original_stock
     await db.sharpening_records.delete_one({"id": record_id})
     return {"ok": True, "new_stock": new_stock}
 

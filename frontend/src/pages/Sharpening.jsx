@@ -42,7 +42,10 @@ export default function Sharpening() {
   const [saving, setSaving] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [outForm, setOutForm] = useState({ quantity: "", helix_length: "", diameter: "", full_length: "", process_type: "alın bileme", company: "", sent_date: today(), note: "" });
-  const [inForm, setInForm] = useState({ record_id: "", quantity: "", company: "", waybill_number: "", received_date: today(), note: "" });
+  const [inForm, setInForm] = useState({ record_id: "", quantity: "", company: "", waybill_number: "", received_date: today(), target_product_id: "", return_helix_length: "", return_diameter: "", return_full_length: "", note: "" });
+  const [returnProductSearch, setReturnProductSearch] = useState("");
+  const [returnProductMode, setReturnProductMode] = useState("existing");
+  const [newReturnProduct, setNewReturnProduct] = useState({ code: "", name: "", category: "Kesici Uç", unit: "adet", brand: "", quality: "", location: "" });
   const [editingRecord, setEditingRecord] = useState(null);
   const [editingSection, setEditingSection] = useState("");
 
@@ -65,6 +68,12 @@ export default function Sharpening() {
     return products.filter((p) => `${p.code} ${p.name} ${p.category}`.toLowerCase().includes(q));
   }, [products, search]);
   const openRecords = records.filter((r) => r.status !== "returned" && Number(r.remaining_quantity || 0) > 0);
+  const selectedIncomingRecord = openRecords.find((r) => r.id === inForm.record_id);
+  const returnProductOptions = useMemo(() => {
+    const q = returnProductSearch.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => `${p.code} ${p.name} ${p.brand || ""} ${p.quality || ""} ${p.category || ""}`.toLowerCase().includes(q));
+  }, [products, returnProductSearch]);
 
   const exportExcel = () => {
     const rows = records.map((r) => ({
@@ -130,8 +139,8 @@ export default function Sharpening() {
 
   const setOut = (key, value) => setOutForm((f) => ({ ...f, [key]: value }));
   const setIn = (key, value) => setInForm((f) => ({ ...f, [key]: value }));
-  const clearEdit = () => { setEditingRecord(null); setEditingSection(""); setSelectedProductId(""); setOutForm({ quantity: "", helix_length: "", diameter: "", full_length: "", process_type: "alın bileme", company: "", sent_date: today(), note: "" }); setInForm({ record_id: "", quantity: "", company: "", waybill_number: "", received_date: today(), note: "" }); };
-  const startEdit = (record, section) => { setEditingRecord(record); setEditingSection(section); setTab(section); setSelectedProductId(record.product_id || ""); setOutForm({ quantity: String(record.quantity ?? ""), helix_length: record.helix_length || "", diameter: record.diameter || "", full_length: record.full_length || "", process_type: record.process_type || "alın bileme", company: record.company || "", sent_date: record.sent_date || today(), note: record.note || "" }); setInForm({ record_id: record.id, quantity: String(record.returned_quantity ?? ""), company: record.return_company || "", waybill_number: record.waybill_number || "", received_date: record.received_date || today(), note: record.return_note || "" }); };
+  const clearEdit = () => { setEditingRecord(null); setEditingSection(""); setSelectedProductId(""); setReturnProductSearch(""); setReturnProductMode("existing"); setNewReturnProduct({ code: "", name: "", category: "Kesici Uç", unit: "adet", brand: "", quality: "", location: "" }); setOutForm({ quantity: "", helix_length: "", diameter: "", full_length: "", process_type: "alın bileme", company: "", sent_date: today(), note: "" }); setInForm({ record_id: "", quantity: "", company: "", waybill_number: "", received_date: today(), target_product_id: "", return_helix_length: "", return_diameter: "", return_full_length: "", note: "" }); };
+  const startEdit = (record, section) => { setEditingRecord(record); setEditingSection(section); setTab(section); setSelectedProductId(record.product_id || ""); setReturnProductMode("existing"); setReturnProductSearch(""); setOutForm({ quantity: String(record.quantity ?? ""), helix_length: record.helix_length || "", diameter: record.diameter || "", full_length: record.full_length || "", process_type: record.process_type || "alın bileme", company: record.company || "", sent_date: record.sent_date || today(), note: record.note || "" }); setInForm({ record_id: record.id, quantity: String(record.returned_quantity ?? ""), target_product_id: record.return_product_id || record.product_id || "", return_helix_length: record.return_helix_length || record.helix_length || "", return_diameter: record.return_diameter || record.diameter || "", return_full_length: record.return_full_length || record.full_length || "", company: record.return_company || "", waybill_number: record.waybill_number || "", received_date: record.received_date || today(), note: record.return_note || "" }); };
   const deleteRecord = async (record) => { if (!window.confirm(`${record.product_code || record.product_name} bileme kaydı silinsin mi? Silme işlemi gönderilen ve henüz dönmeyen miktarı stoğa geri ekler.`)) return; setSaving(true); try { const r = await api.delete(`/sharpening/records/${record.id}`); toast.success(`Bileme kaydı silindi. Stok geri eklendi: ${r.data.new_stock}`); if (editingRecord?.id === record.id) clearEdit(); await load(); } catch (e) { toast.error(e.response?.data?.detail || "Bileme kaydı silinemedi"); } finally { setSaving(false); } };
 
   const submitOut = async (e) => {
@@ -160,25 +169,28 @@ export default function Sharpening() {
 
   const submitIn = async (e) => {
     e.preventDefault();
-    if (editingRecord) {
-      if (!inForm.company.trim() || !inForm.waybill_number.trim()) return toast.error("Firma ve irsaliye numarası zorunludur");
-      setSaving(true);
-      try {
-        const r = await api.put(`/sharpening/records/${editingRecord.id}`, { ...outForm, quantity: Number(outForm.quantity), returned_quantity: Number(inForm.quantity) || 0, return_company: inForm.company, waybill_number: inForm.waybill_number, received_date: inForm.received_date, return_note: inForm.note || "" });
-        toast.success(`Bilemeden gelen kayıt düzeltildi. Yeni stok: ${r.data.new_stock}`); clearEdit(); await load();
-      } catch (e) { toast.error(e.response?.data?.detail || "Bilemeden gelen kayıt düzeltilemedi"); } finally { setSaving(false); }
-      return;
-    }
     if (!inForm.record_id) return toast.error("Bileme kaydı seçiniz");
     if (!inForm.company.trim() || !inForm.waybill_number.trim()) return toast.error("Firma ve irsaliye numarası zorunludur");
     setSaving(true);
     try {
-      const payload = { ...inForm, quantity: inForm.quantity === "" ? null : Number(inForm.quantity) };
-      const r = await api.post("/sharpening/in", payload);
-      toast.success(`Bilemeden gelen ürün stoğa eklendi. Yeni stok: ${r.data.new_stock}`);
-      setInForm({ record_id: "", quantity: "", company: "", waybill_number: "", received_date: today(), note: "" });
-      await load();
-    } catch (e) { toast.error(e.response?.data?.detail || "Stoğa dönüş kaydedilemedi"); }
+      let targetProductId = inForm.target_product_id;
+      if (returnProductMode === "new") {
+        if (!newReturnProduct.name.trim()) return toast.error("Yeni ürün adı zorunludur");
+        const created = await api.post("/products", { ...newReturnProduct, min_stock: 0, current_stock: 0, is_special: false });
+        targetProductId = created.data.id;
+        toast.success(`Yeni ürün kartı oluşturuldu: ${created.data.code}`);
+      }
+      if (!targetProductId) return toast.error("Stoğa alınacak mevcut ürünü seçin veya yeni ürün kartı oluşturun");
+      const payload = { ...inForm, target_product_id: targetProductId, quantity: inForm.quantity === "" ? null : Number(inForm.quantity) };
+      if (editingRecord) {
+        const r = await api.put(`/sharpening/records/${editingRecord.id}`, { ...outForm, quantity: Number(outForm.quantity), returned_quantity: Number(inForm.quantity) || 0, return_product_id: targetProductId, return_helix_length: inForm.return_helix_length, return_diameter: inForm.return_diameter, return_full_length: inForm.return_full_length, return_company: inForm.company, waybill_number: inForm.waybill_number, received_date: inForm.received_date, return_note: inForm.note || "" });
+        toast.success(`Bilemeden gelen kayıt düzeltildi. Yeni stok: ${r.data.new_stock}`);
+      } else {
+        const r = await api.post("/sharpening/in", payload);
+        toast.success(`Bilemeden gelen ürün stoğa eklendi. Yeni stok: ${r.data.new_stock}`);
+      }
+      clearEdit(); await load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Bilemeden gelen kayıt kaydedilemedi"); }
     finally { setSaving(false); }
   };
 
@@ -216,11 +228,17 @@ export default function Sharpening() {
         </form>
       ) : (
         <form onSubmit={submitIn} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 space-y-6">
-          <div className="flex items-center gap-3 text-emerald-300 font-semibold"><PackageCheck className="w-5 h-5" />Bilemeden gelen ürünü tekrar stoğa alın</div>
-          <div><label className={labelClass}>Bilemeye giden kayıt</label><select required value={inForm.record_id} onChange={(e) => setIn("record_id", e.target.value)} className={inputClass}><option value="">-- Açık kayıtlardan seçin --</option>{openRecords.map((r) => <option key={r.id} value={r.id}>{r.product_code} — {r.product_name} | Kalan: {r.remaining_quantity} {r.unit} | {r.company} | {r.sent_date}</option>)}</select></div>
-          {inForm.record_id && (() => { const r = openRecords.find((x) => x.id === inForm.record_id); return r ? <div className="rounded-xl bg-slate-950/70 border border-slate-700 p-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm"><div><span className="text-slate-500 block">Ürün</span>{r.product_name}</div><div><span className="text-slate-500 block">Helis boyu</span>{r.helix_length || "-"}</div><div><span className="text-slate-500 block">Çapı</span>{r.diameter || "-"}</div><div><span className="text-slate-500 block">Tam boyu</span>{r.full_length || "-"}</div><div><span className="text-slate-500 block">İşlem</span>{r.process_type}</div></div> : null; })()}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label className={labelClass}>Gelen miktar</label><input type="number" min="0.01" step="0.01" value={inForm.quantity} onChange={(e) => setIn("quantity", e.target.value)} placeholder="Boş: tamamı" className={inputClass} /></div><div><label className={labelClass}>Firma</label><input required value={inForm.company} onChange={(e) => setIn("company", e.target.value)} className={inputClass} /></div><div><label className={labelClass}>İrsaliye numarası</label><input required value={inForm.waybill_number} onChange={(e) => setIn("waybill_number", e.target.value)} className={inputClass} /></div><div><label className={labelClass}>Geliş tarihi</label><input required type="date" value={inForm.received_date} onChange={(e) => setIn("received_date", e.target.value)} className={inputClass} /></div></div>
-          <div><label className={labelClass}>Not</label><textarea value={inForm.note} onChange={(e) => setIn("note", e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+          <div className="flex items-center gap-3 text-emerald-300 font-semibold"><PackageCheck className="w-5 h-5" />Bilemeden gelen ürünü ölçüleriyle stoğa alın</div>
+          <div><label className={labelClass}>Bilemeye giden kayıt</label><select required value={inForm.record_id} onChange={(e) => { const id = e.target.value; const r = openRecords.find((x) => x.id === id); setInForm({ ...inForm, record_id: id, target_product_id: r?.return_product_id || r?.product_id || "", return_helix_length: r?.return_helix_length || r?.helix_length || "", return_diameter: r?.return_diameter || r?.diameter || "", return_full_length: r?.return_full_length || r?.full_length || "" }); }} className={inputClass}><option value="">-- Açık kayıtlardan seçin --</option>{openRecords.map((r) => <option key={r.id} value={r.id}>{r.product_code} — {r.product_name} | Kalan: {r.remaining_quantity} {r.unit} | {r.company} | {r.sent_date}</option>)}</select></div>
+          {selectedIncomingRecord && <>
+            <div className="rounded-xl bg-slate-950/70 border border-slate-700 p-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm"><div><span className="text-slate-500 block">Giden ürün</span>{selectedIncomingRecord.product_code} — {selectedIncomingRecord.product_name}</div><div><span className="text-slate-500 block">Giden helis</span>{selectedIncomingRecord.helix_length || "-"}</div><div><span className="text-slate-500 block">Giden çap</span>{selectedIncomingRecord.diameter || "-"}</div><div><span className="text-slate-500 block">Giden tam boy</span>{selectedIncomingRecord.full_length || "-"}</div><div><span className="text-slate-500 block">Kalan</span>{selectedIncomingRecord.remaining_quantity} {selectedIncomingRecord.unit}</div></div>
+            <div className="rounded-xl border border-emerald-700/50 bg-emerald-950/20 p-4 space-y-4"><div className="font-bold text-emerald-200">Bilemeden gelen yeni ölçüler</div><div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label className={labelClass}>Helis boyu</label><input value={inForm.return_helix_length} onChange={(e) => setIn("return_helix_length", e.target.value)} placeholder="Değişmediyse giden ölçü" className={inputClass} /></div><div><label className={labelClass}>Çap</label><input value={inForm.return_diameter} onChange={(e) => setIn("return_diameter", e.target.value)} placeholder="Örn. Ø12" className={inputClass} /></div><div><label className={labelClass}>Tam boy</label><input value={inForm.return_full_length} onChange={(e) => setIn("return_full_length", e.target.value)} placeholder="Örn. 100 mm" className={inputClass} /></div></div>
+              <div className="flex gap-2 flex-wrap"><button type="button" onClick={() => setReturnProductMode("existing")} className={`h-10 px-4 rounded-lg font-bold ${returnProductMode === "existing" ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-300"}`}>Mevcut ürün kartını seç</button><button type="button" onClick={() => setReturnProductMode("new")} className={`h-10 px-4 rounded-lg font-bold ${returnProductMode === "new" ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300"}`}>Yeni ürün kartı oluştur</button></div>
+              {returnProductMode === "existing" ? <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><div><label className={labelClass}>Ürünlerde ara</label><input value={returnProductSearch} onChange={(e) => setReturnProductSearch(e.target.value)} placeholder="Kod, ad, marka, kalite..." className={inputClass} /></div><div><label className={labelClass}>Stoğa bağlanacak ürün</label><select required value={inForm.target_product_id} onChange={(e) => setIn("target_product_id", e.target.value)} className={inputClass}><option value="">-- Mevcut ürünü seçin --</option>{returnProductOptions.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name} | {p.brand || "-"} | Stok: {p.current_stock} {p.unit}</option>)}</select></div></div> : <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div><label className={labelClass}>Yeni ürün kodu (ops.)</label><input value={newReturnProduct.code} onChange={(e) => setNewReturnProduct({ ...newReturnProduct, code: e.target.value })} placeholder="Boşsa otomatik" className={inputClass} /></div><div className="md:col-span-2"><label className={labelClass}>Yeni ürün adı</label><input required value={newReturnProduct.name} onChange={(e) => setNewReturnProduct({ ...newReturnProduct, name: e.target.value })} placeholder="Yeni ölçülü ürün adı" className={inputClass} /></div><div><label className={labelClass}>Kategori</label><input value={newReturnProduct.category} onChange={(e) => setNewReturnProduct({ ...newReturnProduct, category: e.target.value })} className={inputClass} /></div><div><label className={labelClass}>Marka</label><input value={newReturnProduct.brand} onChange={(e) => setNewReturnProduct({ ...newReturnProduct, brand: e.target.value })} className={inputClass} /></div><div><label className={labelClass}>Kalite</label><input value={newReturnProduct.quality} onChange={(e) => setNewReturnProduct({ ...newReturnProduct, quality: e.target.value })} className={inputClass} /></div></div>}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label className={labelClass}>Gelen miktar</label><input type="number" min="0.01" step="0.01" value={inForm.quantity} onChange={(e) => setIn("quantity", e.target.value)} placeholder="Boş: tamamı" className={inputClass} /></div><div><label className={labelClass}>Firma</label><input required value={inForm.company} onChange={(e) => setIn("company", e.target.value)} className={inputClass} /></div><div><label className={labelClass}>İrsaliye numarası</label><input required value={inForm.waybill_number} onChange={(e) => setIn("waybill_number", e.target.value)} className={inputClass} /></div><div><label className={labelClass}>Geliş tarihi</label><input required type="date" value={inForm.received_date} onChange={(e) => setIn("received_date", e.target.value)} className={inputClass} /></div></div>
+            <div><label className={labelClass}>Not</label><textarea value={inForm.note} onChange={(e) => setIn("note", e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+          </>}
           <div className="flex gap-3 flex-wrap"><button disabled={saving || loading} className="h-14 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-bold flex items-center gap-2">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />} {editingRecord ? "Bilemeden Gelen Kaydını Güncelle" : "Stoğa Dahil Et"}</button>{editingRecord && <button type="button" onClick={clearEdit} className="h-14 px-5 rounded-lg border border-slate-400 bg-white hover:bg-slate-100 font-bold text-slate-900">Düzenlemeyi İptal Et</button>}</div>
         </form>
       )}
