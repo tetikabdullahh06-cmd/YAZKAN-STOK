@@ -15,6 +15,8 @@ import {
   Download,
   FileSpreadsheet,
   Upload,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -41,6 +43,8 @@ export default function Sharpening() {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [outForm, setOutForm] = useState({ quantity: "", helix_length: "", diameter: "", full_length: "", process_type: "alın bileme", company: "", sent_date: today(), note: "" });
   const [inForm, setInForm] = useState({ record_id: "", quantity: "", company: "", waybill_number: "", received_date: today(), note: "" });
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [editingSection, setEditingSection] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -126,9 +130,21 @@ export default function Sharpening() {
 
   const setOut = (key, value) => setOutForm((f) => ({ ...f, [key]: value }));
   const setIn = (key, value) => setInForm((f) => ({ ...f, [key]: value }));
+  const clearEdit = () => { setEditingRecord(null); setEditingSection(""); setSelectedProductId(""); setOutForm({ quantity: "", helix_length: "", diameter: "", full_length: "", process_type: "alın bileme", company: "", sent_date: today(), note: "" }); setInForm({ record_id: "", quantity: "", company: "", waybill_number: "", received_date: today(), note: "" }); };
+  const startEdit = (record, section) => { setEditingRecord(record); setEditingSection(section); setTab(section); setSelectedProductId(record.product_id || ""); setOutForm({ quantity: String(record.quantity ?? ""), helix_length: record.helix_length || "", diameter: record.diameter || "", full_length: record.full_length || "", process_type: record.process_type || "alın bileme", company: record.company || "", sent_date: record.sent_date || today(), note: record.note || "" }); setInForm({ record_id: record.id, quantity: String(record.returned_quantity ?? ""), company: record.return_company || "", waybill_number: record.waybill_number || "", received_date: record.received_date || today(), note: record.return_note || "" }); };
+  const deleteRecord = async (record) => { if (!window.confirm(`${record.product_code || record.product_name} bileme kaydı silinsin mi? Silme işlemi gönderilen ve henüz dönmeyen miktarı stoğa geri ekler.`)) return; setSaving(true); try { const r = await api.delete(`/sharpening/records/${record.id}`); toast.success(`Bileme kaydı silindi. Stok geri eklendi: ${r.data.new_stock}`); if (editingRecord?.id === record.id) clearEdit(); await load(); } catch (e) { toast.error(e.response?.data?.detail || "Bileme kaydı silinemedi"); } finally { setSaving(false); } };
 
   const submitOut = async (e) => {
     e.preventDefault();
+    if (editingRecord) {
+      if (!outForm.company.trim()) return toast.error("Bileme firması yazınız");
+      setSaving(true);
+      try {
+        const r = await api.put(`/sharpening/records/${editingRecord.id}`, { ...outForm, quantity: Number(outForm.quantity), returned_quantity: Number(inForm.quantity) || 0, return_company: inForm.company || "", waybill_number: inForm.waybill_number || "", received_date: inForm.received_date || "", return_note: inForm.note || "" });
+        toast.success(`Bilemeye giden kayıt düzeltildi. Yeni stok: ${r.data.new_stock}`); clearEdit(); await load();
+      } catch (e) { toast.error(e.response?.data?.detail || "Bileme kaydı düzeltilemedi"); } finally { setSaving(false); }
+      return;
+    }
     if (!selectedProductId) return toast.error("Ürün seçiniz");
     if (!outForm.company.trim()) return toast.error("Bileme firması yazınız");
     setSaving(true);
@@ -144,6 +160,15 @@ export default function Sharpening() {
 
   const submitIn = async (e) => {
     e.preventDefault();
+    if (editingRecord) {
+      if (!inForm.company.trim() || !inForm.waybill_number.trim()) return toast.error("Firma ve irsaliye numarası zorunludur");
+      setSaving(true);
+      try {
+        const r = await api.put(`/sharpening/records/${editingRecord.id}`, { ...outForm, quantity: Number(outForm.quantity), returned_quantity: Number(inForm.quantity) || 0, return_company: inForm.company, waybill_number: inForm.waybill_number, received_date: inForm.received_date, return_note: inForm.note || "" });
+        toast.success(`Bilemeden gelen kayıt düzeltildi. Yeni stok: ${r.data.new_stock}`); clearEdit(); await load();
+      } catch (e) { toast.error(e.response?.data?.detail || "Bilemeden gelen kayıt düzeltilemedi"); } finally { setSaving(false); }
+      return;
+    }
     if (!inForm.record_id) return toast.error("Bileme kaydı seçiniz");
     if (!inForm.company.trim() || !inForm.waybill_number.trim()) return toast.error("Firma ve irsaliye numarası zorunludur");
     setSaving(true);
@@ -187,7 +212,7 @@ export default function Sharpening() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label className={labelClass}>Miktar</label><input required type="number" min="0.01" step="0.01" value={outForm.quantity} onChange={(e) => setOut("quantity", e.target.value)} className={inputClass} /></div><div><label className={labelClass}>Helis boyu</label><input value={outForm.helix_length} onChange={(e) => setOut("helix_length", e.target.value)} placeholder="Örn. 35 mm" className={inputClass} /></div><div><label className={labelClass}>Çapı</label><input value={outForm.diameter} onChange={(e) => setOut("diameter", e.target.value)} placeholder="Örn. Ø12" className={inputClass} /></div><div><label className={labelClass}>Tam boyu</label><input value={outForm.full_length} onChange={(e) => setOut("full_length", e.target.value)} placeholder="Örn. 100 mm" className={inputClass} /></div></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label className={labelClass}>Yapılacak işlem</label><select value={outForm.process_type} onChange={(e) => setOut("process_type", e.target.value)} className={inputClass}><option value="alın bileme">Alın bileme</option><option value="tam bileme">Tam bileme</option></select></div><div><label className={labelClass}>Bilemeye gittiği firma</label><div className="relative"><Factory className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" /><input required value={outForm.company} onChange={(e) => setOut("company", e.target.value)} className={`${inputClass} pl-10`} /></div></div><div><label className={labelClass}>Gidiş tarihi</label><input required type="date" value={outForm.sent_date} onChange={(e) => setOut("sent_date", e.target.value)} className={inputClass} /></div></div>
           <div><label className={labelClass}>Not</label><textarea value={outForm.note} onChange={(e) => setOut("note", e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500" /></div>
-          <button disabled={saving || loading} className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-bold flex items-center gap-2">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUpFromLine className="w-5 h-5" />} Bilemeye Gitti Olarak Kaydet</button>
+          <div className="flex gap-3 flex-wrap"><button disabled={saving || loading} className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-bold flex items-center gap-2">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUpFromLine className="w-5 h-5" />} {editingRecord ? "Bileme Giden Kaydını Güncelle" : "Bilemeye Gitti Olarak Kaydet"}</button>{editingRecord && <button type="button" onClick={clearEdit} className="h-14 px-5 rounded-lg border border-slate-400 bg-white hover:bg-slate-100 font-bold text-slate-900">Düzenlemeyi İptal Et</button>}</div>
         </form>
       ) : (
         <form onSubmit={submitIn} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 space-y-6">
@@ -196,13 +221,13 @@ export default function Sharpening() {
           {inForm.record_id && (() => { const r = openRecords.find((x) => x.id === inForm.record_id); return r ? <div className="rounded-xl bg-slate-950/70 border border-slate-700 p-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm"><div><span className="text-slate-500 block">Ürün</span>{r.product_name}</div><div><span className="text-slate-500 block">Helis boyu</span>{r.helix_length || "-"}</div><div><span className="text-slate-500 block">Çapı</span>{r.diameter || "-"}</div><div><span className="text-slate-500 block">Tam boyu</span>{r.full_length || "-"}</div><div><span className="text-slate-500 block">İşlem</span>{r.process_type}</div></div> : null; })()}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label className={labelClass}>Gelen miktar</label><input type="number" min="0.01" step="0.01" value={inForm.quantity} onChange={(e) => setIn("quantity", e.target.value)} placeholder="Boş: tamamı" className={inputClass} /></div><div><label className={labelClass}>Firma</label><input required value={inForm.company} onChange={(e) => setIn("company", e.target.value)} className={inputClass} /></div><div><label className={labelClass}>İrsaliye numarası</label><input required value={inForm.waybill_number} onChange={(e) => setIn("waybill_number", e.target.value)} className={inputClass} /></div><div><label className={labelClass}>Geliş tarihi</label><input required type="date" value={inForm.received_date} onChange={(e) => setIn("received_date", e.target.value)} className={inputClass} /></div></div>
           <div><label className={labelClass}>Not</label><textarea value={inForm.note} onChange={(e) => setIn("note", e.target.value)} rows={2} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-emerald-500" /></div>
-          <button disabled={saving || loading} className="h-14 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-bold flex items-center gap-2">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />} Stoğa Dahil Et</button>
+          <div className="flex gap-3 flex-wrap"><button disabled={saving || loading} className="h-14 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-bold flex items-center gap-2">{saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />} {editingRecord ? "Bilemeden Gelen Kaydını Güncelle" : "Stoğa Dahil Et"}</button>{editingRecord && <button type="button" onClick={clearEdit} className="h-14 px-5 rounded-lg border border-slate-400 bg-white hover:bg-slate-100 font-bold text-slate-900">Düzenlemeyi İptal Et</button>}</div>
         </form>
       )}
 
       <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-slate-700 flex items-center gap-2"><Wrench className="w-5 h-5 text-blue-300" /><h2 className="font-bold text-lg">Bileme kayıtları</h2></div>
-        {loading ? <div className="p-8 text-center text-slate-500"><Loader2 className="w-6 h-6 animate-spin inline" /></div> : records.length === 0 ? <div className="p-8 text-center text-slate-500">Henüz bileme kaydı yok.</div> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-slate-500 border-b border-slate-700"><th className="p-4">Ürün</th><th className="p-4">Ölçüler</th><th className="p-4">İşlem</th><th className="p-4">Firma / tarih</th><th className="p-4">Miktar</th><th className="p-4">Durum</th><th className="p-4">İrsaliye</th></tr></thead><tbody>{records.map((r) => <tr key={r.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/60"><td className="p-4"><b>{r.product_code}</b><div className="text-slate-400">{r.product_name}</div></td><td className="p-4 text-slate-300">Helis: {r.helix_length || "-"}<br />Çap: {r.diameter || "-"}<br />Tam: {r.full_length || "-"}</td><td className="p-4">{r.process_type}</td><td className="p-4">{r.company}<div className="text-slate-500">{r.sent_date}</div></td><td className="p-4">{r.returned_quantity || 0} / {r.quantity} {r.unit}<div className="text-xs text-amber-300">Kalan: {r.remaining_quantity}</div></td><td className="p-4"><StatusBadge status={r.status} /></td><td className="p-4">{r.waybill_number || "-"}{r.received_date && <div className="text-slate-500">{r.received_date}</div>}</td></tr>)}</tbody></table></div>}
+        {loading ? <div className="p-8 text-center text-slate-500"><Loader2 className="w-6 h-6 animate-spin inline" /></div> : records.length === 0 ? <div className="p-8 text-center text-slate-500">Henüz bileme kaydı yok.</div> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-slate-500 border-b border-slate-700"><th className="p-4">Ürün</th><th className="p-4">Ölçüler</th><th className="p-4">İşlem</th><th className="p-4">Firma / tarih</th><th className="p-4">Miktar</th><th className="p-4">Durum</th><th className="p-4">İrsaliye</th><th className="p-4">İşlemler</th></tr></thead><tbody>{records.map((r) => <tr key={r.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/60"><td className="p-4"><b>{r.product_code}</b><div className="text-slate-400">{r.product_name}</div></td><td className="p-4 text-slate-300">Helis: {r.helix_length || "-"}<br />Çap: {r.diameter || "-"}<br />Tam: {r.full_length || "-"}</td><td className="p-4">{r.process_type}</td><td className="p-4">{r.company}<div className="text-slate-500">{r.sent_date}</div></td><td className="p-4">{r.returned_quantity || 0} / {r.quantity} {r.unit}<div className="text-xs text-amber-300">Kalan: {r.remaining_quantity}</div></td><td className="p-4"><StatusBadge status={r.status} /></td><td className="p-4">{r.waybill_number || "-"}{r.received_date && <div className="text-slate-500">{r.received_date}</div>}</td><td className="p-4"><div className="flex items-center gap-2"><button type="button" onClick={() => startEdit(r, r.status === "sent" ? "out" : "in")} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold"><Pencil className="w-4 h-4" /> Düzelt</button><button type="button" onClick={() => deleteRecord(r)} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-900 font-bold"><Trash2 className="w-4 h-4" /> Sil</button></div></td></tr>)}</tbody></table></div>}
       </div>
     </div>
   );

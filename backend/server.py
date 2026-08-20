@@ -227,6 +227,22 @@ class SharpeningInIn(BaseModel):
     note: Optional[str] = ""
 
 
+class SharpeningUpdateIn(BaseModel):
+    quantity: float
+    helix_length: str = ""
+    diameter: str = ""
+    full_length: str = ""
+    process_type: str
+    company: str
+    sent_date: str
+    note: str = ""
+    returned_quantity: float = 0
+    return_company: str = ""
+    waybill_number: str = ""
+    received_date: str = ""
+    return_note: str = ""
+
+
 class ToolTrialIn(BaseModel):
     comparison_name: str = ""
     trial_date: str
@@ -882,6 +898,60 @@ async def sharpening_in(body: SharpeningInIn, user=Depends(require_admin)):
     await db.sharpening_records.update_one({"id": record["id"]}, {"$set": update})
     updated = await db.sharpening_records.find_one({"id": record["id"]}, {"_id": 0})
     return {"ok": True, "new_stock": new_stock, "record": updated}
+
+
+@api.put("/sharpening/records/{record_id}")
+async def update_sharpening_record(record_id: str, body: SharpeningUpdateIn, user=Depends(require_admin)):
+    record = await db.sharpening_records.find_one({"id": record_id})
+    if not record:
+        raise HTTPException(status_code=404, detail="Bileme kaydı bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
+    if body.process_type not in {"alın bileme", "tam bileme"}:
+        raise HTTPException(status_code=400, detail="Geçersiz bileme işlemi")
+    if not body.company.strip():
+        raise HTTPException(status_code=400, detail="Bileme firması zorunludur")
+    returned = float(body.returned_quantity or 0)
+    if returned < 0 or returned > body.quantity:
+        raise HTTPException(status_code=400, detail="Stoğa dönen miktar, gönderilen miktar aralığında olmalıdır")
+    product = await db.products.find_one({"id": record["product_id"]})
+    if not product:
+        raise HTTPException(status_code=404, detail="Bağlı ürün bulunamadı")
+    old_quantity = float(record.get("quantity", 0))
+    old_returned = float(record.get("returned_quantity", 0))
+    current_stock = float(product.get("current_stock", 0))
+    new_stock = round(current_stock - (body.quantity - old_quantity) + (returned - old_returned), 6)
+    if new_stock < 0:
+        raise HTTPException(status_code=400, detail="Bu düzeltme stok miktarını eksiye düşürüyor")
+    remaining = round(body.quantity - returned, 6)
+    status = "returned" if remaining <= 0 else ("partial" if returned > 0 else "sent")
+    update = {
+        "quantity": body.quantity, "remaining_quantity": remaining, "returned_quantity": returned,
+        "helix_length": body.helix_length or "", "diameter": body.diameter or "", "full_length": body.full_length or "",
+        "process_type": body.process_type, "company": body.company.strip(), "sent_date": body.sent_date,
+        "note": body.note or "", "status": status, "return_company": body.return_company.strip(),
+        "waybill_number": body.waybill_number.strip(), "received_date": body.received_date,
+        "return_note": body.return_note or "", "updated_at": now_utc().isoformat(),
+    }
+    await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+    await db.sharpening_records.update_one({"id": record_id}, {"$set": update})
+    updated = await db.sharpening_records.find_one({"id": record_id}, {"_id": 0})
+    return {"ok": True, "new_stock": new_stock, "record": updated}
+
+
+@api.delete("/sharpening/records/{record_id}")
+async def delete_sharpening_record(record_id: str, user=Depends(require_admin)):
+    record = await db.sharpening_records.find_one({"id": record_id})
+    if not record:
+        raise HTTPException(status_code=404, detail="Bileme kaydı bulunamadı")
+    product = await db.products.find_one({"id": record["product_id"]})
+    if not product:
+        raise HTTPException(status_code=404, detail="Bağlı ürün bulunamadı")
+    restore = float(record.get("quantity", 0)) - float(record.get("returned_quantity", 0))
+    new_stock = round(float(product.get("current_stock", 0)) + restore, 6)
+    await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+    await db.sharpening_records.delete_one({"id": record_id})
+    return {"ok": True, "new_stock": new_stock}
 
 
 # ---------- Tool trials / Kesici takım denemeleri ----------
