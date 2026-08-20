@@ -21,6 +21,10 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 from openpyxl import Workbook
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -179,6 +183,16 @@ class ToolHolderStockOut(BaseModel):
     machine_id: str
     personnel_id: Optional[str] = None
     note: Optional[str] = ""
+
+
+class ToolHolderScrapIn(BaseModel):
+    quantity: float
+    scrap_reason: str
+    description: Optional[str] = ""
+    scrap_date: str
+    location: Optional[str] = ""
+    approved_by: Optional[str] = ""
+    witness: Optional[str] = ""
 
 
 class PersonnelIn(BaseModel):
@@ -1423,6 +1437,89 @@ async def toolholder_out(tid: str, body: ToolHolderStockOut, user=Depends(requir
     }
     await db.toolholder_movements.insert_one(mv)
     return {"ok": True, "new_stock": new_stock, "movement": clean(mv)}
+
+
+@api.get("/toolholder-scraps")
+async def list_toolholder_scraps(user=Depends(get_current_user), limit: int = 500):
+    return await db.toolholder_scraps.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+
+@api.post("/toolholders/{tid}/scrap")
+async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(require_admin)):
+    holder = await db.toolholders.find_one({"id": tid})
+    if not holder:
+        raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Hurda miktarı 0'dan büyük olmalı")
+    if body.quantity > float(holder.get("current_stock", 0)):
+        raise HTTPException(status_code=400, detail="Hurda miktarı mevcut stoktan fazla olamaz")
+    if not body.scrap_reason.strip():
+        raise HTTPException(status_code=400, detail="Hurda nedeni zorunludur")
+    new_stock = round(float(holder.get("current_stock", 0)) - body.quantity, 6)
+    now = now_utc().isoformat()
+    doc = {
+        "id": new_id(), "tool_holder_id": holder["id"], "name": holder.get("name", ""),
+        "brand": holder.get("brand", ""), "holder_type": holder.get("type", ""),
+        "cutting_tool_code_name": holder.get("cutting_tool_code_name", ""),
+        "length": holder.get("length", ""), "diameter": holder.get("diameter", ""),
+        "quantity": body.quantity, "unit": "adet", "scrap_reason": body.scrap_reason.strip(),
+        "description": body.description or "", "scrap_date": body.scrap_date,
+        "location": body.location or holder.get("location", ""), "approved_by": body.approved_by or "",
+        "witness": body.witness or "", "user_id": user["id"], "user_name": user.get("name", ""),
+        "created_at": now, "new_stock": new_stock,
+    }
+    await db.toolholders.update_one({"id": tid}, {"$set": {"current_stock": new_stock}})
+    await db.toolholder_scraps.insert_one(doc)
+    await db.toolholder_movements.insert_one({
+        "id": new_id(), "type": "scrap", "tool_holder_id": holder["id"], "name": holder.get("name", ""),
+        "quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "note": body.description or "",
+        "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now,
+    })
+    return {"ok": True, "new_stock": new_stock, "scrap": clean(doc)}
+
+
+@api.get("/toolholder-scraps/{scrap_id}/pdf")
+async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
+    scrap = await db.toolholder_scraps.find_one({"id": scrap_id}, {"_id": 0})
+    if not scrap:
+        raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    buf = io.BytesIO()
+    pdf = canvas.Canvas(buf, pagesize=A4)
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont("DejaVu", font_path))
+        pdf.setFont("DejaVu", 11)
+    else:
+        pdf.setFont("Helvetica", 11)
+    width, height = A4
+    y = height - 60
+    pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 16)
+    pdf.drawCentredString(width / 2, y, "TAKIM TUTUCU HURDA / KULLANIM DIŞI TUTANAĞI")
+    y -= 35
+    pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 10)
+    rows = [
+        ("Tutanak No", scrap.get("id", "")), ("Tarih", scrap.get("scrap_date", "")),
+        ("Tutucu", scrap.get("name", "")), ("Marka", scrap.get("brand", "")),
+        ("Tutucu Tipi", scrap.get("holder_type", "")), ("Kesici Uç Kodu / İsmi", scrap.get("cutting_tool_code_name", "")),
+        ("Ölçüler", f"Boy: {scrap.get('length', '')} | Çap: {scrap.get('diameter', '')}"),
+        ("Hurda Miktarı", f"{scrap.get('quantity', 0)} {scrap.get('unit', 'adet')}"),
+        ("Hurda Nedeni", scrap.get("scrap_reason", "")), ("Açıklama", scrap.get("description", "")),
+        ("Konum", scrap.get("location", "")), ("İşlemi Yapan", scrap.get("user_name", "")),
+        ("Onaylayan", scrap.get("approved_by", "")), ("Tanık / Teslim Alan", scrap.get("witness", "")),
+    ]
+    for label, value in rows:
+        pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
+        pdf.drawString(55, y, f"{label}:")
+        pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 10)
+        pdf.drawString(215, y, str(value)[:100])
+        y -= 22
+        if y < 100:
+            pdf.showPage(); y = height - 60
+    y -= 15
+    pdf.drawString(70, y, "Düzenleyen İmza: ____________________")
+    pdf.drawString(330, y, "Onay İmza: ____________________")
+    pdf.save(); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="hurda-tutanagi-{scrap_id[:8]}.pdf"'})
 
 
 @api.get("/toolholder-movements")

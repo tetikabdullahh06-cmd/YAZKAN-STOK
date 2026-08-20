@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard, Package, Users, Settings2, ArrowDownToLine,
   ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench,
-  Building2, ClipboardList, Eye, ShieldCheck, Cog, BarChart3, Cable
+  Building2, ClipboardList, Eye, ShieldCheck, Cog, BarChart3, Cable, PackageX
 } from "lucide-react";
 import YazkanLogo from "@/components/YazkanLogo";
 
@@ -18,6 +18,7 @@ const NAV = [
   { to: "/personel", label: "Personel", icon: Users, testid: "nav-personnel" },
   { to: "/tezgahlar", label: "Tezgahlar", icon: Settings2, testid: "nav-machines" },
   { to: "/takim-tutucular", label: "Takım Tutucular", icon: Wrench, testid: "nav-toolholders" },
+  { to: "/hurda-tutucular", label: "Hurda / Kullanım Dışı", icon: PackageX, testid: "nav-holder-scrap", adminOnly: true },
   { to: "/tedarikciler", label: "Tedarikçiler", icon: Building2, testid: "nav-suppliers" },
   { to: "/siparisler", label: "Siparişler", icon: ClipboardList, testid: "nav-orders" },
   { to: "/hareketler", label: "Hareketler", icon: History, testid: "nav-movements" },

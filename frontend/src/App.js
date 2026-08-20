@@ -19,6 +19,7 @@ import Reports from "@/pages/Reports";
 import Suppliers from "@/pages/Suppliers";
 import Orders from "@/pages/Orders";
 import TakimTutucular from "@/pages/TakimTutucular";
+import HurdaTutucular from "@/pages/HurdaTutucular";
 import Sharpening from "@/pages/Sharpening";
 import ToolTrials from "@/pages/ToolTrials";
 import Recipes from "@/pages/Recipes";
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="personel" element={<Personnel />} />
             <Route path="tezgahlar" element={<Machines />} />
             <Route path="takim-tutucular" element={<TakimTutucular />} />
+            <Route path="hurda-tutucular" element={<HurdaTutucular />} />
             <Route path="tedarikciler" element={<Suppliers />} />
             <Route path="siparisler" element={<Orders />} />
             <Route path="stok-giris" element={<StockIn />} />
