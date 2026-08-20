@@ -64,7 +64,7 @@ export default function Sharpening() {
 
   const exportExcel = () => {
     const rows = records.map((r) => ({
-      "Hareket Tipi": "giden",
+      "Hareket Tipi": r.status === "returned" ? "gelen" : "giden",
       "Ürün Kodu": r.product_code || "",
       "Ürün Adı": r.product_name || "",
       "Miktar": r.quantity || 0,
@@ -109,12 +109,12 @@ export default function Sharpening() {
         const sentDate = row["Gidiş Tarihi"] || row.gidis_tarihi || "";
         if (type === "gelen") {
           const matched = records.find((r) => (!code || r.product_code === code) && (!sentDate || String(r.sent_date || "").slice(0, 10) === String(sentDate).slice(0, 10)) && r.status !== "returned");
-          const recordId = matched?.id || row["Kayıt ID"] || row.kayit_id;
+          const recordId = matched?.id;
           if (!recordId) continue;
           await api.post("/sharpening/in", { record_id: recordId, quantity: row["Gelen Miktar"] === "" ? null : Number(row["Gelen Miktar"] || row.gelen_miktar), company: row.Firma || row.firma || "", waybill_number: row["İrsaliye No"] || row.irsaliye_no || "", received_date: row["Geliş Tarihi"] || row.gelis_tarihi || today(), note: row.Not || row.not || "" });
         } else {
           const matched = products.find((p) => (code && p.code === code) || (!code && name && p.name === name));
-          const productId = matched?.id || row["Ürün ID"] || row.urun_id;
+          const productId = matched?.id;
           if (!productId) continue;
           await api.post("/sharpening/out", { product_id: productId, quantity: Number(row.Miktar || row.miktar) || 0, helix_length: row["Helis Boyu"] || row.helis_boyu || "", diameter: row.Çap || row.cap || "", full_length: row["Tam Boy"] || row.tam_boy || "", process_type: row["Yapılacak İşlem"] || row.yapilacak_islem || "alın bileme", company: row.Firma || row.firma || "", sent_date: sentDate || today(), note: row.Not || row.not || "" });
         }
