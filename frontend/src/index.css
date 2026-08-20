@@ -185,3 +185,16 @@ main [data-testid="dashboard-critical-alert"] .font-semibold,
 main [data-testid="dashboard-critical-alert"] .font-black { color: #4c0519 !important; }
 main [data-testid="dashboard-critical-alert"] .border-red-500\/30,
 main [data-testid="dashboard-critical-alert"] .divide-red-900\/40 { border-color: #fecdd3 !important; }
+
+/* Final readability pass: replace pale gray body text with near-black text */
+main .text-slate-300,
+main .text-slate-400,
+main .text-slate-500,
+main .text-slate-600 {
+    color: #111827 !important;
+    font-weight: 600;
+}
+main p, main small, main td, main dd { color: #111827; }
+main input::placeholder, main textarea::placeholder { color: #374151 !important; opacity: 1; }
+main .text-slate-400 svg, main .text-slate-500 svg { color: #111827 !important; }
+
