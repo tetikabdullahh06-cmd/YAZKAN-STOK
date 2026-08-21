@@ -32,18 +32,13 @@ export default function Layout() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const mainRef = useRef(null);
-  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [showBackToTop] = useState(true);
   const nav = NAV.filter((n) => !n.adminOnly || isAdmin);
 
-  useEffect(() => {
-    const main = mainRef.current;
-    if (!main) return undefined;
-    const onScroll = () => setShowBackToTop(main.scrollTop > 320);
-    main.addEventListener("scroll", onScroll, { passive: true });
-    return () => main.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const backToTop = () => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  const backToTop = () => {
+    mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <div className="min-h-screen flex app-shell grain">
@@ -143,7 +138,7 @@ export default function Layout() {
             onClick={backToTop}
             aria-label="Başa dön"
             data-testid="back-to-top"
-            className="fixed right-6 bottom-6 md:bottom-8 z-30 inline-flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 font-black shadow-xl shadow-blue-900/30 transition-all"
+            className="fixed right-6 bottom-20 md:bottom-8 z-[60] inline-flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 font-black shadow-xl shadow-blue-900/30 transition-all"
           >
             <ArrowUp className="w-5 h-5" /> Başa Dön
           </button>
