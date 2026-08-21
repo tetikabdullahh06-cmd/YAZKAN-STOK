@@ -27,7 +27,12 @@ export default function Products() {
   const [stockAdd, setStockAdd] = useState({ query: "", productId: "", quantity: "" });
   const [quickStock, setQuickStock] = useState({ productId: "", direction: "in", quantity: "", note: "" });
 
-  const load = () => api.get("/products").then((r) => setItems(r.data));
+  const load = async () => {
+    // Admin oturumunda Kılavuz kategorisinin mevcut kayıtlarına görseli doğrudan yaz.
+    try { await api.post("/products/apply-category-image", { category: "Kılavuz" }); } catch (_) {}
+    const r = await api.get("/products");
+    setItems(r.data);
+  };
   useEffect(() => { load(); }, []);
   
   const exportExcel = () => {

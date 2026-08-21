@@ -742,6 +742,27 @@ async def upload_image(file: UploadFile = File(...), user=Depends(require_admin)
 
 
 # ---------- Products ----------
+@api.post("/products/apply-category-image")
+async def apply_category_image(body: dict, user=Depends(require_admin)):
+    category_key = _category_key(body.get("category", ""))
+    if category_key != "kilavuz":
+        raise HTTPException(status_code=400, detail="Bu işlem yalnızca Kılavuz kategorisi için kullanılabilir")
+    image_path = ROOT_DIR / "assets" / "kilavuz.jpg"
+    if not image_path.exists():
+        raise HTTPException(status_code=500, detail="Kılavuz görseli sunucuda bulunamadı")
+    encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    image_url = f"data:image/jpeg;base64,{encoded}"
+    products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
+    ids = [
+        p.get("id") for p in products
+        if p.get("id") and "kilavuz" in _category_key(p.get("category", ""))
+    ]
+    if ids:
+        result = await db.products.update_many({"id": {"$in": ids}}, {"$set": {"image_url": image_url}})
+        return {"ok": True, "updated": result.modified_count, "matched": len(ids)}
+    return {"ok": True, "updated": 0, "matched": 0}
+
+
 @api.get("/products")
 async def list_products(user=Depends(get_current_user)):
     # Canlı veritabanında startup migration daha önce çalışmamış olsa bile,
