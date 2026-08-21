@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import { downloadImageWorkbook, imageExportNotice } from "@/lib/excelExport";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Minus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } from "lucide-react";
@@ -46,7 +47,7 @@ export default function Products() {
   };
   useEffect(() => { load(); }, []);
   
-  const exportExcel = () => {
+  const exportExcel = async () => {
     if (!filtered.length) {
       toast.info("Dışa aktarılacak ürün bulunamadı");
       return;
@@ -67,11 +68,13 @@ export default function Products() {
       "Görsel URL": p.image_url || "",
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Ürünler");
-    XLSX.writeFile(workbook, `YAZKAN-urunler-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success(`${rows.length} ürün Excel dosyasına aktarıldı`);
+    await downloadImageWorkbook({
+      sheetName: "Ürünler",
+      rows,
+      imageKey: "Görsel URL",
+      filename: `YAZKAN-urunler-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    });
+    toast.success(`${rows.length} ürün Excel'e aktarıldı. ${imageExportNotice(rows)}`);
   };
 
   const downloadImportTemplate = () => {

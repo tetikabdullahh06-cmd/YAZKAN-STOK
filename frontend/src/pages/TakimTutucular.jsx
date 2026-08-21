@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import * as XLSX from "xlsx";
+import { downloadImageWorkbook, imageExportNotice } from "@/lib/excelExport";
 import { toast } from "sonner";
 import {
   Plus, Pencil, Trash2, Search, Wrench, ArrowDownToLine, ArrowUpFromLine,
@@ -201,7 +202,7 @@ export default function TakimTutucular() {
     } catch { toast.error("Hareketler yüklenemedi"); }
   };
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const rows = filtered.map((t) => ({
       "Tutucu Adı": t.name || "",
       "Marka": t.brand || "",
@@ -216,16 +217,14 @@ export default function TakimTutucular() {
       "Not": t.note || "",
       "Görsel URL": t.image_url || "",
     }));
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    worksheet["!cols"] = [
-      { wch: 32 }, { wch: 18 }, { wch: 28 }, { wch: 34 }, { wch: 12 }, { wch: 12 },
-      { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 36 },
-    ];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Takım Tutucular");
     const suffix = q.trim() ? "filtreli" : "tam-liste";
-    XLSX.writeFile(workbook, `takim-tutucular-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success(`${rows.length} takım tutucu Excel'e aktarıldı`);
+    await downloadImageWorkbook({
+      sheetName: "Takım Tutucular",
+      rows,
+      imageKey: "Görsel URL",
+      filename: `takim-tutucular-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    });
+    toast.success(`${rows.length} takım tutucu Excel'e aktarıldı. ${imageExportNotice(rows)}`);
   };
 
   return (

@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, FileSpreadsheet, Download } from "lucide-react";
 import * as XLSX from "xlsx";
+import { downloadImageWorkbook, imageExportNotice } from "@/lib/excelExport";
 import { useAuth } from "@/context/AuthContext";
 import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 
@@ -56,7 +57,7 @@ export default function Personnel() {
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
   };
   const edit = (p) => { setForm({ first_name: p.first_name, last_name: p.last_name, department: p.department || "", image_url: p.image_url || "" }); setEditId(p.id); setShowForm(true); };
-  const exportExcel = () => { const rows = filtered.map((p) => ({ "Ad": p.first_name, "Soyad": p.last_name, "Görev": p.department || "", "Görsel URL": p.image_url || "" })); const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Personel"); XLSX.writeFile(wb, `YAZKAN-personel-${new Date().toISOString().slice(0, 10)}.xlsx`); toast.success(`${rows.length} personel dışa aktarıldı`); };
+  const exportExcel = async () => { const rows = filtered.map((p) => ({ "Ad": p.first_name, "Soyad": p.last_name, "Görev": p.department || "", "Görsel URL": p.image_url || "" })); await downloadImageWorkbook({ sheetName: "Personel", rows, imageKey: "Görsel URL", filename: `YAZKAN-personel-${new Date().toISOString().slice(0, 10)}.xlsx` }); toast.success(`${rows.length} personel dışa aktarıldı. ${imageExportNotice(rows)}`); };
   const downloadTemplate = () => { const ws = XLSX.utils.json_to_sheet([{ first_name: "Örnek", last_name: "Personel", department: "CNC Tornacı", image_url: "" }]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Personel Şablonu"); XLSX.writeFile(wb, "personel-ice-aktarma-sablonu.xlsx"); };
   const importExcel = async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; try { const data = await file.arrayBuffer(); const wb = XLSX.read(data, { type: "array" }); const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" }); const blob = new Blob([await file.arrayBuffer()], { type: file.type }); const fd = new FormData(); fd.append("file", blob, file.name); const preview = await api.post("/personnel/import?commit=false", fd, { headers: { "Content-Type": "multipart/form-data" } }); if (!window.confirm(`${preview.data.preview?.length || rows.length} satır içe aktarılacak. Devam edilsin mi?`)) return; const commitFd = new FormData(); commitFd.append("file", blob, file.name); await api.post("/personnel/import?commit=true", commitFd, { headers: { "Content-Type": "multipart/form-data" } }); toast.success("Personel Excel içe aktarma tamamlandı"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Excel içe aktarılamadı"); } };
 
