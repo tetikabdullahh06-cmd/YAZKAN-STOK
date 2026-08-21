@@ -34,6 +34,8 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 app = FastAPI(title="CNC Takımhane API")
+# Hurda / Kullanım Dışı modülü sürüm işareti: 2026-08-21
+SCRAP_MODULE_VERSION = "2026-08-21"
 api = APIRouter(prefix="/api")
 
 JWT_ALGORITHM = "HS256"
