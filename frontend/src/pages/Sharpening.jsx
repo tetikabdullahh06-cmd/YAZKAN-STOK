@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { downloadImageWorkbook } from "@/lib/excelExport";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -76,42 +77,81 @@ export default function Sharpening() {
     return products.filter((p) => `${p.code} ${p.name} ${p.brand || ""} ${p.quality || ""} ${p.category || ""}`.toLowerCase().includes(q));
   }, [products, returnProductSearch]);
 
-  const exportExcel = (allRecords = false) => {
-    const exportRecords = allRecords
+  const exportExcel = async (mode = "out", allRecords = false) => {
+    const candidates = allRecords
       ? records
-      : records.filter((r) => String(r.sent_date || r.created_at || "").slice(0, 10) === exportDate);
+      : records.filter((r) => String(mode === "in" ? (r.received_date || "") : (r.sent_date || r.created_at || "")).slice(0, 10) === exportDate);
+    const exportRecords = mode === "in"
+      ? candidates.filter((r) => Number(r.returned_quantity || 0) > 0)
+      : mode === "out"
+        ? candidates.filter((r) => Number(r.quantity || 0) > 0)
+        : candidates;
     if (!exportRecords.length) {
-      toast.info(allRecords ? "Dışa aktarılacak kayıt bulunamadı" : `${exportDate} tarihinde bileme kaydı bulunamadı`);
+      toast.info(allRecords ? "Dışa aktarılacak kayıt bulunamadı" : `${exportDate} tarihinde seçilen hareket türünde kayıt bulunamadı`);
       return;
     }
-    const rows = exportRecords.map((r) => ({
-      "Hareket Tipi": r.status === "returned" ? "gelen" : "giden",
-      "Ürün Kodu": r.product_code || "",
-      "Ürün Adı": r.product_name || "",
-      "Ürün Görsel URL": products.find((p) => p.id === r.product_id)?.image_url || "",
-      "Miktar": r.quantity || 0,
-      "Helis Boyu": r.helix_length || "",
-      "Çap": r.diameter || "",
-      "Tam Boy": r.full_length || "",
-      "Gelen Ürün Kodu": r.return_product_code || r.product_code || "",
-      "Gelen Ürün Adı": r.return_product_name || r.product_name || "",
-      "Gelen Ürün Görsel URL": products.find((p) => p.id === r.return_product_id)?.image_url || "",
-      "Gelen Helis Boyu": r.return_helix_length || r.helix_length || "",
-      "Gelen Çap": r.return_diameter || r.diameter || "",
-      "Gelen Tam Boy": r.return_full_length || r.full_length || "",
-      "Yapılacak İşlem": r.process_type || "alın bileme",
-      "Firma": r.company || "",
-      "Gidiş Tarihi": r.sent_date || "",
-      "Gelen Miktar": r.returned_quantity || 0,
-      "İrsaliye No": r.waybill_number || "",
-      "Geliş Tarihi": r.received_date || "",
-      "Not": r.note || "",
-      "Durum": r.status || "",
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Bileme Kayıtları");
-    XLSX.writeFile(wb, allRecords ? `bileme-tum-kayitlar-${today()}.xlsx` : `bileme-kayitlari-${exportDate}.xlsx`);
-    toast.success(allRecords ? `${rows.length} tüm bileme kaydı Excel'e aktarıldı` : `${exportDate} tarihli ${rows.length} bileme kaydı Excel'e aktarıldı`);
+    const rows = exportRecords.map((r) => {
+      const imageUrl = mode === "in"
+        ? (products.find((p) => p.id === r.return_product_id)?.image_url || products.find((p) => p.id === r.product_id)?.image_url || "")
+        : (products.find((p) => p.id === r.product_id)?.image_url || "");
+      if (mode === "in") return {
+        "Hareket Tipi": "Bilemeden Gelen",
+        "Ürün Kodu": r.return_product_code || r.product_code || "",
+        "Ürün Adı": r.return_product_name || r.product_name || "",
+        "Görsel": "",
+        __imageUrl: imageUrl,
+        "Miktar": r.returned_quantity || 0,
+        "Helis Boyu": r.return_helix_length || r.helix_length || "",
+        "Çap": r.return_diameter || r.diameter || "",
+        "Tam Boy": r.return_full_length || r.full_length || "",
+        "Firma": r.return_company || r.company || "",
+        "İrsaliye No": r.waybill_number || "",
+        "Geliş Tarihi": r.received_date || "",
+        "Not": r.return_note || r.note || "",
+        "Durum": r.status || "",
+      };
+      if (mode === "out") return {
+        "Hareket Tipi": "Bilemeye Giden",
+        "Ürün Kodu": r.product_code || "",
+        "Ürün Adı": r.product_name || "",
+        "Görsel": "",
+        __imageUrl: imageUrl,
+        "Miktar": r.quantity || 0,
+        "Helis Boyu": r.helix_length || "",
+        "Çap": r.diameter || "",
+        "Tam Boy": r.full_length || "",
+        "Yapılacak İşlem": r.process_type || "alın bileme",
+        "Firma": r.company || "",
+        "Gidiş Tarihi": r.sent_date || "",
+        "Not": r.note || "",
+        "Durum": r.status || "",
+      };
+      return {
+        "Hareket Tipi": r.status === "returned" ? "Gelen" : "Giden / Gelen",
+        "Ürün Kodu": r.product_code || "",
+        "Ürün Adı": r.product_name || "",
+        "Görsel": "",
+        __imageUrl: imageUrl,
+        "Giden Miktar": r.quantity || 0,
+        "Gelen Miktar": r.returned_quantity || 0,
+        "Giden Helis": r.helix_length || "",
+        "Giden Çap": r.diameter || "",
+        "Gelen Helis": r.return_helix_length || "",
+        "Gelen Çap": r.return_diameter || "",
+        "Firma": r.company || "",
+        "Gidiş Tarihi": r.sent_date || "",
+        "İrsaliye No": r.waybill_number || "",
+        "Geliş Tarihi": r.received_date || "",
+        "Durum": r.status || "",
+      };
+    });
+    const filename = mode === "out"
+      ? `bilemeye-giden-${allRecords ? "tum-" : `${exportDate}-`}${today()}.xlsx`
+      : mode === "in"
+        ? `bilemeden-gelen-${allRecords ? "tum-" : `${exportDate}-`}${today()}.xlsx`
+        : `bileme-tum-kayitlar-${today()}.xlsx`;
+    await downloadImageWorkbook({ sheetName: mode === "out" ? "Bilemeye Giden" : mode === "in" ? "Bilemeden Gelen" : "Tüm Bileme", rows, filename });
+    toast.success(`${rows.length} ${mode === "out" ? "giden" : mode === "in" ? "gelen" : "toplam"} kayıt Excel'e aktarıldı`);
   };
   const downloadTemplate = () => {
     const rows = [
@@ -217,7 +257,7 @@ export default function Sharpening() {
           <h1 className="font-display text-4xl font-black">Bilemeye Gidenler / Bilemeden Gelenler</h1>
           <p className="text-slate-400 mt-2">Bilemeye gönderilen ürünleri stoktan düşürün, geri gelenleri irsaliye bilgisiyle tekrar stoğa alın.</p>
         </div>
-          <div className="flex gap-2 flex-wrap items-center"><label className="flex items-center gap-2 h-11 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 text-sm font-semibold">Gün seçin<input type="date" value={exportDate} onChange={(e) => setExportDate(e.target.value)} className="h-8 rounded bg-slate-950 border border-slate-600 px-2 text-slate-100" /></label><button onClick={() => exportExcel(false)} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Seçilen Günü Excel'e Aktar</button><button onClick={() => exportExcel(true)} className="h-11 px-4 rounded-lg bg-teal-700 hover:bg-teal-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Tüm Kayıtları Aktar</button><button onClick={downloadTemplate} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-200"><FileSpreadsheet className="w-4 h-4" /> Örnek Şablon</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white cursor-pointer"><Upload className="w-4 h-4" /> İçe Aktar<input type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden" /></label><button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button></div>
+          <div className="flex gap-2 flex-wrap items-center"><label className="flex items-center gap-2 h-11 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 text-sm font-semibold">Gün seçin<input type="date" value={exportDate} onChange={(e) => setExportDate(e.target.value)} className="h-8 rounded bg-slate-950 border border-slate-600 px-2 text-slate-100" /></label><button onClick={() => exportExcel("out", false)} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Gidenleri Aktar</button><button onClick={() => exportExcel("in", false)} className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Gelenleri Aktar</button><button onClick={() => exportExcel("all", true)} className="h-11 px-4 rounded-lg bg-teal-700 hover:bg-teal-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Tümünü Aktar</button><button onClick={downloadTemplate} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-200"><FileSpreadsheet className="w-4 h-4" /> Örnek Şablon</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white cursor-pointer"><Upload className="w-4 h-4" /> İçe Aktar<input type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden" /></label><button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
