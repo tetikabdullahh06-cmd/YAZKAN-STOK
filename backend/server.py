@@ -467,6 +467,20 @@ async def startup():
             await db.products.update_many({"id": {"$in": matched_ids}}, {"$set": {"image_url": image_url}})
             logger.info(f"Parmak Freze görseli uygulandı: {len(matched_ids)} ürün")
 
+    # Karbür Matkap kategorisindeki tüm ürünlere ortak görseli uygula.
+    carbide_image_path = ROOT_DIR / "assets" / "karbur.jpg"
+    if carbide_image_path.exists():
+        carbide_data = base64.b64encode(carbide_image_path.read_bytes()).decode("ascii")
+        carbide_url = f"data:image/jpeg;base64,{carbide_data}"
+        carbide_products = await db.products.find({}).to_list(5000)
+        carbide_ids = [
+            product["id"] for product in carbide_products
+            if "karbür matkap" in " ".join(str(product.get(k, "")) for k in ("name", "category", "brand")).casefold()
+        ]
+        if carbide_ids:
+            await db.products.update_many({"id": {"$in": carbide_ids}}, {"$set": {"image_url": carbide_url}})
+            logger.info(f"Karbür Matkap görseli uygulandı: {len(carbide_ids)} ürün")
+
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -720,6 +734,14 @@ async def list_products(user=Depends(get_current_user)):
         category_ids = [item.get("id") for item in category_matches if item.get("id")]
         if category_ids:
             await db.products.update_many({"id": {"$in": category_ids}}, {"$set": {"image_url": image_url}})
+    carbide_image_path = ROOT_DIR / "assets" / "karbur.jpg"
+    if carbide_image_path.exists():
+        carbide_data = base64.b64encode(carbide_image_path.read_bytes()).decode("ascii")
+        carbide_url = f"data:image/jpeg;base64,{carbide_data}"
+        carbide_matches = await db.products.find({"category": {"$regex": "karbür matkap", "$options": "i"}}, {"id": 1}).to_list(5000)
+        carbide_ids = [item.get("id") for item in carbide_matches if item.get("id")]
+        if carbide_ids:
+            await db.products.update_many({"id": {"$in": carbide_ids}}, {"$set": {"image_url": carbide_url}})
     products = await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
     sharpening_totals = {}
     open_records = await db.sharpening_records.find({"status": {"$in": ["sent", "partial"]}}, {"_id": 0, "product_id": 1, "quantity": 1, "returned_quantity": 1, "remaining_quantity": 1}).to_list(5000)
