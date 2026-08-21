@@ -315,11 +315,11 @@ export default function Products() {
               {filtered.map((p) => {
                 const crit = p.current_stock <= p.min_stock;
                 return (
-                  <tr key={p.id} data-testid={`product-row-${p.code}`} className={`h-16 hover:bg-slate-700/40 ${crit ? "bg-red-950/20" : ""}`}>
+                  <tr key={p.id} data-testid={`product-row-${p.code}`} className="h-16 hover:bg-slate-700/40">
                     <td className="px-4 font-mono-tab font-semibold text-slate-300">{p.code}</td>
                     <td className="px-4 font-medium">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span>{p.name}</span><ImageHover src={p.image_url} alt={p.name} />
+                        {crit && <span className="inline-flex items-center rounded-md bg-red-600 px-2 py-1 text-[10px] font-black tracking-wide text-white">KRİTİK STOK UYARI</span>}<span>{p.name}</span><ImageHover src={p.image_url} alt={p.name} />
                         {p.is_special && (
                           <span data-testid={`product-special-badge-${p.code}`} className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/40 rounded px-1.5 py-0.5">
                             Özel Takım
