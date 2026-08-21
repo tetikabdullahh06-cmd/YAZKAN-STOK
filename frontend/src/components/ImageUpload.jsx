@@ -36,11 +36,19 @@ export default function ImageUpload({ value, onChange, label = "Görsel" }) {
 }
 
 export function ImageHover({ src, alt = "Görsel" }) {
+  const [preview, setPreview] = useState(null);
   if (!src) return null;
-  return <span className="relative inline-flex align-middle ml-2 group">
-    <img src={src} alt={alt} className="w-9 h-9 rounded-md object-cover border border-slate-300" />
-    <span className="pointer-events-none absolute z-50 left-0 top-10 hidden group-hover:block w-56 h-56 rounded-xl overflow-hidden border-2 border-white shadow-2xl bg-white">
+  const showPreview = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const size = 224;
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - size - 8));
+    const top = rect.bottom + size + 8 <= window.innerHeight ? rect.bottom + 8 : Math.max(8, rect.top - size - 8);
+    setPreview({ left, top });
+  };
+  return <span className="relative inline-flex align-middle ml-2">
+    <img src={src} alt={alt} onMouseEnter={showPreview} onMouseLeave={() => setPreview(null)} className="w-9 h-9 rounded-md object-cover border border-slate-300 cursor-zoom-in" />
+    {preview && <span onMouseEnter={() => setPreview(preview)} onMouseLeave={() => setPreview(null)} style={{ position: "fixed", zIndex: 9999, left: preview.left, top: preview.top, width: 224, height: 224 }} className="pointer-events-auto rounded-xl overflow-hidden border-2 border-white shadow-2xl bg-white p-1">
       <img src={src} alt={alt} className="w-full h-full object-contain" />
-    </span>
+    </span>}
   </span>;
 }
