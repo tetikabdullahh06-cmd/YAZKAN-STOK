@@ -456,7 +456,13 @@ async def startup():
         image_data = base64.b64encode(parmak_image_path.read_bytes()).decode("ascii")
         image_url = f"data:image/jpeg;base64,{image_data}"
         matching = await db.products.find({}).to_list(5000)
-        matched_ids = [p["id"] for p in matching if "parmak freze" in " ".join(str(p.get(k, "")) for k in ("name", "category", "brand")).casefold()]
+        # Kategori alanı önceliklidir; boşluk/büyük-küçük harf farklarını tolere et.
+        matched_ids = []
+        for product in matching:
+            category = " ".join(str(product.get("category", "")).split()).casefold()
+            searchable = " ".join(str(product.get(k, "")) for k in ("name", "category", "brand")).casefold()
+            if "parmak freze" in category or "parmak freze" in searchable:
+                matched_ids.append(product["id"])
         if matched_ids:
             await db.products.update_many({"id": {"$in": matched_ids}}, {"$set": {"image_url": image_url}})
             logger.info(f"Parmak Freze görseli uygulandı: {len(matched_ids)} ürün")
@@ -704,6 +710,16 @@ async def upload_image(file: UploadFile = File(...), user=Depends(require_admin)
 # ---------- Products ----------
 @api.get("/products")
 async def list_products(user=Depends(get_current_user)):
+    # Canlı veritabanında startup migration daha önce çalışmamış olsa bile,
+    # Ürünler ekranı açıldığında kategori eşleşmesini garanti altına al.
+    parmak_image_path = ROOT_DIR / "assets" / "parmakfreze.jpg"
+    if parmak_image_path.exists():
+        image_data = base64.b64encode(parmak_image_path.read_bytes()).decode("ascii")
+        image_url = f"data:image/jpeg;base64,{image_data}"
+        category_matches = await db.products.find({"category": {"$regex": "parmak freze", "$options": "i"}}, {"id": 1}).to_list(5000)
+        category_ids = [item.get("id") for item in category_matches if item.get("id")]
+        if category_ids:
+            await db.products.update_many({"id": {"$in": category_ids}}, {"$set": {"image_url": image_url}})
     products = await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
     sharpening_totals = {}
     open_records = await db.sharpening_records.find({"status": {"$in": ["sent", "partial"]}}, {"_id": 0, "product_id": 1, "quantity": 1, "returned_quantity": 1, "remaining_quantity": 1}).to_list(5000)
