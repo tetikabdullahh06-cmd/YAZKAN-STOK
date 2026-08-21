@@ -65,13 +65,15 @@ export default function Products() {
       "Mevcut Stok": p.current_stock ?? 0,
       "Bilemede": p.in_sharpening ?? 0,
       "Özel Takım": p.is_special ? "Evet" : "Hayır",
-      "Görsel URL": p.image_url || "",
+      "Görsel": "",
+      __imageUrl: p.image_url || "",
     }));
 
     await downloadImageWorkbook({
       sheetName: "Ürünler",
       rows,
-      imageKey: "Görsel URL",
+      imageKey: "Görsel",
+      imageSourceKey: "__imageUrl",
       filename: `YAZKAN-urunler-${new Date().toISOString().slice(0, 10)}.xlsx`,
     });
     toast.success(`${rows.length} ürün Excel'e aktarıldı. ${imageExportNotice(rows)}`);

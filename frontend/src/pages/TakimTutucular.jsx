@@ -215,13 +215,15 @@ export default function TakimTutucular() {
       "Mevcut Stok": t.current_stock ?? 0,
       "Stok Durumu": Number(t.current_stock || 0) <= Number(t.min_stock || 0) ? "Kritik" : "Normal",
       "Not": t.note || "",
-      "Görsel URL": t.image_url || "",
+      "Görsel": "",
+      __imageUrl: t.image_url || "",
     }));
     const suffix = q.trim() ? "filtreli" : "tam-liste";
     await downloadImageWorkbook({
       sheetName: "Takım Tutucular",
       rows,
-      imageKey: "Görsel URL",
+      imageKey: "Görsel",
+      imageSourceKey: "__imageUrl",
       filename: `takim-tutucular-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`,
     });
     toast.success(`${rows.length} takım tutucu Excel'e aktarıldı. ${imageExportNotice(rows)}`);

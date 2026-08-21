@@ -1,9 +1,9 @@
 import ExcelJS from "exceljs";
 
-export async function downloadImageWorkbook({ sheetName, rows, filename, imageKey = "Görsel URL" }) {
+export async function downloadImageWorkbook({ sheetName, rows, filename, imageKey = "Görsel", imageSourceKey = "__imageUrl" }) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
-  const headers = rows.length ? Object.keys(rows[0]) : [imageKey];
+  const headers = rows.length ? Object.keys(rows[0]).filter((key) => !key.startsWith("__")) : [imageKey];
 
   worksheet.columns = headers.map((header) => ({
     header,
@@ -17,7 +17,7 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
   const imageColumn = headers.indexOf(imageKey);
   if (imageColumn >= 0) {
     rows.forEach((row, index) => {
-      const imageUrl = String(row[imageKey] || "");
+      const imageUrl = String(row[imageSourceKey] || "");
       if (!imageUrl.startsWith("data:image/")) return;
       const extension = imageUrl.startsWith("data:image/png") ? "png" : "jpeg";
       const imageId = workbook.addImage({ base64: imageUrl, extension });
@@ -39,12 +39,12 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
   URL.revokeObjectURL(url);
 }
 
-export function hasEmbeddedImages(rows, imageKey = "Görsel URL") {
-  return rows.some((row) => String(row[imageKey] || "").startsWith("data:image/"));
+export function hasEmbeddedImages(rows, imageSourceKey = "__imageUrl") {
+  return rows.some((row) => String(row[imageSourceKey] || "").startsWith("data:image/"));
 }
 
-export function imageExportNotice(rows, imageKey = "Görsel URL") {
-  return hasEmbeddedImages(rows, imageKey)
+export function imageExportNotice(rows, imageSourceKey = "__imageUrl") {
+  return hasEmbeddedImages(rows, imageSourceKey)
     ? "Görseller Excel hücrelerine gömüldü"
     : "Görsel URL alanı korundu; görsel bulunmayan kayıtlar metin olarak kaldı";
 }
