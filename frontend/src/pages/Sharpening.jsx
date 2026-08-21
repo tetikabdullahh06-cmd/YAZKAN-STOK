@@ -80,12 +80,14 @@ export default function Sharpening() {
       "Hareket Tipi": r.status === "returned" ? "gelen" : "giden",
       "Ürün Kodu": r.product_code || "",
       "Ürün Adı": r.product_name || "",
+      "Ürün Görsel URL": products.find((p) => p.id === r.product_id)?.image_url || "",
       "Miktar": r.quantity || 0,
       "Helis Boyu": r.helix_length || "",
       "Çap": r.diameter || "",
       "Tam Boy": r.full_length || "",
       "Gelen Ürün Kodu": r.return_product_code || r.product_code || "",
       "Gelen Ürün Adı": r.return_product_name || r.product_name || "",
+      "Gelen Ürün Görsel URL": products.find((p) => p.id === r.return_product_id)?.image_url || "",
       "Gelen Helis Boyu": r.return_helix_length || r.helix_length || "",
       "Gelen Çap": r.return_diameter || r.diameter || "",
       "Gelen Tam Boy": r.return_full_length || r.full_length || "",
@@ -105,8 +107,8 @@ export default function Sharpening() {
   };
   const downloadTemplate = () => {
     const rows = [
-      { "Hareket Tipi": "giden", "Ürün Kodu": "UÇ-001", "Ürün Adı": "Örnek Uç", "Miktar": 1, "Helis Boyu": "35 mm", "Çap": "Ø12", "Tam Boy": "100 mm", "Yapılacak İşlem": "alın bileme", "Firma": "Örnek Bileme", "Gidiş Tarihi": today(), "Gelen Miktar": "", "İrsaliye No": "", "Geliş Tarihi": "", "Not": "Şablon satırı" },
-      { "Hareket Tipi": "gelen", "Ürün Kodu": "UÇ-001", "Ürün Adı": "Örnek Uç", "Miktar": "", "Helis Boyu": "", "Çap": "", "Tam Boy": "", "Gelen Ürün Kodu": "UÇ-001-YENİ", "Gelen Ürün Adı": "Yeni ölçülü ürün", "Gelen Helis Boyu": "38 mm", "Gelen Çap": "Ø11.98", "Gelen Tam Boy": "99 mm", "Yapılacak İşlem": "", "Firma": "Gelen Firma", "Gidiş Tarihi": today(), "Gelen Miktar": 1, "İrsaliye No": "IRS-001", "Geliş Tarihi": today(), "Not": "Gelen satırda Ürün Kodu ve Gidiş Tarihi ile açık kayıt eşleştirilir" },
+      { "Hareket Tipi": "giden", "Ürün Kodu": "UÇ-001", "Ürün Görsel URL": "", "Ürün Adı": "Örnek Uç", "Miktar": 1, "Helis Boyu": "35 mm", "Çap": "Ø12", "Tam Boy": "100 mm", "Yapılacak İşlem": "alın bileme", "Firma": "Örnek Bileme", "Gidiş Tarihi": today(), "Gelen Miktar": "", "İrsaliye No": "", "Geliş Tarihi": "", "Not": "Şablon satırı" },
+      { "Hareket Tipi": "gelen", "Ürün Kodu": "UÇ-001", "Ürün Görsel URL": "", "Gelen Ürün Görsel URL": "", "Ürün Adı": "Örnek Uç", "Miktar": "", "Helis Boyu": "", "Çap": "", "Tam Boy": "", "Gelen Ürün Kodu": "UÇ-001-YENİ", "Gelen Ürün Adı": "Yeni ölçülü ürün", "Gelen Helis Boyu": "38 mm", "Gelen Çap": "Ø11.98", "Gelen Tam Boy": "99 mm", "Yapılacak İşlem": "", "Firma": "Gelen Firma", "Gidiş Tarihi": today(), "Gelen Miktar": 1, "İrsaliye No": "IRS-001", "Geliş Tarihi": today(), "Not": "Gelen satırda Ürün Kodu ve Gidiş Tarihi ile açık kayıt eşleştirilir" },
     ];
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Bileme Şablonu");

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, FileSpreadsheet, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import { useAuth } from "@/context/AuthContext";
+import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 
-const emptyForm = { first_name: "", last_name: "", department: "" };
+const emptyForm = { first_name: "", last_name: "", department: "", image_url: "" };
 const DEFAULT_DEPTS = ["CNC Dik İşlemeci", "CNC Tornacı", "Üniversal Tornacı", "Taşlamacı", "Üretim Mühendisi"];
 const DEPT_STORAGE_KEY = "cnc_extra_departments";
 
@@ -53,7 +55,11 @@ export default function Personnel() {
       setShowForm(false); setEditId(null); setForm(emptyForm); load();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
   };
-  const edit = (p) => { setForm({ first_name: p.first_name, last_name: p.last_name, department: p.department || "" }); setEditId(p.id); setShowForm(true); };
+  const edit = (p) => { setForm({ first_name: p.first_name, last_name: p.last_name, department: p.department || "", image_url: p.image_url || "" }); setEditId(p.id); setShowForm(true); };
+  const exportExcel = () => { const rows = filtered.map((p) => ({ "Ad": p.first_name, "Soyad": p.last_name, "Görev": p.department || "", "Görsel URL": p.image_url || "" })); const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Personel"); XLSX.writeFile(wb, `YAZKAN-personel-${new Date().toISOString().slice(0, 10)}.xlsx`); toast.success(`${rows.length} personel dışa aktarıldı`); };
+  const downloadTemplate = () => { const ws = XLSX.utils.json_to_sheet([{ first_name: "Örnek", last_name: "Personel", department: "CNC Tornacı", image_url: "" }]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Personel Şablonu"); XLSX.writeFile(wb, "personel-ice-aktarma-sablonu.xlsx"); };
+  const importExcel = async (event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; try { const data = await file.arrayBuffer(); const wb = XLSX.read(data, { type: "array" }); const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" }); const blob = new Blob([await file.arrayBuffer()], { type: file.type }); const fd = new FormData(); fd.append("file", blob, file.name); const preview = await api.post("/personnel/import?commit=false", fd, { headers: { "Content-Type": "multipart/form-data" } }); if (!window.confirm(`${preview.data.preview?.length || rows.length} satır içe aktarılacak. Devam edilsin mi?`)) return; const commitFd = new FormData(); commitFd.append("file", blob, file.name); await api.post("/personnel/import?commit=true", commitFd, { headers: { "Content-Type": "multipart/form-data" } }); toast.success("Personel Excel içe aktarma tamamlandı"); load(); } catch (e) { toast.error(e.response?.data?.detail || "Excel içe aktarılamadı"); } };
+
   const del = async (p) => {
     if (!window.confirm(`${p.first_name} ${p.last_name} silinsin mi?`)) return;
     try { await api.delete(`/personnel/${p.id}`); toast.success("Silindi"); load(); }
@@ -68,12 +74,14 @@ export default function Personnel() {
           <h1 className="font-display text-4xl font-black">Personel</h1>
           <p className="text-slate-400 text-sm mt-1">{items.length} personel</p>
         </div>
-        {isAdmin && (
+        <div className="flex gap-2 flex-wrap">{isAdmin && (<>
           <button onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(true); }} data-testid="personnel-add-btn"
             className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
             <Plus className="w-5 h-5" /> Yeni Personel
           </button>
-        )}
+          <label className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center gap-2 cursor-pointer"><FileSpreadsheet className="w-5 h-5" /> Excel İçe Aktar<input type="file" accept=".xlsx,.xls" onChange={importExcel} className="hidden" /></label>
+          <button onClick={downloadTemplate} className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold"><FileSpreadsheet className="w-5 h-5 inline mr-2" />Şablon</button>
+        </>)}<button onClick={exportExcel} className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold"><Download className="w-5 h-5 inline mr-2" />Excel Dışa Aktar</button></div>
       </div>
 
       <div className="relative">
@@ -113,6 +121,7 @@ export default function Personnel() {
               </div>
             )}
           </div>
+          <div className="md:col-span-2"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Personel görseli" /></div>
           <div className="md:col-span-2 flex gap-3">
             <button type="submit" data-testid="perf-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">Kaydet</button>
             <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">İptal</button>
@@ -132,7 +141,7 @@ export default function Personnel() {
           <tbody className="divide-y divide-slate-700">
             {filtered.map((p) => (
               <tr key={p.id} className="h-16 hover:bg-slate-700/40">
-                <td className="px-4 font-medium">{p.first_name} {p.last_name}</td>
+                <td className="px-4 font-medium">{p.first_name} {p.last_name}<ImageHover src={p.image_url} alt={`${p.first_name} ${p.last_name}`} /></td>
                 <td className="px-4 text-slate-400">{p.department || <span className="text-slate-600">-</span>}</td>
                 <td className="px-4">
                   <div className="flex justify-end gap-2">

@@ -7,6 +7,8 @@ load_dotenv(ROOT_DIR / ".env")
 import os
 import io
 import uuid
+import base64
+import mimetypes
 import logging
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, List
@@ -25,6 +27,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
+from reportlab.lib.utils import ImageReader
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -152,6 +155,7 @@ class ProductIn(BaseModel):
     quality: Optional[str] = ""
     brand: Optional[str] = ""
     is_special: bool = False
+    image_url: Optional[str] = ""
 
 
 class QuickStockAdjustmentIn(BaseModel):
@@ -171,6 +175,7 @@ class ToolHolderIn_Model(BaseModel):
     current_stock: float = 0.0
     location: Optional[str] = ""
     note: Optional[str] = ""
+    image_url: Optional[str] = ""
 
 
 class ToolHolderStockIn(BaseModel):
@@ -198,12 +203,15 @@ class ToolHolderScrapIn(BaseModel):
     witness_personnel_id: Optional[str] = ""
     approved_by: Optional[str] = ""
     witness: Optional[str] = ""
+    before_image_url: Optional[str] = ""
+    after_image_url: Optional[str] = ""
 
 
 class PersonnelIn(BaseModel):
     first_name: str
     last_name: str
     department: Optional[str] = ""
+    image_url: Optional[str] = ""
 
 
 class MachineIn(BaseModel):
@@ -668,6 +676,20 @@ async def _next_product_code() -> str:
     return f"YZK{max_n + 1:05d}"
 
 
+# ---------- Image upload ----------
+@api.post("/images/upload")
+async def upload_image(file: UploadFile = File(...), user=Depends(require_admin)):
+    allowed = {"image/jpeg", "image/png", "image/webp"}
+    content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
+    if content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Sadece JPG, PNG veya WEBP görsel yükleyebilirsiniz")
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Görsel boyutu en fazla 5 MB olabilir")
+    encoded = base64.b64encode(content).decode("ascii")
+    return {"image_url": f"data:{content_type};base64,{encoded}", "filename": file.filename or "gorsel"}
+
+
 # ---------- Products ----------
 @api.get("/products")
 async def list_products(user=Depends(get_current_user)):
@@ -778,6 +800,47 @@ async def delete_personnel(pid: str, user=Depends(require_admin)):
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Personel bulunamadı")
     return {"ok": True}
+
+
+@api.get("/personnel/import/template")
+async def personnel_import_template(user=Depends(get_current_user)):
+    wb = Workbook(); ws = wb.active; ws.title = "Personel"
+    ws.append(["first_name", "last_name", "department", "image_url"])
+    ws.append(["Örnek", "Personel", "CNC Tornacı", ""])
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": 'attachment; filename="personel_sablonu.xlsx"'})
+
+
+@api.post("/personnel/import")
+async def personnel_import(file: UploadFile = File(...), commit: bool = False, user=Depends(require_admin)):
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Sadece .xlsx dosyası yükleyin")
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(await file.read()), data_only=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Excel dosyası okunamadı")
+    rows = list(wb.active.iter_rows(values_only=True))
+    if len(rows) < 2: raise HTTPException(status_code=400, detail="Dosyada veri yok")
+    header = [str(c).strip().lower() if c else "" for c in rows[0]]; idx = {h: i for i, h in enumerate(header) if h}
+    if "first_name" not in idx or "last_name" not in idx: raise HTTPException(status_code=400, detail="first_name ve last_name zorunludur")
+    def get(row, key):
+        i = idx.get(key); return "" if i is None or i >= len(row) or row[i] is None else str(row[i]).strip()
+    preview = []
+    for row_num, row in enumerate(rows[1:], 2):
+        first, last = get(row, "first_name"), get(row, "last_name")
+        if not first or not last: preview.append({"row": row_num, "action": "skip", "error": "Ad ve soyad zorunludur"}); continue
+        d = {"first_name": first, "last_name": last, "department": get(row, "department"), "image_url": get(row, "image_url")}
+        existing = await db.personnel.find_one({"first_name": first, "last_name": last})
+        preview.append({"row": row_num, "action": "update" if existing else "create", "data": d})
+    if not commit: return {"committed": False, "preview": preview}
+    created = updated = 0
+    for item in preview:
+        if item["action"] == "skip": continue
+        d = item["data"]
+        if item["action"] == "create": await db.personnel.insert_one({**d, "id": new_id(), "created_at": now_utc().isoformat()}); created += 1
+        else: await db.personnel.update_one({"first_name": d["first_name"], "last_name": d["last_name"]}, {"$set": d}); updated += 1
+    return {"committed": True, "created": created, "updated": updated, "preview": preview}
 
 
 # ---------- Machines ----------
@@ -1591,6 +1654,22 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         y -= 22
         if y < 100:
             pdf.showPage(); y = height - 60
+    image_rows = [("Eski Hâli / Stoktaki Görsel", scrap.get("before_image_url", "")), ("Yeni Hasarlı Hâli", scrap.get("after_image_url", ""))]
+    for caption, data_url in image_rows:
+        if not data_url or not str(data_url).startswith("data:image/"):
+            continue
+        try:
+            raw = base64.b64decode(str(data_url).split(",", 1)[1])
+            img = ImageReader(io.BytesIO(raw))
+            if y < 240:
+                pdf.showPage(); y = height - 60
+            pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
+            pdf.drawString(55, y, caption)
+            y -= 10
+            pdf.drawImage(img, 55, y - 175, width=220, height=165, preserveAspectRatio=True, anchor="sw", mask="auto")
+            y -= 195
+        except Exception:
+            continue
     y -= 15
     pdf.drawString(70, y, "Düzenleyen İmza: ____________________")
     pdf.drawString(330, y, "Onay İmza: ____________________")
@@ -1617,9 +1696,9 @@ async def toolholder_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Tutucular"
-    ws.append(["name", "brand", "cutting_tool_code_name", "type", "length", "diameter", "min_stock", "current_stock", "location", "note"])
-    ws.append(["BT40 Örnek Tutucu", "Regofix", "WNMG 080412-PM", "BT40", "120", "32", 1, 5, "Raf A-1", ""])
-    ws.append(["HSK-A63 ER32", "Big Kaiser", "ER32 pens seti", "HSK-A63", "90", "25", 1, 3, "Raf A-2", "Kısa tip"])
+    ws.append(["name", "brand", "cutting_tool_code_name", "type", "length", "diameter", "min_stock", "current_stock", "location", "note", "image_url"])
+    ws.append(["BT40 Örnek Tutucu", "Regofix", "WNMG 080412-PM", "BT40", "120", "32", 1, 5, "Raf A-1", "", ""])
+    ws.append(["HSK-A63 ER32", "Big Kaiser", "ER32 pens seti", "HSK-A63", "90", "25", 1, 3, "Raf A-2", "Kısa tip", ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1707,6 +1786,7 @@ async def toolholder_import(file: UploadFile = File(...), commit: bool = False,
             "current_stock": current_stock,
             "location": _safe_str(_get(row, "location")),
             "note": _safe_str(_get(row, "note")),
+            "image_url": _safe_str(_get(row, "image_url")),
         }
         # Match on name + brand + type (best-effort uniqueness key)
         query = {"name": d["name"]}
@@ -1978,7 +2058,7 @@ async def product_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ürünler"
-    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand"])
+    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand", "image_url"])
     ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik"])
     ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch"])
     buf = io.BytesIO()
@@ -2061,13 +2141,14 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
         location = _safe_str(_get(row, "location"))
         quality = _safe_str(_get(row, "quality"))
         brand = _safe_str(_get(row, "brand"))
+        image_url = _safe_str(_get(row, "image_url"))
         existing = await db.products.find_one({"code": code}) if code else None
         action = "update" if existing else "create"
         preview.append({
             "row": row_num, "action": action, "error": None,
             "data": {"code": code, "name": name, "category": category, "unit": unit,
                      "min_stock": min_stock, "current_stock": current_stock,
-                     "location": location, "quality": quality, "brand": brand},
+                     "location": location, "quality": quality, "brand": brand, "image_url": image_url},
         })
 
     stats = {

@@ -8,10 +8,11 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import ToolHolderImport from "@/components/ToolHolderImport";
+import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 
 const emptyForm = {
   name: "", brand: "", cutting_tool_code_name: "", type: "", length: "", diameter: "",
-  min_stock: 0, current_stock: 0, location: "", note: ""
+  min_stock: 0, current_stock: 0, location: "", note: "", image_url: ""
 };
 
 const DEFAULT_TYPES = ["BT30", "BT40", "BT50", "HSK-A63", "HSK-A100", "ER Pens Tutucu", "Shrink Fit", "Weldon", "Diğer"];
@@ -213,6 +214,7 @@ export default function TakimTutucular() {
       "Mevcut Stok": t.current_stock ?? 0,
       "Stok Durumu": Number(t.current_stock || 0) <= Number(t.min_stock || 0) ? "Kritik" : "Normal",
       "Not": t.note || "",
+      "Görsel URL": t.image_url || "",
     }));
     const worksheet = XLSX.utils.json_to_sheet(rows);
     worksheet["!cols"] = [
@@ -326,6 +328,7 @@ export default function TakimTutucular() {
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Mevcut Stok</label>
             <input type="number" step="1" min="0" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} data-testid="th-f-current" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3 font-mono-tab" />
           </div>
+          <div className="md:col-span-3"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Takım tutucu görseli" /></div>
           <div className="md:col-span-3 flex gap-3">
               <button type="submit" data-testid="th-f-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">{editId ? "Mevcut Tutucuyu Güncelle" : "Yeni Tutucu Kaydet"}</button>
             <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">İptal</button>
@@ -354,7 +357,7 @@ export default function TakimTutucular() {
                 const crit = t.current_stock <= t.min_stock;
                 return (
                   <tr key={t.id} data-testid={`th-row-${t.id}`} className={`h-16 hover:bg-slate-700/40 ${crit ? "bg-red-950/20" : ""}`}>
-                    <td className="px-4 font-medium">{t.name}</td>
+                    <td className="px-4 font-medium">{t.name}<ImageHover src={t.image_url} alt={t.name} /></td>
                     <td className="px-4 text-slate-300">{t.brand || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-slate-300">{t.cutting_tool_code_name || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-slate-300">{t.type || <span className="text-slate-600">-</span>}</td>

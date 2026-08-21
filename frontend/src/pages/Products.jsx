@@ -4,9 +4,10 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Minus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } from "lucide-react";
 import ProductImport from "@/components/ProductImport";
+import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 import { useAuth } from "@/context/AuthContext";
 
-const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", is_special: false };
+const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", is_special: false, image_url: "" };
 const DEFAULT_CATS = ["Kesici Uç", "Matkap", "Kater", "Apparat", "Ölçüm Aleti", "Diğer"];
 const CATS_STORAGE_KEY = "cnc_extra_categories";
 
@@ -47,6 +48,7 @@ export default function Products() {
       "Mevcut Stok": p.current_stock ?? 0,
       "Bilemede": p.in_sharpening ?? 0,
       "Özel Takım": p.is_special ? "Evet" : "Hayır",
+      "Görsel URL": p.image_url || "",
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -58,7 +60,7 @@ export default function Products() {
 
   const downloadImportTemplate = () => {
     const rows = [
-      { code: "", name: "Örnek Kesici Uç", category: "Kesici Uç", unit: "adet", brand: "Örnek Marka", quality: "P25", location: "A-01", min_stock: 2, current_stock: 10, is_special: "Hayır" },
+      { code: "", name: "Örnek Kesici Uç", category: "Kesici Uç", unit: "adet", brand: "Örnek Marka", quality: "P25", location: "A-01", min_stock: 2, current_stock: 10, is_special: "Hayır", image_url: "Görsel URL veya data:image/..." },
       { code: "MEVCUT_ÜRÜN_KODU", name: "Mevcut ürüne stok ekleme", category: "Kesici Uç", unit: "adet", brand: "Aynı marka", quality: "Aynı kalite", location: "", min_stock: "", current_stock: 5, is_special: "Hayır" },
     ];
     const worksheet = XLSX.utils.json_to_sheet(rows); const workbook = XLSX.utils.book_new();
@@ -266,6 +268,7 @@ export default function Products() {
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Mevcut Stok</label>
             <input type="number" step="0.01" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} data-testid="pf-current" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3 font-mono-tab" />
           </div>
+          <div className="md:col-span-3"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Ürün görseli" /></div>
           <div className="md:col-span-3">
             <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 bg-slate-950 hover:border-blue-500/50 cursor-pointer select-none">
               <input type="checkbox" checked={!!form.is_special}
@@ -308,7 +311,7 @@ export default function Products() {
                     <td className="px-4 font-mono-tab font-semibold text-slate-300">{p.code}</td>
                     <td className="px-4 font-medium">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span>{p.name}</span>
+                        <span>{p.name}</span><ImageHover src={p.image_url} alt={p.name} />
                         {p.is_special && (
                           <span data-testid={`product-special-badge-${p.code}`} className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/40 rounded px-1.5 py-0.5">
                             Özel Takım
