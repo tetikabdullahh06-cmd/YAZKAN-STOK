@@ -761,10 +761,12 @@ async def apply_category_image(body: dict, user=Depends(require_admin)):
         raise HTTPException(status_code=500, detail="Kılavuz görseli sunucuda bulunamadı")
     encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
     image_url = f"data:image/jpeg;base64,{encoded}"
-    products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
+    products = await db.products.find({}, {"id": 1, "category": 1, "image_url": 1}).to_list(5000)
     ids = [
         p.get("id") for p in products
-        if p.get("id") and "kilavuz" in _category_key(p.get("category", ""))
+        if p.get("id")
+        and category_match in _category_key(p.get("category", ""))
+        and not p.get("image_url")
     ]
     if ids:
         result = await db.products.update_many({"id": {"$in": ids}}, {"$set": {"image_url": image_url}})

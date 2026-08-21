@@ -29,18 +29,14 @@ export default function Products() {
   const [quickStock, setQuickStock] = useState({ productId: "", direction: "in", quantity: "", note: "" });
 
   const load = async () => {
-    // Admin oturumunda Kılavuz kategorisinin mevcut kayıtlarına görseli doğrudan yaz.
+    // Kategori görsel kontrolleri arka planda sessiz çalışır; sayfa açılışında bildirim gösterilmez.
     try {
-      const applied = await api.post("/products/apply-category-image", { category: "Kılavuz" });
-      const count = Number(applied.data?.updated || 0);
-      if (count > 0) toast.success(`Kılavuz görseli ${count} ürüne uygulandı`);
-      else if (Number(applied.data?.matched || 0) === 0) toast.warning("Kılavuz kategorisinde eşleşen ürün bulunamadı");
-      const tline = await api.post("/products/apply-category-image", { category: "T-LİNE Matkap" });
-      const tlineCount = Number(tline.data?.updated || 0);
-      if (tlineCount > 0) toast.success(`T-LİNE Matkap görseli ${tlineCount} ürüne uygulandı`);
-      else if (Number(tline.data?.matched || 0) === 0) toast.warning("T-LİNE Matkap kategorisinde eşleşen ürün bulunamadı");
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Kılavuz görseli uygulanamadı");
+      await Promise.all([
+        api.post("/products/apply-category-image", { category: "Kılavuz" }),
+        api.post("/products/apply-category-image", { category: "T-LİNE Matkap" }),
+      ]);
+    } catch (_) {
+      // Görsel migration hatası ürün listesinin açılmasını engellemez.
     }
     const r = await api.get("/products");
     setItems(r.data);
