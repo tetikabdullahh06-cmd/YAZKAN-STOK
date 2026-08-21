@@ -94,7 +94,7 @@ export default function Layout() {
           <button
             onClick={async () => { await logout(); navigate("/giris"); }}
             data-testid="logout-btn"
-            className="w-full h-12 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 flex items-center justify-center gap-2 transition-colors"
+            className="w-full h-12 rounded-lg !bg-slate-800 hover:!bg-slate-700 !text-white border border-slate-600 flex items-center justify-center gap-2 transition-colors font-bold opacity-100"
           >
             <LogOut className="w-4 h-4" /> Çıkış Yap
           </button>
@@ -132,17 +132,6 @@ export default function Layout() {
           )}
           <Outlet />
         </div>
-        {showBackToTop && (
-          <button
-            type="button"
-            onClick={backToTop}
-            aria-label="Başa dön"
-            data-testid="back-to-top"
-            className="fixed right-6 bottom-20 md:bottom-8 z-[60] inline-flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 font-black shadow-xl shadow-blue-900/30 transition-all"
-          >
-            <ArrowUp className="w-5 h-5" /> Başa Dön
-          </button>
-        )}
         {/* Mobile bottom nav */}
         <div className="md:hidden fixed bottom-0 inset-x-0 app-mobile-nav border-t grid grid-cols-5 z-20">
           {nav.slice(0, 5).map((n) => (
@@ -162,6 +151,17 @@ export default function Layout() {
           ))}
         </div>
       </main>
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={backToTop}
+          aria-label="Başa dön"
+          data-testid="back-to-top"
+          className="fixed right-6 bottom-6 z-[9999] inline-flex items-center gap-2 rounded-full !bg-blue-600 hover:!bg-blue-500 !text-white border border-blue-300 px-4 py-3 font-black shadow-2xl shadow-blue-900/40 opacity-100"
+        >
+          <ArrowUp className="w-5 h-5" /> Başa Dön
+        </button>
+      )}
     </div>
   );
 }
