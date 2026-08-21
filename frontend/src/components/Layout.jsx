@@ -74,7 +74,7 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 relative z-[100]">
           <div className="px-3 py-2 mb-2">
             <div className="flex items-center gap-2 mb-1">
               <div className="text-xs text-slate-500 uppercase tracking-widest">Oturum</div>
@@ -94,7 +94,8 @@ export default function Layout() {
           <button
             onClick={async () => { await logout(); navigate("/giris"); }}
             data-testid="logout-btn"
-            className="w-full h-12 rounded-lg !bg-slate-800 hover:!bg-slate-700 !text-white border border-slate-600 flex items-center justify-center gap-2 transition-colors font-bold opacity-100"
+            style={{ backgroundColor: "#0f172a", color: "#ffffff", minHeight: 48, display: "flex", width: "100%", visibility: "visible", opacity: 1, position: "relative", zIndex: 100 }}
+            className="w-full h-12 rounded-lg border border-slate-500 flex items-center justify-center gap-2 transition-colors font-bold"
           >
             <LogOut className="w-4 h-4" /> Çıkış Yap
           </button>
