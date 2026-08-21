@@ -29,7 +29,14 @@ export default function Products() {
 
   const load = async () => {
     // Admin oturumunda Kılavuz kategorisinin mevcut kayıtlarına görseli doğrudan yaz.
-    try { await api.post("/products/apply-category-image", { category: "Kılavuz" }); } catch (_) {}
+    try {
+      const applied = await api.post("/products/apply-category-image", { category: "Kılavuz" });
+      const count = Number(applied.data?.updated || 0);
+      if (count > 0) toast.success(`Kılavuz görseli ${count} ürüne uygulandı`);
+      else if (Number(applied.data?.matched || 0) === 0) toast.warning("Kılavuz kategorisinde eşleşen ürün bulunamadı");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Kılavuz görseli uygulanamadı");
+    }
     const r = await api.get("/products");
     setItems(r.data);
   };
