@@ -29,15 +29,6 @@ export default function Products() {
   const [quickStock, setQuickStock] = useState({ productId: "", direction: "in", quantity: "", note: "" });
 
   const load = async () => {
-    // Kategori görsel kontrolleri arka planda sessiz çalışır; sayfa açılışında bildirim gösterilmez.
-    try {
-      await Promise.all([
-        api.post("/products/apply-category-image", { category: "Kılavuz" }),
-        api.post("/products/apply-category-image", { category: "T-LİNE Matkap" }),
-      ]);
-    } catch (_) {
-      // Görsel migration hatası ürün listesinin açılmasını engellemez.
-    }
     const r = await api.get("/products");
     setItems(r.data);
   };
