@@ -6,8 +6,11 @@ load_dotenv(ROOT_DIR / ".env")
 
 # Türkçe kategori metinlerini büyük/küçük harf ve aksan farklarından bağımsız karşılaştır.
 def _category_key(value):
-    text = " ".join(str(value or "").split()).casefold()
-    return text.translate(str.maketrans({"ü": "u", "ö": "o", "ı": "i", "ş": "s", "ğ": "g", "ç": "c"}))
+    text = unicodedata.normalize("NFKD", str(value or "").casefold())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.translate(str.maketrans({"ı": "i"}))
+    text = "".join(ch if ch.isalnum() else " " for ch in text)
+    return " ".join(text.split())
 
 
 import os
@@ -16,6 +19,7 @@ import uuid
 import base64
 import mimetypes
 import logging
+import unicodedata
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, List
 from zoneinfo import ZoneInfo
@@ -745,9 +749,14 @@ async def upload_image(file: UploadFile = File(...), user=Depends(require_admin)
 @api.post("/products/apply-category-image")
 async def apply_category_image(body: dict, user=Depends(require_admin)):
     category_key = _category_key(body.get("category", ""))
-    if category_key != "kilavuz":
-        raise HTTPException(status_code=400, detail="Bu işlem yalnızca Kılavuz kategorisi için kullanılabilir")
-    image_path = ROOT_DIR / "assets" / "kilavuz.jpg"
+    asset_map = {
+        "kilavuz": ("kilavuz", "kilavuz.jpg"),
+        "t line matkap": ("t-line matkap", "tline.jpg"),
+    }
+    if category_key not in asset_map:
+        raise HTTPException(status_code=400, detail="Desteklenmeyen kategori görseli")
+    category_match, asset_name = asset_map[category_key]
+    image_path = ROOT_DIR / "assets" / asset_name
     if not image_path.exists():
         raise HTTPException(status_code=500, detail="Kılavuz görseli sunucuda bulunamadı")
     encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
@@ -799,6 +808,17 @@ async def list_products(user=Depends(get_current_user)):
         ]
         if guide_ids:
             await db.products.update_many({"id": {"$in": guide_ids}}, {"$set": {"image_url": guide_url}})
+    tline_image_path = ROOT_DIR / "assets" / "tline.jpg"
+    if tline_image_path.exists():
+        tline_data = base64.b64encode(tline_image_path.read_bytes()).decode("ascii")
+        tline_url = f"data:image/jpeg;base64,{tline_data}"
+        all_products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
+        tline_ids = [
+            item.get("id") for item in all_products
+            if item.get("id") and "t line matkap" in _category_key(item.get("category", ""))
+        ]
+        if tline_ids:
+            await db.products.update_many({"id": {"$in": tline_ids}}, {"$set": {"image_url": tline_url}})
     products = await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
     sharpening_totals = {}
     open_records = await db.sharpening_records.find({"status": {"$in": ["sent", "partial"]}}, {"_id": 0, "product_id": 1, "quantity": 1, "returned_quantity": 1, "remaining_quantity": 1}).to_list(5000)

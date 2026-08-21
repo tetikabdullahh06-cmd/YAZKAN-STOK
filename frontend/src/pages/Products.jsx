@@ -34,6 +34,10 @@ export default function Products() {
       const count = Number(applied.data?.updated || 0);
       if (count > 0) toast.success(`Kılavuz görseli ${count} ürüne uygulandı`);
       else if (Number(applied.data?.matched || 0) === 0) toast.warning("Kılavuz kategorisinde eşleşen ürün bulunamadı");
+      const tline = await api.post("/products/apply-category-image", { category: "T-LİNE Matkap" });
+      const tlineCount = Number(tline.data?.updated || 0);
+      if (tlineCount > 0) toast.success(`T-LİNE Matkap görseli ${tlineCount} ürüne uygulandı`);
+      else if (Number(tline.data?.matched || 0) === 0) toast.warning("T-LİNE Matkap kategorisinde eşleşen ürün bulunamadı");
     } catch (e) {
       toast.error(e.response?.data?.detail || "Kılavuz görseli uygulanamadı");
     }
