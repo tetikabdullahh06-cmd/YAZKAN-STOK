@@ -4,6 +4,12 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
+# Türkçe kategori metinlerini büyük/küçük harf ve aksan farklarından bağımsız karşılaştır.
+def _category_key(value):
+    text = " ".join(str(value or "").split()).casefold()
+    return text.translate(str.maketrans({"ü": "u", "ö": "o", "ı": "i", "ş": "s", "ğ": "g", "ç": "c"}))
+
+
 import os
 import io
 import uuid
@@ -459,8 +465,8 @@ async def startup():
         # Kategori alanı önceliklidir; boşluk/büyük-küçük harf farklarını tolere et.
         matched_ids = []
         for product in matching:
-            category = " ".join(str(product.get("category", "")).split()).casefold()
-            searchable = " ".join(str(product.get(k, "")) for k in ("name", "category", "brand")).casefold()
+            category = _category_key(product.get("category", ""))
+            searchable = _category_key(" ".join(str(product.get(k, "")) for k in ("name", "category", "brand")))
             if "parmak freze" in category or "parmak freze" in searchable:
                 matched_ids.append(product["id"])
         if matched_ids:
@@ -475,7 +481,7 @@ async def startup():
         carbide_products = await db.products.find({}).to_list(5000)
         carbide_ids = [
             product["id"] for product in carbide_products
-            if "karbür matkap" in " ".join(str(product.get(k, "")) for k in ("name", "category", "brand")).casefold()
+            if "karbur matkap" in _category_key(product.get("category", ""))
         ]
         if carbide_ids:
             await db.products.update_many({"id": {"$in": carbide_ids}}, {"$set": {"image_url": carbide_url}})
@@ -738,8 +744,13 @@ async def list_products(user=Depends(get_current_user)):
     if carbide_image_path.exists():
         carbide_data = base64.b64encode(carbide_image_path.read_bytes()).decode("ascii")
         carbide_url = f"data:image/jpeg;base64,{carbide_data}"
-        carbide_matches = await db.products.find({"category": {"$regex": "karbür matkap", "$options": "i"}}, {"id": 1}).to_list(5000)
-        carbide_ids = [item.get("id") for item in carbide_matches if item.get("id")]
+        # Mongo regex Türkçe Ü/ü durumlarında güvenilir olmayabildiğinden
+        # kategori kayıtlarını Python tarafında normalize ederek eşleştir.
+        all_products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
+        carbide_ids = [
+            item.get("id") for item in all_products
+            if item.get("id") and "karbur matkap" in _category_key(item.get("category", ""))
+        ]
         if carbide_ids:
             await db.products.update_many({"id": {"$in": carbide_ids}}, {"$set": {"image_url": carbide_url}})
     products = await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
