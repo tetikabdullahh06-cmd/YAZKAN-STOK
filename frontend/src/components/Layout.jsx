@@ -1,7 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
-  LayoutDashboard, Package, Users, Settings2, ArrowDownToLine,
+  LayoutDashboard, Package, Users, Settings2, ArrowDownToLine, ArrowUp,
   ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench,
   Building2, ClipboardList, Eye, ShieldCheck, Cog, BarChart3, Cable, PackageX
 } from "lucide-react";
@@ -30,7 +31,19 @@ const NAV = [
 export default function Layout() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
+  const mainRef = useRef(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const nav = NAV.filter((n) => !n.adminOnly || isAdmin);
+
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return undefined;
+    const onScroll = () => setShowBackToTop(main.scrollTop > 320);
+    main.addEventListener("scroll", onScroll, { passive: true });
+    return () => main.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const backToTop = () => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
 
   return (
     <div className="min-h-screen flex app-shell grain">
@@ -111,7 +124,7 @@ export default function Layout() {
         </button>
       </div>
 
-      <main className="flex-1 overflow-auto relative z-10 pt-14 md:pt-0">
+      <main ref={mainRef} className="flex-1 overflow-auto relative z-10 pt-14 md:pt-0">
         <div className="p-4 md:p-8 lg:p-12 max-w-[1600px]">
           {!isAdmin && (
             <div data-testid="viewer-banner" className="mb-6 flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-xl px-4 py-3">
@@ -124,6 +137,17 @@ export default function Layout() {
           )}
           <Outlet />
         </div>
+        {showBackToTop && (
+          <button
+            type="button"
+            onClick={backToTop}
+            aria-label="Başa dön"
+            data-testid="back-to-top"
+            className="fixed right-6 bottom-6 md:bottom-8 z-30 inline-flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 font-black shadow-xl shadow-blue-900/30 transition-all"
+          >
+            <ArrowUp className="w-5 h-5" /> Başa Dön
+          </button>
+        )}
         {/* Mobile bottom nav */}
         <div className="md:hidden fixed bottom-0 inset-x-0 app-mobile-nav border-t grid grid-cols-5 z-20">
           {nav.slice(0, 5).map((n) => (
