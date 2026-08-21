@@ -48,6 +48,7 @@ export default function Sharpening() {
   const [newReturnProduct, setNewReturnProduct] = useState({ code: "", name: "", category: "Kesici Uç", unit: "adet", brand: "", quality: "", location: "" });
   const [editingRecord, setEditingRecord] = useState(null);
   const [editingSection, setEditingSection] = useState("");
+  const [exportDate, setExportDate] = useState(today());
 
   const load = async () => {
     setLoading(true);
@@ -75,8 +76,15 @@ export default function Sharpening() {
     return products.filter((p) => `${p.code} ${p.name} ${p.brand || ""} ${p.quality || ""} ${p.category || ""}`.toLowerCase().includes(q));
   }, [products, returnProductSearch]);
 
-  const exportExcel = () => {
-    const rows = records.map((r) => ({
+  const exportExcel = (allRecords = false) => {
+    const exportRecords = allRecords
+      ? records
+      : records.filter((r) => String(r.sent_date || r.created_at || "").slice(0, 10) === exportDate);
+    if (!exportRecords.length) {
+      toast.info(allRecords ? "Dışa aktarılacak kayıt bulunamadı" : `${exportDate} tarihinde bileme kaydı bulunamadı`);
+      return;
+    }
+    const rows = exportRecords.map((r) => ({
       "Hareket Tipi": r.status === "returned" ? "gelen" : "giden",
       "Ürün Kodu": r.product_code || "",
       "Ürün Adı": r.product_name || "",
@@ -102,8 +110,8 @@ export default function Sharpening() {
     }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Bileme Kayıtları");
-    XLSX.writeFile(wb, `bileme-kayitlari-${today()}.xlsx`);
-    toast.success(`${rows.length} bileme kaydı Excel'e aktarıldı`);
+    XLSX.writeFile(wb, allRecords ? `bileme-tum-kayitlar-${today()}.xlsx` : `bileme-kayitlari-${exportDate}.xlsx`);
+    toast.success(allRecords ? `${rows.length} tüm bileme kaydı Excel'e aktarıldı` : `${exportDate} tarihli ${rows.length} bileme kaydı Excel'e aktarıldı`);
   };
   const downloadTemplate = () => {
     const rows = [
@@ -209,7 +217,7 @@ export default function Sharpening() {
           <h1 className="font-display text-4xl font-black">Bilemeye Gidenler / Bilemeden Gelenler</h1>
           <p className="text-slate-400 mt-2">Bilemeye gönderilen ürünleri stoktan düşürün, geri gelenleri irsaliye bilgisiyle tekrar stoğa alın.</p>
         </div>
-          <div className="flex gap-2 flex-wrap"><button onClick={downloadTemplate} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-200"><FileSpreadsheet className="w-4 h-4" /> Örnek Şablon</button><button onClick={exportExcel} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Dışa Aktar</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white cursor-pointer"><Upload className="w-4 h-4" /> İçe Aktar<input type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden" /></label><button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button></div>
+          <div className="flex gap-2 flex-wrap items-center"><label className="flex items-center gap-2 h-11 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 text-sm font-semibold">Gün seçin<input type="date" value={exportDate} onChange={(e) => setExportDate(e.target.value)} className="h-8 rounded bg-slate-950 border border-slate-600 px-2 text-slate-100" /></label><button onClick={() => exportExcel(false)} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Seçilen Günü Excel'e Aktar</button><button onClick={() => exportExcel(true)} className="h-11 px-4 rounded-lg bg-teal-700 hover:bg-teal-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Tüm Kayıtları Aktar</button><button onClick={downloadTemplate} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-200"><FileSpreadsheet className="w-4 h-4" /> Örnek Şablon</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white cursor-pointer"><Upload className="w-4 h-4" /> İçe Aktar<input type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden" /></label><button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
