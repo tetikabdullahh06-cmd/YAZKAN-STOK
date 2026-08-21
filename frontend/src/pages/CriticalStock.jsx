@@ -25,14 +25,19 @@ export default function CriticalStock() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {items.map((p) => (
-            <div key={p.id} data-testid={`critical-${p.code}`} className="bg-red-950/30 border border-red-800/50 rounded-2xl p-6 flex items-start justify-between gap-4">
+            <div key={p.id} data-testid={`critical-${p.code}`} className="bg-slate-800/70 border border-slate-700 rounded-2xl p-6 flex items-start justify-between gap-4 shadow-sm">
               <div className="flex-1 min-w-0">
-                <div className="font-mono-tab text-xs text-red-300 uppercase tracking-widest">{p.code} • {p.category}</div>
-                <div className="font-display text-xl font-bold mt-1 truncate">{p.name}</div>
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <span className="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-1 text-xs font-black tracking-wider text-white shadow-sm">
+                    <AlertTriangle className="w-3.5 h-3.5" /> KRİTİK STOK
+                  </span>
+                  <span className="font-mono-tab text-xs text-slate-400 uppercase tracking-widest">{p.code} • {p.category}</span>
+                </div>
+                <div className="font-display text-xl font-bold mt-1 truncate text-white">{p.name}</div>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <div className="text-3xl font-black text-red-400 font-mono-tab">{p.current_stock}</div>
-                <div className="text-xs text-slate-500 uppercase tracking-widest">/ min {p.min_stock} {p.unit}</div>
+                <div className="text-xs text-slate-400 uppercase tracking-widest">/ min {p.min_stock} {p.unit}</div>
               </div>
             </div>
           ))}
