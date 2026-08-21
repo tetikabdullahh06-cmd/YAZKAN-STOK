@@ -17,6 +17,8 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
   const imageColumn = headers.indexOf(imageKey);
   if (imageColumn >= 0) {
     rows.forEach((row, index) => {
+      const imageCell = worksheet.getCell(index + 2, imageColumn + 1);
+      imageCell.value = null;
       const imageUrl = String(row[imageSourceKey] || "");
       if (!imageUrl.startsWith("data:image/")) return;
       const extension = imageUrl.startsWith("data:image/png") ? "png" : "jpeg";
