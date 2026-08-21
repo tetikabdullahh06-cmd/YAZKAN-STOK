@@ -487,6 +487,20 @@ async def startup():
             await db.products.update_many({"id": {"$in": carbide_ids}}, {"$set": {"image_url": carbide_url}})
             logger.info(f"Karbür Matkap görseli uygulandı: {len(carbide_ids)} ürün")
 
+    # Kılavuz kategorisindeki tüm ürünlere ortak görseli uygula.
+    guide_image_path = ROOT_DIR / "assets" / "kilavuz.jpg"
+    if guide_image_path.exists():
+        guide_data = base64.b64encode(guide_image_path.read_bytes()).decode("ascii")
+        guide_url = f"data:image/jpeg;base64,{guide_data}"
+        guide_products = await db.products.find({}).to_list(5000)
+        guide_ids = [
+            product["id"] for product in guide_products
+            if "kilavuz" in _category_key(product.get("category", ""))
+        ]
+        if guide_ids:
+            await db.products.update_many({"id": {"$in": guide_ids}}, {"$set": {"image_url": guide_url}})
+            logger.info(f"Kılavuz görseli uygulandı: {len(guide_ids)} ürün")
+
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -753,6 +767,17 @@ async def list_products(user=Depends(get_current_user)):
         ]
         if carbide_ids:
             await db.products.update_many({"id": {"$in": carbide_ids}}, {"$set": {"image_url": carbide_url}})
+    guide_image_path = ROOT_DIR / "assets" / "kilavuz.jpg"
+    if guide_image_path.exists():
+        guide_data = base64.b64encode(guide_image_path.read_bytes()).decode("ascii")
+        guide_url = f"data:image/jpeg;base64,{guide_data}"
+        all_products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
+        guide_ids = [
+            item.get("id") for item in all_products
+            if item.get("id") and "kilavuz" in _category_key(item.get("category", ""))
+        ]
+        if guide_ids:
+            await db.products.update_many({"id": {"$in": guide_ids}}, {"$set": {"image_url": guide_url}})
     products = await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
     sharpening_totals = {}
     open_records = await db.sharpening_records.find({"status": {"$in": ["sent", "partial"]}}, {"_id": 0, "product_id": 1, "quantity": 1, "returned_quantity": 1, "remaining_quantity": 1}).to_list(5000)
