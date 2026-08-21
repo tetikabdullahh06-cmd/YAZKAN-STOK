@@ -450,6 +450,17 @@ async def startup():
                                                    "at": now_utc().isoformat()}},
                                          upsert=True)
 
+    # Apply the supplied common image to all existing Parmak Freze products.
+    parmak_image_path = ROOT_DIR / "assets" / "parmakfreze.jpg"
+    if parmak_image_path.exists():
+        image_data = base64.b64encode(parmak_image_path.read_bytes()).decode("ascii")
+        image_url = f"data:image/jpeg;base64,{image_data}"
+        matching = await db.products.find({}).to_list(5000)
+        matched_ids = [p["id"] for p in matching if "parmak freze" in " ".join(str(p.get(k, "")) for k in ("name", "category", "brand")).casefold()]
+        if matched_ids:
+            await db.products.update_many({"id": {"$in": matched_ids}}, {"$set": {"image_url": image_url}})
+            logger.info(f"Parmak Freze görseli uygulandı: {len(matched_ids)} ürün")
+
 
 @app.on_event("shutdown")
 async def shutdown():
