@@ -193,6 +193,9 @@ class ToolHolderScrapIn(BaseModel):
     description: Optional[str] = ""
     scrap_date: str
     location: Optional[str] = ""
+    operator_personnel_id: Optional[str] = ""
+    approver_personnel_id: Optional[str] = ""
+    witness_personnel_id: Optional[str] = ""
     approved_by: Optional[str] = ""
     witness: Optional[str] = ""
 
@@ -1458,6 +1461,14 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
     if not body.scrap_reason.strip():
         raise HTTPException(status_code=400, detail="Hurda nedeni zorunludur")
     new_stock = round(float(holder.get("current_stock", 0)) - body.quantity, 6)
+    async def personnel_name(pid: str) -> str:
+        if not pid:
+            return ""
+        person = await db.personnel.find_one({"id": pid})
+        return f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else ""
+    operator_name = await personnel_name(body.operator_personnel_id or "") or user.get("name", "")
+    approver_name = await personnel_name(body.approver_personnel_id or "") or body.approved_by or ""
+    witness_name = await personnel_name(body.witness_personnel_id or "") or body.witness or ""
     now = now_utc().isoformat()
     doc = {
         "id": new_id(), "tool_holder_id": holder["id"], "name": holder.get("name", ""),
@@ -1466,8 +1477,10 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
         "length": holder.get("length", ""), "diameter": holder.get("diameter", ""),
         "quantity": body.quantity, "unit": "adet", "scrap_reason": body.scrap_reason.strip(),
         "description": body.description or "", "scrap_date": body.scrap_date,
-        "location": body.location or holder.get("location", ""), "approved_by": body.approved_by or "",
-        "witness": body.witness or "", "user_id": user["id"], "user_name": user.get("name", ""),
+        "location": body.location or holder.get("location", ""), "approved_by": approver_name,
+        "witness": witness_name, "operator_personnel_id": body.operator_personnel_id or "",
+        "approver_personnel_id": body.approver_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "",
+        "operator_name": operator_name, "user_id": user["id"], "user_name": user.get("name", ""),
         "created_at": now, "new_stock": new_stock,
     }
     await db.toolholders.update_one({"id": tid}, {"$set": {"current_stock": new_stock}})
@@ -1478,6 +1491,67 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
         "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now,
     })
     return {"ok": True, "new_stock": new_stock, "scrap": clean(doc)}
+
+
+@api.put("/toolholder-scraps/{scrap_id}")
+async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=Depends(require_admin)):
+    record = await db.toolholder_scraps.find_one({"id": scrap_id})
+    if not record:
+        raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    if body.quantity <= 0 or not body.scrap_reason.strip():
+        raise HTTPException(status_code=400, detail="Miktar ve hurda nedeni zorunludur")
+    holder = await db.toolholders.find_one({"id": record["tool_holder_id"]})
+    if not holder:
+        raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
+    old_qty = float(record.get("quantity", 0))
+    current_stock = float(holder.get("current_stock", 0))
+    new_stock = round(current_stock + old_qty - body.quantity, 6)
+    if new_stock < 0:
+        raise HTTPException(status_code=400, detail="Bu düzeltme stok miktarını eksiye düşürüyor")
+    async def personnel_name(pid: str) -> str:
+        if not pid:
+            return ""
+        person = await db.personnel.find_one({"id": pid})
+        return f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else ""
+    operator_name = await personnel_name(body.operator_personnel_id or "") or record.get("operator_name", "") or user.get("name", "")
+    approver_name = await personnel_name(body.approver_personnel_id or "") or body.approved_by or ""
+    witness_name = await personnel_name(body.witness_personnel_id or "") or body.witness or ""
+    update = {
+        "quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "description": body.description or "",
+        "scrap_date": body.scrap_date, "location": body.location or holder.get("location", ""),
+        "operator_personnel_id": body.operator_personnel_id or "", "approver_personnel_id": body.approver_personnel_id or "",
+        "witness_personnel_id": body.witness_personnel_id or "", "operator_name": operator_name,
+        "approved_by": approver_name, "witness": witness_name, "new_stock": new_stock,
+        "updated_at": now_utc().isoformat(), "updated_by": user.get("name", ""),
+    }
+    await db.toolholders.update_one({"id": holder["id"]}, {"$set": {"current_stock": new_stock}})
+    await db.toolholder_scraps.update_one({"id": scrap_id}, {"$set": update})
+    await db.toolholder_movements.insert_one({
+        "id": new_id(), "type": "scrap_adjustment", "tool_holder_id": holder["id"], "name": holder.get("name", ""),
+        "quantity": round(body.quantity - old_qty, 6), "note": "Hurda kaydı düzeltildi", "scrap_id": scrap_id,
+        "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat(),
+    })
+    updated = await db.toolholder_scraps.find_one({"id": scrap_id}, {"_id": 0})
+    return {"ok": True, "new_stock": new_stock, "scrap": updated}
+
+
+@api.delete("/toolholder-scraps/{scrap_id}")
+async def delete_toolholder_scrap(scrap_id: str, user=Depends(require_admin)):
+    record = await db.toolholder_scraps.find_one({"id": scrap_id})
+    if not record:
+        raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    holder = await db.toolholders.find_one({"id": record["tool_holder_id"]})
+    if not holder:
+        raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
+    new_stock = round(float(holder.get("current_stock", 0)) + float(record.get("quantity", 0)), 6)
+    await db.toolholders.update_one({"id": holder["id"]}, {"$set": {"current_stock": new_stock}})
+    await db.toolholder_scraps.delete_one({"id": scrap_id})
+    await db.toolholder_movements.insert_one({
+        "id": new_id(), "type": "scrap_cancel", "tool_holder_id": holder["id"], "name": holder.get("name", ""),
+        "quantity": record.get("quantity", 0), "note": "Hurda kaydı silindi; stok geri eklendi", "scrap_id": scrap_id,
+        "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat(),
+    })
+    return {"ok": True, "new_stock": new_stock}
 
 
 @api.get("/toolholder-scraps/{scrap_id}/pdf")
