@@ -751,7 +751,7 @@ async def apply_category_image(body: dict, user=Depends(require_admin)):
     category_key = _category_key(body.get("category", ""))
     asset_map = {
         "kilavuz": ("kilavuz", "kilavuz.jpg"),
-        "t line matkap": ("t-line matkap", "tline.jpg"),
+        "t line matkap": ("t line matkap", "tline.jpg"),
     }
     if category_key not in asset_map:
         raise HTTPException(status_code=400, detail="Desteklenmeyen kategori görseli")
