@@ -1461,21 +1461,47 @@ async def report_excel(user=Depends(get_current_user),
                        date_from: Optional[str] = None, date_to: Optional[str] = None):
     q = _date_query(date_from, date_to)
     movements = await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    # Bilemeye gönderilen kayıtlar ayrı koleksiyonda tutulduğu için raporun
+    # Hareketler sayfasına açıklayıcı bir hareket satırı olarak eklenir.
+    sharpening_records = await db.sharpening_records.find(q, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    for sr in sharpening_records:
+        movements.append({
+            "created_at": sr.get("created_at", ""),
+            "transaction_date": sr.get("sent_date", ""),
+            "type": "out",
+            "product_code": sr.get("product_code", ""),
+            "product_name": sr.get("product_name", ""),
+            "quantity": sr.get("quantity", 0),
+            "personnel_name": sr.get("sent_by", ""),
+            "machine_name": "",
+            "production_product": "",
+            "supplier": sr.get("company", ""),
+            "note": sr.get("note", ""),
+            "user_name": sr.get("sent_by", ""),
+            "sharpening_record_id": sr.get("id", ""),
+            "movement_purpose": "Bilemeye gitti",
+            "destination": sr.get("company", ""),
+            "process_type": sr.get("process_type", ""),
+            "helix_length": sr.get("helix_length", ""),
+            "diameter": sr.get("diameter", ""),
+            "full_length": sr.get("full_length", ""),
+        })
 
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Hareketler"
-    ws1.append(["Tarih", "Tip", "İşlem / Amaç", "Ürün Kodu", "Ürün Adı", "Miktar",
-                "Personel", "Tezgah", "Üretim / İşlenen Ürün", "Tedarikçi", "Not", "Kullanıcı"])
+    ws1.append(["Tarih", "Tip", "İşlem / Amaç", "Çıkış / Hedef", "Bileme İşlemi", "Ürün Kodu", "Ürün Adı", "Miktar",
+                "Personel", "Tezgah", "Üretim / İşlenen Ürün", "Helis", "Çap", "Tam Boy", "Tedarikçi", "Not", "Kullanıcı"])
     for m in movements:
         ws1.append([
             m.get("transaction_date") or m.get("created_at", "")[:19].replace("T", " "),
             "GİRİŞ" if m.get("type") == "in" else "ÇIKIŞ",
-            "Bilemeye gönderildi" if m.get("sharpening_record_id") else ("Stok girişi" if m.get("type") == "in" else "Üretimde kullanım"),
-            m.get("product_code", ""), m.get("product_name", ""),
-            m.get("quantity", 0),
-            m.get("personnel_name", ""), m.get("machine_name", ""),
-            m.get("production_product", ""), m.get("supplier", ""), m.get("note", ""), m.get("user_name", ""),
+            m.get("movement_purpose") or ("Bilemeye gitti" if m.get("sharpening_record_id") else ("Stok girişi" if m.get("type") == "in" else ("İşleme için verildi" if m.get("machine_name") else "Üretimde kullanım"))),
+            m.get("destination") or (m.get("machine_name", "") if m.get("type") == "out" else m.get("supplier", "")),
+            m.get("process_type", ""), m.get("product_code", ""), m.get("product_name", ""),
+            m.get("quantity", 0), m.get("personnel_name", ""), m.get("machine_name", ""),
+            m.get("production_product", ""), m.get("helix_length", ""), m.get("diameter", ""), m.get("full_length", ""),
+            m.get("supplier", ""), m.get("note", ""), m.get("user_name", ""),
         ])
 
     def _summary(sheet, key, header):
