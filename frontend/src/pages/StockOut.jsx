@@ -26,6 +26,17 @@ export default function StockOut() {
 
   useEffect(() => { reload(); }, []);
 
+  const resetForm = () => {
+    setProductId("");
+    setPersonnelId("");
+    setMachineId("");
+    setQuantity("");
+    setNote("");
+    setProductionProduct("");
+    setQuery("");
+    setTransactionDate(new Date().toISOString().slice(0, 10));
+  };
+
   const selected = products.find((p) => p.id === productId);
   const filteredProducts = products.filter((p) => {
     const s = query.toLowerCase();
@@ -43,8 +54,8 @@ export default function StockOut() {
       });
       if (r.data.critical) toast.warning(`Stok çıkışı kaydedildi. UYARI: Kritik seviyede! Yeni stok: ${r.data.new_stock}`);
       else toast.success(`Stok çıkışı kaydedildi. Yeni stok: ${r.data.new_stock}`);
-      setProductId(""); setQuantity(""); setNote(""); setProductionProduct(""); setQuery(""); setTransactionDate(new Date().toISOString().slice(0, 10));
-      reload();
+      resetForm();
+      await reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
     setLoading(false);
   };
