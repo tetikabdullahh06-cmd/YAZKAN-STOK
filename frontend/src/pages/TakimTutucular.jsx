@@ -202,7 +202,7 @@ export default function TakimTutucular() {
     } catch { toast.error("Hareketler yüklenemedi"); }
   };
 
-  const exportExcel = async () => {
+  const exportExcel = async (includeImages = true) => {
     const rows = filtered.map((t) => ({
       "Tutucu Adı": t.name || "",
       "Marka": t.brand || "",
@@ -224,9 +224,10 @@ export default function TakimTutucular() {
       rows,
       imageKey: "Görsel",
       imageSourceKey: "__imageUrl",
-      filename: `takim-tutucular-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      includeImages,
+      filename: `takim-tutucular-${includeImages ? "resimli" : "resimsiz"}-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`,
     });
-    toast.success(`${rows.length} takım tutucu Excel'e aktarıldı. ${imageExportNotice(rows)}`);
+    toast.success(`${rows.length} takım tutucu ${includeImages ? "resimli" : "resimsiz"} Excel'e aktarıldı`);
   };
 
   return (
@@ -245,9 +246,13 @@ export default function TakimTutucular() {
               className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
               <Plus className="w-5 h-5" /> Yeni Tutucu
             </button>
-            <button onClick={exportExcel} data-testid="th-export-btn"
+            <button onClick={() => exportExcel(true)} data-testid="th-export-image-btn"
               className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95">
-              <Download className="w-5 h-5" /> Excel'e Dışa Aktar
+              <Download className="w-5 h-5" /> Resimli Excel
+            </button>
+            <button onClick={() => exportExcel(false)} data-testid="th-export-plain-btn"
+              className="h-14 px-5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white font-semibold flex items-center gap-2 active:scale-95">
+              <Download className="w-5 h-5" /> Resimsiz Excel
             </button>
             <button onClick={() => setShowImport(true)} data-testid="th-import-btn"
               className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">

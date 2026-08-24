@@ -50,6 +50,7 @@ export default function Sharpening() {
   const [editingRecord, setEditingRecord] = useState(null);
   const [editingSection, setEditingSection] = useState("");
   const [exportDate, setExportDate] = useState(today());
+  const [includeImages, setIncludeImages] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -150,7 +151,7 @@ export default function Sharpening() {
       : mode === "in"
         ? `bilemeden-gelen-${allRecords ? "tum-" : `${exportDate}-`}${today()}.xlsx`
         : `bileme-tum-kayitlar-${today()}.xlsx`;
-    await downloadImageWorkbook({ sheetName: mode === "out" ? "Bilemeye Giden" : mode === "in" ? "Bilemeden Gelen" : "Tüm Bileme", rows, filename });
+    await downloadImageWorkbook({ sheetName: mode === "out" ? "Bilemeye Giden" : mode === "in" ? "Bilemeden Gelen" : "Tüm Bileme", rows, filename, includeImages });
     toast.success(`${rows.length} ${mode === "out" ? "giden" : mode === "in" ? "gelen" : "toplam"} kayıt Excel'e aktarıldı`);
   };
   const downloadTemplate = () => {
@@ -257,7 +258,7 @@ export default function Sharpening() {
           <h1 className="font-display text-4xl font-black">Bilemeye Gidenler / Bilemeden Gelenler</h1>
           <p className="text-slate-400 mt-2">Bilemeye gönderilen ürünleri stoktan düşürün, geri gelenleri irsaliye bilgisiyle tekrar stoğa alın.</p>
         </div>
-          <div className="flex gap-2 flex-wrap items-center"><label className="flex items-center gap-2 h-11 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 text-sm font-semibold">Gün seçin<input type="date" value={exportDate} onChange={(e) => setExportDate(e.target.value)} className="h-8 rounded bg-slate-950 border border-slate-600 px-2 text-slate-100" /></label><button onClick={() => exportExcel("out", false)} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Gidenleri Aktar</button><button onClick={() => exportExcel("in", false)} className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Gelenleri Aktar</button><button onClick={() => exportExcel("all", true)} className="h-11 px-4 rounded-lg bg-teal-700 hover:bg-teal-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Tümünü Aktar</button><button onClick={downloadTemplate} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-200"><FileSpreadsheet className="w-4 h-4" /> Örnek Şablon</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white cursor-pointer"><Upload className="w-4 h-4" /> İçe Aktar<input type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden" /></label><button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button></div>
+          <div className="flex gap-2 flex-wrap items-center"><label className="flex items-center gap-2 h-11 px-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 text-sm font-semibold">Gün seçin<input type="date" value={exportDate} onChange={(e) => setExportDate(e.target.value)} className="h-8 rounded bg-slate-950 border border-slate-600 px-2 text-slate-100" /></label><button type="button" onClick={() => setIncludeImages(true)} className={`h-11 px-4 rounded-lg font-bold ${includeImages ? "bg-emerald-700 text-white" : "bg-slate-800 text-slate-300"}`}>Resimli</button><button type="button" onClick={() => setIncludeImages(false)} className={`h-11 px-4 rounded-lg font-bold ${!includeImages ? "bg-blue-700 text-white" : "bg-slate-800 text-slate-300"}`}>Resimsiz</button><button onClick={() => exportExcel("out", false)} className="h-11 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Gidenleri Aktar</button><button onClick={() => exportExcel("in", false)} className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Gelenleri Aktar</button><button onClick={() => exportExcel("all", true)} className="h-11 px-4 rounded-lg bg-teal-700 hover:bg-teal-600 flex items-center gap-2 text-white"><Download className="w-4 h-4" /> Tümünü Aktar</button><button onClick={downloadTemplate} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-200"><FileSpreadsheet className="w-4 h-4" /> Örnek Şablon</button><label className="h-11 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 flex items-center gap-2 text-white cursor-pointer"><Upload className="w-4 h-4" /> İçe Aktar<input type="file" accept=".xlsx,.xls,.csv" onChange={importExcel} className="hidden" /></label><button onClick={load} className="h-11 px-4 rounded-lg border border-slate-700 hover:bg-slate-800 flex items-center gap-2 text-slate-300"><RefreshCw className="w-4 h-4" /> Yenile</button></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -1,9 +1,9 @@
 import ExcelJS from "exceljs";
 
-export async function downloadImageWorkbook({ sheetName, rows, filename, imageKey = "Görsel", imageSourceKey = "__imageUrl" }) {
+export async function downloadImageWorkbook({ sheetName, rows, filename, imageKey = "Görsel", imageSourceKey = "__imageUrl", includeImages = true }) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
-  const headers = rows.length ? Object.keys(rows[0]).filter((key) => !key.startsWith("__")) : [imageKey];
+  const headers = rows.length ? Object.keys(rows[0]).filter((key) => !key.startsWith("__") && (includeImages || key !== imageKey)) : (includeImages ? [imageKey] : []);
 
   worksheet.columns = headers.map((header) => ({
     header,
@@ -15,7 +15,7 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
 
   rows.forEach((row) => worksheet.addRow(row));
   const imageColumn = headers.indexOf(imageKey);
-  if (imageColumn >= 0) {
+  if (includeImages && imageColumn >= 0) {
     rows.forEach((row, index) => {
       const imageCell = worksheet.getCell(index + 2, imageColumn + 1);
       imageCell.value = null;
@@ -31,6 +31,28 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
     });
   }
 
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadPlainWorkbook({ sheetName, rows, filename }) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+  const headers = rows.length ? Object.keys(rows[0]).filter((key) => !key.startsWith("__") && key !== "Görsel" && key !== "Görsel URL") : [];
+  worksheet.columns = headers.map((header) => ({ header, key: header, width: Math.max(14, Math.min(28, String(header).length + 4)) }));
+  worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+  rows.forEach((row) => {
+    const plain = {};
+    headers.forEach((header) => { plain[header] = row[header] ?? ""; });
+    worksheet.addRow(plain);
+  });
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);

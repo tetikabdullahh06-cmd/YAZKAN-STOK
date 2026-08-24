@@ -13,6 +13,7 @@ export default function StockIn() {
  const [supplierId, setSupplierId] = useState("");
  const [supplierManual, setSupplierManual] = useState("");
  const [note, setNote] = useState("");
+ const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
  const [loading, setLoading] = useState(false);
 
  const reload = () => Promise.all([
@@ -53,9 +54,10 @@ export default function StockIn() {
     supplier: supplierName,
     supplier_id: supplierId || null,
     note,
+    transaction_date: transactionDate,
    });
    toast.success(`Stok girişi kaydedildi. Yeni stok: ${r.data.new_stock}`);
-   setProductId(""); setProductQuery(""); setQuantity(""); setSupplierId(""); setSupplierManual(""); setNote("");
+   setProductId(""); setProductQuery(""); setQuantity(""); setSupplierId(""); setSupplierManual(""); setNote(""); setTransactionDate(new Date().toISOString().slice(0, 10));
    reload();
   } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
   setLoading(false);
@@ -108,6 +110,11 @@ export default function StockIn() {
      <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Miktar {selected ? `(${selected.unit})` : ""}</label>
      <input required type="number" step="0.01" min="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} data-testid="si-qty"
       className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-2xl font-bold font-mono-tab focus:ring-2 focus:ring-emerald-500 outline-none" />
+    </div>
+
+    <div>
+     <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">İşlem Tarihi</label>
+     <input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} data-testid="si-date" className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-emerald-500 outline-none" />
     </div>
 
     <div>

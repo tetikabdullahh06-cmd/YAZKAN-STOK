@@ -13,6 +13,7 @@ export default function StockOut() {
   const [machineId, setMachineId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -37,11 +38,11 @@ export default function StockOut() {
     try {
       const r = await api.post("/stock/out", {
         product_id: productId, quantity: parseFloat(quantity),
-        personnel_id: personnelId, machine_id: machineId, note,
+        personnel_id: personnelId, machine_id: machineId, note, transaction_date: transactionDate,
       });
       if (r.data.critical) toast.warning(`Stok çıkışı kaydedildi. UYARI: Kritik seviyede! Yeni stok: ${r.data.new_stock}`);
       else toast.success(`Stok çıkışı kaydedildi. Yeni stok: ${r.data.new_stock}`);
-      setProductId(""); setQuantity(""); setNote(""); setQuery("");
+      setProductId(""); setQuantity(""); setNote(""); setQuery(""); setTransactionDate(new Date().toISOString().slice(0, 10));
       reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
     setLoading(false);
@@ -89,8 +90,14 @@ export default function StockOut() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Personel</label>
+                  <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">İşlem Tarihi</label>
+          <input required type="date" value={transactionDate} onChange={(e) => setTransactionDate(e.target.value)} data-testid="so-date" className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-red-500 outline-none" />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Personel</label>
+
             <select required value={personnelId} onChange={(e) => setPersonnelId(e.target.value)} data-testid="so-personnel"
               className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-red-500 outline-none">
               <option value="">-- Seçin --</option>

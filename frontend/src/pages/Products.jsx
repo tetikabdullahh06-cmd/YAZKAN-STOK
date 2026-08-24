@@ -34,7 +34,7 @@ export default function Products() {
   };
   useEffect(() => { load(); }, []);
   
-  const exportExcel = async () => {
+  const exportExcel = async (includeImages = true) => {
     if (!filtered.length) {
       toast.info("Dışa aktarılacak ürün bulunamadı");
       return;
@@ -61,9 +61,10 @@ export default function Products() {
       rows,
       imageKey: "Görsel",
       imageSourceKey: "__imageUrl",
-      filename: `YAZKAN-urunler-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      filename: `YAZKAN-urunler-${includeImages ? "resimli" : "resimsiz"}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      includeImages,
     });
-    toast.success(`${rows.length} ürün Excel'e aktarıldı. ${imageExportNotice(rows)}`);
+    toast.success(`${rows.length} ürün ${includeImages ? "resimli" : "resimsiz"} Excel'e aktarıldı`);
   };
 
   const downloadImportTemplate = () => {
@@ -184,13 +185,14 @@ export default function Products() {
               </button>
         </>
       )}
-      <button
-        onClick={exportExcel}
-        data-testid="product-export-btn"
-        className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95"
-      >
-        <FileSpreadsheet className="w-5 h-5" /> Excel'e Dışa Aktar
-            </button>
+      <button onClick={() => exportExcel(true)} data-testid="product-export-image-btn"
+        className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95">
+        <FileSpreadsheet className="w-5 h-5" /> Resimli Excel
+      </button>
+      <button onClick={() => exportExcel(false)} data-testid="product-export-plain-btn"
+        className="h-14 px-5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white font-semibold flex items-center gap-2 active:scale-95">
+        <FileSpreadsheet className="w-5 h-5" /> Resimsiz Excel
+      </button>
     </div>
   </div>
 

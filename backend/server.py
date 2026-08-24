@@ -239,6 +239,7 @@ class StockInIn(BaseModel):
     supplier: Optional[str] = ""
     supplier_id: Optional[str] = None
     note: Optional[str] = ""
+    transaction_date: Optional[str] = ""
 
 
 class StockOutIn(BaseModel):
@@ -247,6 +248,7 @@ class StockOutIn(BaseModel):
     personnel_id: str
     machine_id: str
     note: Optional[str] = ""
+    transaction_date: Optional[str] = ""
 
 
 class SharpeningOutIn(BaseModel):
@@ -1023,6 +1025,7 @@ async def stock_in(body: StockInIn, user=Depends(require_admin)):
         "supplier": body.supplier or "", "supplier_id": body.supplier_id or "", "note": body.note or "",
         "user_id": user["id"], "user_name": user["name"],
         "created_at": now_utc().isoformat(),
+        "transaction_date": body.transaction_date or now_utc().date().isoformat(),
     }
     await db.movements.insert_one(movement)
     return {"ok": True, "new_stock": new_stock, "movement": clean(movement)}
@@ -1055,6 +1058,7 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         "note": body.note or "",
         "user_id": user["id"], "user_name": user["name"],
         "created_at": now_utc().isoformat(),
+        "transaction_date": body.transaction_date or now_utc().date().isoformat(),
     }
     await db.movements.insert_one(movement)
     critical = new_stock <= product["min_stock"]
@@ -1083,11 +1087,15 @@ async def list_movements(
     if machine_id:
         q["machine_id"] = machine_id
     if date_from or date_to:
-        q["created_at"] = {}
+        date_query = {}
         if date_from:
-            q["created_at"]["$gte"] = date_from
+            date_query["$gte"] = date_from
         if date_to:
-            q["created_at"]["$lte"] = date_to + "T23:59:59"
+            date_query["$lte"] = date_to
+        q["$or"] = [
+            {"transaction_date": date_query},
+            {"transaction_date": {"$exists": False}, "created_at": {"$gte": date_from or "", "$lte": (date_to + "T23:59:59") if date_to else "9999-12-31T23:59:59"}},
+        ]
     return await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
 
 
