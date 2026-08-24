@@ -41,8 +41,8 @@ export default function StockOut() {
 
   const selected = products.find((p) => p.id === productId);
   const filteredProducts = products.filter((p) => {
-    const s = query.toLowerCase();
-    return !s || p.code.toLowerCase().includes(s) || p.name.toLowerCase().includes(s);
+    const s = query.toLowerCase().trim();
+    return !s || [p.code, p.name, p.brand].some((value) => String(value || "").toLowerCase().includes(s));
   });
 
   const submit = async (e) => {
@@ -85,12 +85,12 @@ export default function StockOut() {
         <div>
           <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ürün Ara</label>
           <input value={query} onChange={(e) => setQuery(e.target.value)} data-testid="so-search"
-            placeholder="Kod veya isim ile ara..."
+            placeholder="Kod, isim veya marka ile ara..."
             className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-4 mb-2 focus:ring-2 focus:ring-red-500 outline-none" />
           <select required value={productId} onChange={(e) => setProductId(e.target.value)} data-testid="so-product"
             className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-base focus:ring-2 focus:ring-red-500 outline-none">
             <option value="">-- Ürün seçin --</option>
-            {filteredProducts.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name} (Mevcut: {p.current_stock} {p.unit})</option>)}
+            {filteredProducts.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name} | Marka: {p.brand || "Marka yok"} (Mevcut: {p.current_stock} {p.unit})</option>)}
           </select>
           {selected && selected.current_stock <= selected.min_stock && (
             <div className="mt-2 flex items-center gap-2 text-xs text-red-400"><AlertTriangle className="w-4 h-4" /> Bu ürün kritik seviyede</div>
