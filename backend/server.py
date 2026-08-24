@@ -1478,7 +1478,7 @@ async def report_excel(user=Depends(get_current_user),
             m.get("production_product", ""), m.get("supplier", ""), m.get("note", ""), m.get("user_name", ""),
         ])
 
-    def _agg(sheet, key, header):
+    def _summary(sheet, key, header):
         ws = wb.create_sheet(sheet)
         ws.append(header)
         agg = {}
@@ -1490,9 +1490,26 @@ async def report_excel(user=Depends(get_current_user),
         for k, v in agg.items():
             ws.append([k, v])
 
-    _agg("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar"])
-    _agg("Personel Bazlı", "personnel_name", ["Personel", "Toplam Miktar"])
-    _agg("Tezgah Bazlı", "machine_name", ["Tezgah", "Toplam Miktar"])
+    _summary("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar"])
+
+    detail_headers = ["Tarih", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç"]
+    def _detail_sheet(sheet, sort_key):
+        ws = wb.create_sheet(sheet)
+        ws.append(detail_headers)
+        rows = [m for m in movements if m.get("type") == "out"]
+        rows.sort(key=lambda m: (m.get(sort_key, ""), m.get("transaction_date") or m.get("created_at", "")))
+        for m in rows:
+            ws.append([
+                m.get("transaction_date") or m.get("created_at", "")[:10],
+                m.get("personnel_name", ""), m.get("machine_name", ""), m.get("product_name", ""),
+                m.get("product_code", ""), m.get("production_product", ""), m.get("quantity", 0),
+                "Bilemeye gönderildi" if m.get("sharpening_record_id") else "Üretimde kullanım",
+            ])
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+    _detail_sheet("Personel Bazlı", "personnel_name")
+    _detail_sheet("Tezgah Bazlı", "machine_name")
 
     detail_ws = wb.create_sheet("Kullanım Detayı")
     detail_ws.append(["Tarih", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç"])
