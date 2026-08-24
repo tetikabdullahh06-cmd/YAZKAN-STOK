@@ -1481,9 +1481,22 @@ async def report_excel(user=Depends(get_current_user),
         if not sent_day or sent_day != movement_day:
             return False
         # Eski sürümlerde bileme önce normal stok çıkışı, sonra bileme kaydı olarak
-        # tutulmuş olabilir. Aynı gün ve aynı miktardaki eşleşmeyi tek satıra indir.
+        # tutulmuş olabilir. Önce kesin kayıt bağı ve işlem zamanı kontrol edilir;
+        # eski kayıtlarda zaman bağı yoksa aynı gün/miktar ve boş üretim alanı
+        # bileme için oluşturulmuş stok çıkışını tekilleştirmek için kullanılır.
+        try:
+            created_a = datetime.fromisoformat(str(sr.get("created_at", "")).replace("Z", "+00:00"))
+            created_b = datetime.fromisoformat(str(m.get("created_at", "")).replace("Z", "+00:00"))
+            if created_a.tzinfo is None:
+                created_a = created_a.replace(tzinfo=timezone.utc)
+            if created_b.tzinfo is None:
+                created_b = created_b.replace(tzinfo=timezone.utc)
+            if abs((created_a - created_b).total_seconds()) <= 15 * 60:
+                return True
+        except (TypeError, ValueError, OverflowError):
+            pass
         note = f"{m.get('note', '')} {m.get('production_product', '')}".casefold()
-        return ("bileme" in note or not m.get("machine_id"))
+        return "bileme" in note or (not m.get("production_product") and not m.get("note"))
 
     for sr in sharpening_records:
         if any(_same_sharpening_movement(sr, m) for m in movements):
