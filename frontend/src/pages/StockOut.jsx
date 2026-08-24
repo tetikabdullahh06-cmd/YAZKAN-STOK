@@ -17,6 +17,7 @@ export default function StockOut() {
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [formKey, setFormKey] = useState(0);
 
   const reload = () => Promise.all([
     api.get("/products").then((r) => setProducts(r.data)),
@@ -35,6 +36,7 @@ export default function StockOut() {
     setProductionProduct("");
     setQuery("");
     setTransactionDate(new Date().toISOString().slice(0, 10));
+    setFormKey((key) => key + 1);
   };
 
   const selected = products.find((p) => p.id === productId);
@@ -79,7 +81,7 @@ export default function StockOut() {
         />
       </div>
 
-      <form onSubmit={submit} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 md:p-8 space-y-5">
+      <form key={formKey} onSubmit={submit} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 md:p-8 space-y-5">
         <div>
           <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ürün Ara</label>
           <input value={query} onChange={(e) => setQuery(e.target.value)} data-testid="so-search"
