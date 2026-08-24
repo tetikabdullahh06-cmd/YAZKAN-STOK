@@ -90,8 +90,13 @@ export default function StockOut() {
           <select required value={productId} onChange={(e) => setProductId(e.target.value)} data-testid="so-product"
             className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-base focus:ring-2 focus:ring-red-500 outline-none">
             <option value="">-- Ürün seçin --</option>
-            {filteredProducts.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name} | Marka: {p.brand || "Marka yok"} (Mevcut: {p.current_stock} {p.unit})</option>)}
+            {filteredProducts.map((p) => <option key={p.id} value={p.id}>Marka: {p.brand || "Marka yok"} | {p.code} — {p.name} | Mevcut: {p.current_stock} {p.unit}</option>)}
           </select>
+          {selected && (
+            <div className="mt-2 rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-sm text-slate-200">
+              <span className="font-bold text-red-300">Seçilen marka:</span> {selected.brand || selected.manufacturer || selected.marka || "Marka bilgisi yok"}
+            </div>
+          )}
           {selected && selected.current_stock <= selected.min_stock && (
             <div className="mt-2 flex items-center gap-2 text-xs text-red-400"><AlertTriangle className="w-4 h-4" /> Bu ürün kritik seviyede</div>
           )}
