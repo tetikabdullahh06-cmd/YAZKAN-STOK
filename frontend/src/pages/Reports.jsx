@@ -16,7 +16,7 @@ const REPORT_TYPES = [
 ];
 
 export default function Reports() {
-  const [dateFrom, setDateFrom] = useState(isoDay(-30));
+  const [dateFrom, setDateFrom] = useState(isoDay(-365));
   const [dateTo, setDateTo] = useState(isoDay(0));
   const [reportType, setReportType] = useState("by_product");
   const [summary, setSummary] = useState(null);
@@ -95,10 +95,11 @@ export default function Reports() {
           <button onClick={() => applyPreset(7)} className="h-10 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold">Son 7 Gün</button>
           <button onClick={() => applyPreset(30)} className="h-10 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold">Son 30 Gün</button>
           <button onClick={() => applyPreset(90)} className="h-10 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold">Son 90 Gün</button>
+          <button onClick={() => applyPreset(365)} className="h-10 px-4 rounded-lg bg-blue-700 hover:bg-blue-600 text-sm font-semibold text-white">Son 1 Yıl</button>
         </div>
         <div className="flex gap-4 flex-wrap items-end">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Başlangıç</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Başlangıç (en fazla 1 yıl geriye)</label>
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} data-testid="rep-from" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
           </div>
           <div>
