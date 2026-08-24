@@ -13,6 +13,7 @@ export default function StockOut() {
   const [machineId, setMachineId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
+  const [productionProduct, setProductionProduct] = useState("");
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -38,11 +39,11 @@ export default function StockOut() {
     try {
       const r = await api.post("/stock/out", {
         product_id: productId, quantity: parseFloat(quantity),
-        personnel_id: personnelId, machine_id: machineId, note, transaction_date: transactionDate,
+        personnel_id: personnelId, machine_id: machineId, note, production_product: productionProduct, transaction_date: transactionDate,
       });
       if (r.data.critical) toast.warning(`Stok çıkışı kaydedildi. UYARI: Kritik seviyede! Yeni stok: ${r.data.new_stock}`);
       else toast.success(`Stok çıkışı kaydedildi. Yeni stok: ${r.data.new_stock}`);
-      setProductId(""); setQuantity(""); setNote(""); setQuery(""); setTransactionDate(new Date().toISOString().slice(0, 10));
+      setProductId(""); setQuantity(""); setNote(""); setProductionProduct(""); setQuery(""); setTransactionDate(new Date().toISOString().slice(0, 10));
       reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
     setLoading(false);
@@ -112,6 +113,11 @@ export default function StockOut() {
               {machines.map((m) => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Üretim / İşlenen Ürün</label>
+          <input value={productionProduct} onChange={(e) => setProductionProduct(e.target.value)} placeholder="Örn. Flanş gövdesi, mil, parça kodu" data-testid="so-production-product" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-red-500 outline-none" />
         </div>
 
         <div>

@@ -142,6 +142,12 @@ export default function Reports() {
               </tbody>
             </table>
           )}
+          {reportType === "by_personnel" && (summary.details || []).length > 0 && (
+            <div className="border-t border-slate-700 overflow-auto">
+              <div className="px-6 py-4 font-bold text-emerald-300">Personel kullanım ayrıntısı</div>
+              <table className="w-full text-sm min-w-[760px]"><thead className="bg-slate-900/50"><tr className="text-left text-slate-400 uppercase tracking-wider text-xs"><th className="px-6 py-3">Personel</th><th className="px-6 py-3">Tezgâh</th><th className="px-6 py-3">Kullanılan uç / ürün</th><th className="px-6 py-3">Üretim / işlenen ürün</th><th className="px-6 py-3 text-right">Miktar</th></tr></thead><tbody className="divide-y divide-slate-700">{summary.details.map((d, i) => <tr key={i} className="hover:bg-slate-700/40"><td className="px-6 py-3 font-semibold">{d.personnel}</td><td className="px-6 py-3">{d.machine}</td><td className="px-6 py-3">{d.code ? `${d.code} — ` : ""}{d.tool}</td><td className="px-6 py-3">{d.production_product}</td><td className="px-6 py-3 text-right font-bold text-emerald-400">{d.qty}</td></tr>)}</tbody></table>
+            </div>
+          )}
         </div>
       )}
     </div>

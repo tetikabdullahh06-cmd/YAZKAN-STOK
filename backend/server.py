@@ -249,6 +249,7 @@ class StockOutIn(BaseModel):
     machine_id: str
     note: Optional[str] = ""
     transaction_date: Optional[str] = ""
+    production_product: Optional[str] = ""
 
 
 class SharpeningOutIn(BaseModel):
@@ -1056,6 +1057,7 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         "personnel_name": f"{personnel['first_name']} {personnel['last_name']}",
         "machine_id": machine["id"], "machine_name": machine["name"],
         "note": body.note or "",
+        "production_product": body.production_product or "",
         "user_id": user["id"], "user_name": user["name"],
         "created_at": now_utc().isoformat(),
         "transaction_date": body.transaction_date or now_utc().date().isoformat(),
@@ -1406,11 +1408,15 @@ async def dashboard(user=Depends(get_current_user)):
 def _date_query(date_from, date_to):
     q = {}
     if date_from or date_to:
-        q["created_at"] = {}
+        transaction_query = {}
         if date_from:
-            q["created_at"]["$gte"] = date_from
+            transaction_query["$gte"] = date_from
         if date_to:
-            q["created_at"]["$lte"] = date_to + "T23:59:59"
+            transaction_query["$lte"] = date_to
+        q["$or"] = [
+            {"transaction_date": transaction_query},
+            {"transaction_date": {"$exists": False}, "created_at": {"$gte": date_from or "", "$lte": (date_to + "T23:59:59") if date_to else "9999-12-31T23:59:59"}},
+        ]
     return q
 
 
@@ -1421,6 +1427,7 @@ async def report_summary(user=Depends(get_current_user),
     movements = await db.movements.find(q, {"_id": 0}).to_list(20000)
 
     by_product, by_personnel, by_machine = {}, {}, {}
+    detail_map = {}
     for m in movements:
         if m.get("type") != "out":
             continue
@@ -1436,11 +1443,15 @@ async def report_summary(user=Depends(get_current_user),
         by_machine.setdefault(mc, {"qty": 0, "total": 0})
         by_machine[mc]["qty"] += m.get("quantity", 0)
         by_machine[mc]["total"] += m.get("total", 0)
+        detail_key = (per, mc, m.get("product_name", "-"), m.get("production_product", "-") or "-")
+        detail_map.setdefault(detail_key, {"personnel": per, "machine": mc, "tool": m.get("product_name", "-"), "code": m.get("product_code", ""), "production_product": m.get("production_product", "-") or "-", "qty": 0})
+        detail_map[detail_key]["qty"] += m.get("quantity", 0)
 
     return {
         "by_product": [{"name": k, **v} for k, v in by_product.items()],
         "by_personnel": [{"name": k, **v} for k, v in by_personnel.items()],
         "by_machine": [{"name": k, **v} for k, v in by_machine.items()],
+        "details": list(detail_map.values()),
         "count": len(movements),
     }
 
@@ -1454,16 +1465,17 @@ async def report_excel(user=Depends(get_current_user),
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Hareketler"
-    ws1.append(["Tarih", "Tip", "Ürün Kodu", "Ürün Adı", "Miktar",
-                "Personel", "Tezgah", "Tedarikçi", "Not", "Kullanıcı"])
+    ws1.append(["Tarih", "Tip", "İşlem / Amaç", "Ürün Kodu", "Ürün Adı", "Miktar",
+                "Personel", "Tezgah", "Üretim / İşlenen Ürün", "Tedarikçi", "Not", "Kullanıcı"])
     for m in movements:
         ws1.append([
-            m.get("created_at", "")[:19].replace("T", " "),
+            m.get("transaction_date") or m.get("created_at", "")[:19].replace("T", " "),
             "GİRİŞ" if m.get("type") == "in" else "ÇIKIŞ",
+            "Bilemeye gönderildi" if m.get("sharpening_record_id") else ("Stok girişi" if m.get("type") == "in" else "Üretimde kullanım"),
             m.get("product_code", ""), m.get("product_name", ""),
             m.get("quantity", 0),
             m.get("personnel_name", ""), m.get("machine_name", ""),
-            m.get("supplier", ""), m.get("note", ""), m.get("user_name", ""),
+            m.get("production_product", ""), m.get("supplier", ""), m.get("note", ""), m.get("user_name", ""),
         ])
 
     def _agg(sheet, key, header):
@@ -1481,6 +1493,18 @@ async def report_excel(user=Depends(get_current_user),
     _agg("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar"])
     _agg("Personel Bazlı", "personnel_name", ["Personel", "Toplam Miktar"])
     _agg("Tezgah Bazlı", "machine_name", ["Tezgah", "Toplam Miktar"])
+
+    detail_ws = wb.create_sheet("Kullanım Detayı")
+    detail_ws.append(["Tarih", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç"])
+    for m in movements:
+        if m.get("type") != "out":
+            continue
+        detail_ws.append([
+            m.get("transaction_date") or m.get("created_at", "")[:10],
+            m.get("personnel_name", ""), m.get("machine_name", ""), m.get("product_name", ""),
+            m.get("product_code", ""), m.get("production_product", ""), m.get("quantity", 0),
+            "Bilemeye gönderildi" if m.get("sharpening_record_id") else "Üretimde kullanım",
+        ])
 
     buf = io.BytesIO()
     wb.save(buf)
