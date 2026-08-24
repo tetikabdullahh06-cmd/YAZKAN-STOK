@@ -1464,7 +1464,30 @@ async def report_excel(user=Depends(get_current_user),
     # Bilemeye gönderilen kayıtlar ayrı koleksiyonda tutulduğu için raporun
     # Hareketler sayfasına açıklayıcı bir hareket satırı olarak eklenir.
     sharpening_records = await db.sharpening_records.find(q, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    def _same_sharpening_movement(sr, m):
+        if m.get("type") != "out":
+            return False
+        if sr.get("id") and m.get("sharpening_record_id") == sr.get("id"):
+            return True
+        if m.get("product_id") != sr.get("product_id"):
+            return False
+        try:
+            if float(m.get("quantity", 0)) != float(sr.get("quantity", 0)):
+                return False
+        except (TypeError, ValueError):
+            return False
+        sent_day = str(sr.get("sent_date", ""))[:10]
+        movement_day = str(m.get("transaction_date") or m.get("created_at", ""))[:10]
+        if not sent_day or sent_day != movement_day:
+            return False
+        # Eski sürümlerde bileme önce normal stok çıkışı, sonra bileme kaydı olarak
+        # tutulmuş olabilir. Aynı gün ve aynı miktardaki eşleşmeyi tek satıra indir.
+        note = f"{m.get('note', '')} {m.get('production_product', '')}".casefold()
+        return ("bileme" in note or not m.get("machine_id"))
+
     for sr in sharpening_records:
+        if any(_same_sharpening_movement(sr, m) for m in movements):
+            continue
         movements.append({
             "created_at": sr.get("created_at", ""),
             "transaction_date": sr.get("sent_date", ""),
