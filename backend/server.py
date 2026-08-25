@@ -1079,6 +1079,43 @@ async def list_movements(
         sharpening_q = None  # Bileme kayıtlarında bu alanlar bulunmaz.
     if sharpening_q is not None:
         sharpening_records = await db.sharpening_records.find(sharpening_q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+        def same_sharpening_movement(record, movement):
+            if movement.get("type") != "out":
+                return False
+            if record.get("id") and movement.get("sharpening_record_id") == record.get("id"):
+                return True
+            if movement.get("product_id") != record.get("product_id"):
+                return False
+            try:
+                if float(movement.get("quantity", 0)) != float(record.get("quantity", 0)):
+                    return False
+            except (TypeError, ValueError):
+                return False
+            sent_day = str(record.get("sent_date") or record.get("created_at", ""))[:10]
+            movement_day = str(movement.get("transaction_date") or movement.get("created_at", ""))[:10]
+            if not sent_day or sent_day != movement_day:
+                return False
+            try:
+                sent_at = datetime.fromisoformat(str(record.get("created_at", "")).replace("Z", "+00:00"))
+                movement_at = datetime.fromisoformat(str(movement.get("created_at", "")).replace("Z", "+00:00"))
+                if sent_at.tzinfo is None:
+                    sent_at = sent_at.replace(tzinfo=timezone.utc)
+                if movement_at.tzinfo is None:
+                    movement_at = movement_at.replace(tzinfo=timezone.utc)
+                if abs((sent_at - movement_at).total_seconds()) <= 15 * 60:
+                    return True
+            except (TypeError, ValueError, OverflowError):
+                pass
+            note = f"{movement.get('note', '')} {movement.get('production_product', '')}".casefold()
+            return "bileme" in note or (not movement.get("production_product") and not movement.get("note"))
+
+        # Eski sürümlerde aynı bileme işlemi normal stok çıkışı olarak da yazılmış
+        # olabilir. Eşleşen normal satır kaldırılır; yalnızca bileme kategorisi kalır.
+        movements = [
+            movement for movement in movements
+            if not any(same_sharpening_movement(record, movement) for record in sharpening_records)
+        ]
         existing_sharpening_ids = {m.get("sharpening_record_id") for m in movements if m.get("sharpening_record_id")}
         for record in sharpening_records:
             record_id = record.get("id")
