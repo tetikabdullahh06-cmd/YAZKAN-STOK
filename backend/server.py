@@ -1402,6 +1402,7 @@ async def dashboard(user=Depends(get_current_user)):
     total_products = len(products)
     critical = [p for p in products if p.get("current_stock", 0) <= p.get("min_stock", 0)]
     critical_count = len(critical)
+    out_of_stock = [p for p in products if float(p.get("current_stock", 0) or 0) <= 0]
 
     month_start = now_utc().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_movements = await db.movements.find(
@@ -1434,6 +1435,7 @@ async def dashboard(user=Depends(get_current_user)):
         "critical_count": critical_count,
         "month_total_cost": 0,
         "critical_products": critical[:10],
+        "out_of_stock_products": out_of_stock[:100],
         "top_personnel": [{"name": n, "qty": round(q, 2)} for n, q in top_personnel],
         "top_machines": [{"name": n, "qty": round(q, 2)} for n, q in top_machines],
         "personnel_list": personnel_list,
