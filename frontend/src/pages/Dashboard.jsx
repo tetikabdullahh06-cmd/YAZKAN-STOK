@@ -104,36 +104,30 @@ export default function Dashboard() {
         <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2">
             <Users className="w-4 h-4 text-blue-400" />
-            <h3 className="font-display text-lg font-bold">En Çok Tüketen Personel (Bu Ay)</h3>
+            <div><h3 className="font-display text-lg font-bold">Personel Listesi</h3><p className="text-xs text-slate-400 mt-1">Detay için personel adına tıklayın.</p></div>
           </div>
-          <div className="divide-y divide-slate-700">
-            {(d.top_personnel || []).length === 0 && <div className="p-6 text-slate-500 text-sm">Bu ay tüketim yok</div>}
-            {(d.top_personnel || []).map((p, i) => (
-              <div key={i} className="flex items-center justify-between px-6 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm">{i + 1}</div>
-                  <div className="font-medium">{p.name}</div>
-                </div>
-                <div className="font-mono-tab font-bold text-emerald-400">{p.qty}</div>
-              </div>
+          <div className="divide-y divide-slate-700 max-h-96 overflow-auto">
+            {(d.personnel_list || []).length === 0 && <div className="p-6 text-slate-500 text-sm">Personel kaydı yok</div>}
+            {(d.personnel_list || []).map((p) => (
+              <Link key={p.id} to={`/tuketim-detay/personel/${p.id}`} className="flex items-center justify-between px-6 py-3 hover:bg-blue-500/10 transition-colors">
+                <div><div className="font-medium">{p.name}</div><div className="text-xs text-slate-400">{p.department || "Departman belirtilmemiş"}</div></div>
+                <div className="text-right"><div className="font-mono-tab font-bold text-emerald-400">{p.qty}</div><div className="text-[10px] text-slate-500">Bu ay</div></div>
+              </Link>
             ))}
           </div>
         </div>
         <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2">
             <Settings2 className="w-4 h-4 text-blue-400" />
-            <h3 className="font-display text-lg font-bold">En Çok Tüketen Tezgah (Bu Ay)</h3>
+            <div><h3 className="font-display text-lg font-bold">Tezgâh Listesi</h3><p className="text-xs text-slate-400 mt-1">Detay için tezgâha tıklayın.</p></div>
           </div>
-          <div className="divide-y divide-slate-700">
-            {(d.top_machines || []).length === 0 && <div className="p-6 text-slate-500 text-sm">Bu ay tüketim yok</div>}
-            {(d.top_machines || []).map((p, i) => (
-              <div key={i} className="flex items-center justify-between px-6 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm">{i + 1}</div>
-                  <div className="font-medium">{p.name}</div>
-                </div>
-                <div className="font-mono-tab font-bold text-emerald-400">{p.qty}</div>
-              </div>
+          <div className="divide-y divide-slate-700 max-h-96 overflow-auto">
+            {(d.machine_list || []).length === 0 && <div className="p-6 text-slate-500 text-sm">Tezgâh kaydı yok</div>}
+            {(d.machine_list || []).map((m) => (
+              <Link key={m.id} to={`/tuketim-detay/tezgah/${m.id}`} className="flex items-center justify-between px-6 py-3 hover:bg-blue-500/10 transition-colors">
+                <div><div className="font-medium">{m.code} — {m.name}</div><div className="text-xs text-slate-400">{m.brand || ""}{m.model ? ` · ${m.model}` : ""}</div></div>
+                <div className="text-right"><div className="font-mono-tab font-bold text-emerald-400">{m.qty}</div><div className="text-[10px] text-slate-500">Bu ay</div></div>
+              </Link>
             ))}
           </div>
         </div>

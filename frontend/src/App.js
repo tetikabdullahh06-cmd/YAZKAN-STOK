@@ -24,6 +24,7 @@ import Sharpening from "@/pages/Sharpening";
 import ToolTrials from "@/pages/ToolTrials";
 import Recipes from "@/pages/Recipes";
 import Settings from "@/pages/Settings";
+import ConsumptionDetail from "@/pages/ConsumptionDetail";
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="kritik-stok" element={<CriticalStock />} />
             <Route path="raporlar" element={<Reports />} />
             <Route path="ayarlar" element={<Settings />} />
+            <Route path="tuketim-detay/:kind/:id" element={<ConsumptionDetail />} />
           </Route>
         </Routes>
       </BrowserRouter>

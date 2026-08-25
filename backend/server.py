@@ -1350,6 +1350,15 @@ async def dashboard(user=Depends(get_current_user)):
     top_machines = sorted(m_totals.items(), key=lambda x: -x[1])[:5]
 
     recent = await db.movements.find({}, {"_id": 0}).sort("created_at", -1).to_list(10)
+    personnel_list = await db.personnel.find({}, {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "department": 1}).sort("first_name", 1).to_list(2000)
+    machine_list = await db.machines.find({}, {"_id": 0, "id": 1, "code": 1, "name": 1, "brand": 1, "model": 1}).sort("code", 1).to_list(2000)
+    personnel_totals = {name: round(qty, 2) for name, qty in p_totals.items()}
+    machine_totals = {name: round(qty, 2) for name, qty in m_totals.items()}
+    for person in personnel_list:
+        person["name"] = f"{person.get('first_name', '')} {person.get('last_name', '')}".strip()
+        person["qty"] = personnel_totals.get(person["name"], 0)
+    for machine in machine_list:
+        machine["qty"] = machine_totals.get(machine.get("name", ""), 0)
 
     return {
         "total_products": total_products,
@@ -1358,8 +1367,30 @@ async def dashboard(user=Depends(get_current_user)):
         "critical_products": critical[:10],
         "top_personnel": [{"name": n, "qty": round(q, 2)} for n, q in top_personnel],
         "top_machines": [{"name": n, "qty": round(q, 2)} for n, q in top_machines],
+        "personnel_list": personnel_list,
+        "machine_list": machine_list,
         "recent_movements": recent,
     }
+
+
+# ---------- Consumption detail reports ----------
+@api.get("/reports/consumption-detail")
+async def consumption_detail(user=Depends(get_current_user), personnel_id: Optional[str] = None, machine_id: Optional[str] = None):
+    if not personnel_id and not machine_id:
+        raise HTTPException(status_code=400, detail="Personel veya tezgâh seçilmelidir")
+    movement_filter = {"type": "out"}
+    if personnel_id:
+        movement_filter["personnel_id"] = personnel_id
+    if machine_id:
+        movement_filter["machine_id"] = machine_id
+    rows = await db.movements.find(movement_filter, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    totals = {}
+    for row in rows:
+        key = (row.get("product_id", ""), row.get("product_code", ""), row.get("product_name", "-"), row.get("production_product", "") or "-")
+        item = totals.setdefault(key, {"product_id": key[0], "product_code": key[1], "product_name": key[2], "production_product": key[3], "quantity": 0, "movement_count": 0})
+        item["quantity"] += float(row.get("quantity", 0) or 0)
+        item["movement_count"] += 1
+    return {"rows": list(totals.values()), "movements": rows}
 
 
 # ---------- Reports (Excel) ----------
