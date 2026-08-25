@@ -1398,7 +1398,7 @@ async def list_recipe_movements(user=Depends(get_current_user), recipe_id: Optio
 # ---------- Dashboard ----------
 @api.get("/dashboard")
 async def dashboard(user=Depends(get_current_user)):
-    products = await db.products.find({}, {"_id": 0}).to_list(2000)
+    products = await db.products.find({}, {"_id": 0}).to_list(10000)
     total_products = len(products)
     critical = [p for p in products if p.get("current_stock", 0) <= p.get("min_stock", 0)]
     critical_count = len(critical)
