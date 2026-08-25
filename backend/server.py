@@ -1561,7 +1561,7 @@ async def report_excel(user=Depends(get_current_user),
 
     _summary("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar"])
 
-    detail_headers = ["Tarih", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç"]
+    detail_headers = ["İşlem Tarihi", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç"]
     def _detail_sheet(sheet, sort_key):
         ws = wb.create_sheet(sheet)
         ws.append(detail_headers)
