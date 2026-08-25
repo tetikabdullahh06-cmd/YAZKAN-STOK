@@ -23,17 +23,24 @@ export default function Movements() {
       m.sharpening_record_id ||
       String(m.movement_purpose || "").toLocaleLowerCase("tr-TR").includes("bileme")
     );
-    const keyOf = (m) => [
-      m.type || "", m.product_code || m.product_id || m.product_name || "",
-      Number(m.quantity || 0), String(m.transaction_date || m.created_at || "").slice(0, 10),
-    ].join("|");
+    const dateOf = (m) => {
+      const value = String(m.transaction_date || m.created_at || "");
+      const iso = value.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+      if (iso) return `${iso[1]}-${String(iso[2]).padStart(2, "0")}-${String(iso[3]).padStart(2, "0")}`;
+      const tr = value.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+      if (tr) return `${tr[3]}-${String(tr[2]).padStart(2, "0")}-${String(tr[1]).padStart(2, "0")}`;
+      return value.slice(0, 10);
+    };
+    const codeOf = (m) => m.product_code || (String(m.product_name || "").match(/YZK\d{5}/i) || [""])[0] || m.product_id || m.product_name || "";
+    const keyOf = (m) => [m.type || "", codeOf(m), Number(m.quantity || 0), dateOf(m)].join("|");
     const sharpeningKeys = new Set(rawItems.filter(isSharpening).map(keyOf));
+    const sharpeningCodes = new Set(rawItems.filter(isSharpening).map(codeOf).filter(Boolean));
     const seen = new Set();
     const seenSharpening = new Set();
     const cleanItems = rawItems.filter((m) => {
       const key = keyOf(m);
       // Aynı ürün/miktar/tarihte bileme hareketi varsa normal işleme çıkışını kaldır.
-      if (!isSharpening(m) && sharpeningKeys.has(key)) return false;
+      if (!isSharpening(m) && (sharpeningKeys.has(key) || (sharpeningCodes.has(codeOf(m)) && !dateOf(m)))) return false;
       // Aynı bileme hareketi canlı eski API’den birden fazla gelirse tek satır bırak.
       if (isSharpening(m)) {
         const sharpeningKey = `${key}|${m.movement_category || (m.type === "in" ? "Bilemeden Gelen" : "Bilemeye Giden")}`;
