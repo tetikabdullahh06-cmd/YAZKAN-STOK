@@ -24,7 +24,7 @@ export default function Movements() {
       String(m.movement_purpose || "").toLocaleLowerCase("tr-TR").includes("bileme")
     );
     const keyOf = (m) => [
-      m.type || "", m.product_id || m.product_code || m.product_name || "",
+      m.type || "", m.product_code || m.product_id || m.product_name || "",
       Number(m.quantity || 0), String(m.transaction_date || m.created_at || "").slice(0, 10),
     ].join("|");
     const sharpeningKeys = new Set(rawItems.filter(isSharpening).map(keyOf));

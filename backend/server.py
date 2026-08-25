@@ -1085,7 +1085,7 @@ async def list_movements(
                 return False
             if record.get("id") and movement.get("sharpening_record_id") == record.get("id"):
                 return True
-            if movement.get("product_id") != record.get("product_id"):
+            if not ((movement.get("product_id") and movement.get("product_id") == record.get("product_id")) or (movement.get("product_code") and movement.get("product_code") == record.get("product_code"))):
                 return False
             try:
                 if float(movement.get("quantity", 0)) != float(record.get("quantity", 0)):
@@ -1120,7 +1120,7 @@ async def list_movements(
                 if movement.get("id") not in consumed_duplicate_ids
                 and movement.get("type") == "out"
                 and not movement.get("sharpening_record_id")
-                and movement.get("product_id") == record.get("product_id")
+                and ((movement.get("product_id") and movement.get("product_id") == record.get("product_id")) or (movement.get("product_code") and movement.get("product_code") == record.get("product_code")))
                 and str(movement.get("transaction_date") or movement.get("created_at", ""))[:10] == str(record.get("sent_date") or record.get("created_at", ""))[:10]
             ]
             exact = []
