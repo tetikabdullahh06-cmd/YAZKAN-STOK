@@ -8,9 +8,11 @@ export default function StockOut() {
   const [products, setProducts] = useState([]);
   const [personnel, setPersonnel] = useState([]);
   const [machines, setMachines] = useState([]);
+  const [toolholders, setToolholders] = useState([]);
   const [productId, setProductId] = useState("");
   const [personnelId, setPersonnelId] = useState("");
   const [machineId, setMachineId] = useState("");
+  const [toolholderId, setToolholderId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
   const [productionProduct, setProductionProduct] = useState("");
@@ -23,6 +25,7 @@ export default function StockOut() {
     api.get("/products").then((r) => setProducts(r.data)),
     api.get("/personnel").then((r) => setPersonnel(r.data)),
     api.get("/machines").then((r) => setMachines(r.data)),
+    api.get("/toolholders").then((r) => setToolholders(r.data)),
   ]);
 
   useEffect(() => { reload(); }, []);
@@ -31,6 +34,7 @@ export default function StockOut() {
     setProductId("");
     setPersonnelId("");
     setMachineId("");
+    setToolholderId("");
     setQuantity("");
     setNote("");
     setProductionProduct("");
@@ -52,7 +56,7 @@ export default function StockOut() {
     try {
       const r = await api.post("/stock/out", {
         product_id: productId, quantity: parseFloat(quantity),
-        personnel_id: personnelId, machine_id: machineId, note, production_product: productionProduct, transaction_date: transactionDate,
+        personnel_id: personnelId, machine_id: machineId, toolholder_id: toolholderId, note, production_product: productionProduct, transaction_date: transactionDate,
       });
       if (r.data.critical) toast.warning(`Stok çıkışı kaydedildi. UYARI: Kritik seviyede! Yeni stok: ${r.data.new_stock}`);
       else toast.success(`Stok çıkışı kaydedildi. Yeni stok: ${r.data.new_stock}`);
@@ -131,6 +135,15 @@ export default function StockOut() {
               {machines.map((m) => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Takım Tutucu <span className="text-slate-500 normal-case">(isteğe bağlı)</span></label>
+          <select value={toolholderId} onChange={(e) => setToolholderId(e.target.value)} data-testid="so-toolholder"
+            className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-red-500 outline-none">
+            <option value="">-- Ürün tutucuya bağlanmıyorsa boş bırakın --</option>
+            {toolholders.map((h) => <option key={h.id} value={h.id}>{h.code ? `${h.code} — ` : ""}{h.name}{h.brand ? ` | ${h.brand}` : ""} | Mevcut: {h.current_stock ?? 0}</option>)}
+          </select>
         </div>
 
         <div>

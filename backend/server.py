@@ -247,6 +247,7 @@ class StockOutIn(BaseModel):
     quantity: float
     personnel_id: str
     machine_id: str
+    toolholder_id: Optional[str] = ""
     note: Optional[str] = ""
     transaction_date: Optional[str] = ""
     production_product: Optional[str] = ""
@@ -1005,6 +1006,11 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
     machine = await db.machines.find_one({"id": body.machine_id})
     if not machine:
         raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
+    toolholder = None
+    if body.toolholder_id:
+        toolholder = await db.toolholders.find_one({"id": body.toolholder_id})
+        if not toolholder:
+            raise HTTPException(status_code=404, detail="Takım tutucu bulunamadı")
     new_stock = product["current_stock"] - body.quantity
     await db.products.update_one({"id": body.product_id}, {"$set": {"current_stock": new_stock}})
     movement = {
@@ -1014,6 +1020,10 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         "personnel_id": personnel["id"],
         "personnel_name": f"{personnel['first_name']} {personnel['last_name']}",
         "machine_id": machine["id"], "machine_code": machine.get("code", ""), "machine_name": machine["name"],
+        "toolholder_id": toolholder.get("id", "") if toolholder else "",
+        "toolholder_code": toolholder.get("code", "") if toolholder else "",
+        "toolholder_name": toolholder.get("name", "") if toolholder else "",
+        "toolholder_brand": toolholder.get("brand", "") if toolholder else "",
         "note": body.note or "",
         "production_product": body.production_product or "",
         "user_id": user["id"], "user_name": user["name"],
