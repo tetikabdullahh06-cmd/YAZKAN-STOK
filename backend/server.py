@@ -779,51 +779,9 @@ async def apply_category_image(body: dict, user=Depends(require_admin)):
 
 @api.get("/products")
 async def list_products(user=Depends(get_current_user)):
-    # Canlı veritabanında startup migration daha önce çalışmamış olsa bile,
-    # Ürünler ekranı açıldığında kategori eşleşmesini garanti altına al.
-    parmak_image_path = ROOT_DIR / "assets" / "parmakfreze.jpg"
-    if parmak_image_path.exists():
-        image_data = base64.b64encode(parmak_image_path.read_bytes()).decode("ascii")
-        image_url = f"data:image/jpeg;base64,{image_data}"
-        category_matches = await db.products.find({"category": {"$regex": "parmak freze", "$options": "i"}}, {"id": 1}).to_list(5000)
-        category_ids = [item.get("id") for item in category_matches if item.get("id")]
-        if category_ids:
-            await db.products.update_many({"id": {"$in": category_ids}}, {"$set": {"image_url": image_url}})
-    carbide_image_path = ROOT_DIR / "assets" / "karbur.jpg"
-    if carbide_image_path.exists():
-        carbide_data = base64.b64encode(carbide_image_path.read_bytes()).decode("ascii")
-        carbide_url = f"data:image/jpeg;base64,{carbide_data}"
-        # Mongo regex Türkçe Ü/ü durumlarında güvenilir olmayabildiğinden
-        # kategori kayıtlarını Python tarafında normalize ederek eşleştir.
-        all_products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
-        carbide_ids = [
-            item.get("id") for item in all_products
-            if item.get("id") and "karbur matkap" in _category_key(item.get("category", ""))
-        ]
-        if carbide_ids:
-            await db.products.update_many({"id": {"$in": carbide_ids}}, {"$set": {"image_url": carbide_url}})
-    guide_image_path = ROOT_DIR / "assets" / "kilavuz.jpg"
-    if guide_image_path.exists():
-        guide_data = base64.b64encode(guide_image_path.read_bytes()).decode("ascii")
-        guide_url = f"data:image/jpeg;base64,{guide_data}"
-        all_products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
-        guide_ids = [
-            item.get("id") for item in all_products
-            if item.get("id") and "kilavuz" in _category_key(item.get("category", ""))
-        ]
-        if guide_ids:
-            await db.products.update_many({"id": {"$in": guide_ids}}, {"$set": {"image_url": guide_url}})
-    tline_image_path = ROOT_DIR / "assets" / "tline.jpg"
-    if tline_image_path.exists():
-        tline_data = base64.b64encode(tline_image_path.read_bytes()).decode("ascii")
-        tline_url = f"data:image/jpeg;base64,{tline_data}"
-        all_products = await db.products.find({}, {"id": 1, "category": 1}).to_list(5000)
-        tline_ids = [
-            item.get("id") for item in all_products
-            if item.get("id") and "t line matkap" in _category_key(item.get("category", ""))
-        ]
-        if tline_ids:
-            await db.products.update_many({"id": {"$in": tline_ids}}, {"$set": {"image_url": tline_url}})
+    # Görsel kategori migration'ları startup sırasında bir kez çalışır.
+    # Listeleme endpoint'inde tekrar tekrar dosya okuyup toplu update yapmak,
+    # her sayfa açılışını gereksiz yere yavaşlatır; bu sıcak yolda yalnızca okuma yapıyoruz.
     products = await db.products.find({}, {"_id": 0}).sort("code", 1).to_list(2000)
     sharpening_totals = {}
     open_records = await db.sharpening_records.find({"status": {"$in": ["sent", "partial"]}}, {"_id": 0, "product_id": 1, "quantity": 1, "returned_quantity": 1, "remaining_quantity": 1}).to_list(5000)
