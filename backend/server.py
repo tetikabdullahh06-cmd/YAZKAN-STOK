@@ -1111,11 +1111,30 @@ async def list_movements(
             return "bileme" in note or (not movement.get("production_product") and not movement.get("note"))
 
         # Eski sürümlerde aynı bileme işlemi normal stok çıkışı olarak da yazılmış
-        # olabilir. Eşleşen normal satır kaldırılır; yalnızca bileme kategorisi kalır.
-        movements = [
-            movement for movement in movements
-            if not any(same_sharpening_movement(record, movement) for record in sharpening_records)
-        ]
+        # olabilir. Önce kesin bağlı kayıtları, sonra aynı ürün+miktar+tarih
+        # eşleşmesini kullanarak yalnızca bir normal satırı kaldırıyoruz.
+        consumed_duplicate_ids = set()
+        for record in sharpening_records:
+            candidates = [
+                movement for movement in movements
+                if movement.get("id") not in consumed_duplicate_ids
+                and movement.get("type") == "out"
+                and not movement.get("sharpening_record_id")
+                and movement.get("product_id") == record.get("product_id")
+                and str(movement.get("transaction_date") or movement.get("created_at", ""))[:10] == str(record.get("sent_date") or record.get("created_at", ""))[:10]
+            ]
+            exact = []
+            for movement in candidates:
+                try:
+                    if float(movement.get("quantity", 0)) == float(record.get("quantity", 0)):
+                        exact.append(movement)
+                except (TypeError, ValueError):
+                    continue
+            candidates = exact or candidates
+            if candidates:
+                candidates.sort(key=lambda movement: (0 if same_sharpening_movement(record, movement) else 1, str(movement.get("created_at", ""))))
+                consumed_duplicate_ids.add(candidates[0].get("id"))
+        movements = [movement for movement in movements if movement.get("id") not in consumed_duplicate_ids]
         existing_sharpening_ids = {(m.get("sharpening_record_id"), m.get("sharpening_movement_kind") or ("in" if m.get("type") == "in" else "out")) for m in movements if m.get("sharpening_record_id")}
         for record in sharpening_records:
             record_id = record.get("id")
