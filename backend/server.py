@@ -1066,7 +1066,9 @@ async def list_movements(
             {"transaction_date": date_query},
             {"transaction_date": {"$exists": False}, "created_at": {"$gte": date_from or "", "$lte": (date_to + "T23:59:59") if date_to else "9999-12-31T23:59:59"}},
         ]
-    movements = await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    # Filtreleme yapılmadan önce yeterli sayıda hareket alıyoruz; aksi halde
+    # mükerrer satır ilk limit içinde kalıp bileme filtresine ulaşamayabilir.
+    movements = await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
 
     # Bileme kayıtları movements koleksiyonunda tutulmadığından, Hareketler
     # ekranında ayrı ve tekil hareket satırları olarak gösterilir.
@@ -1079,6 +1081,27 @@ async def list_movements(
         sharpening_q = None  # Bileme kayıtlarında bu alanlar bulunmaz.
     if sharpening_q is not None:
         sharpening_records = await db.sharpening_records.find(sharpening_q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+        # Bir ürün aynı gün bilemeye gönderilmişse, o güne ait normal çıkış
+        # satırları bu ekranda ikinci bir çıkış olarak gösterilmez. Bileme
+        # işlemi zaten stok çıkışıdır; yalnızca Bilemeye Giden satırı kalır.
+        sharpening_product_days = set()
+        for record in sharpening_records:
+            day = str(record.get("sent_date") or record.get("created_at", ""))[:10]
+            if day:
+                sharpening_product_days.add((record.get("product_id"), record.get("product_code", ""), day))
+        movements = [
+            movement for movement in movements
+            if not (
+                movement.get("type") == "out"
+                and not movement.get("sharpening_record_id")
+                and any(
+                    day == str(movement.get("transaction_date") or movement.get("created_at", ""))[:10]
+                    and ((pid and movement.get("product_id") == pid) or (code and movement.get("product_code") == code))
+                    for pid, code, day in sharpening_product_days
+                )
+            )
+        ]
 
         def same_sharpening_movement(record, movement):
             if movement.get("type") != "out":
