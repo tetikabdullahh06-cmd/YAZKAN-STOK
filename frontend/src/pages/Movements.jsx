@@ -16,7 +16,29 @@ export default function Movements() {
     if (dateFrom) p.date_from = dateFrom;
     if (dateTo) p.date_to = dateTo;
     const r = await api.get("/movements", { params: p });
-    setItems(r.data);
+    const rawItems = Array.isArray(r.data) ? r.data : [];
+    const isSharpening = (m) => Boolean(
+      m.movement_category === "Bilemeye Giden" ||
+      m.movement_category === "Bilemeden Gelen" ||
+      m.sharpening_record_id ||
+      String(m.movement_purpose || "").toLocaleLowerCase("tr-TR").includes("bileme")
+    );
+    const keyOf = (m) => [
+      m.type || "", m.product_id || m.product_code || m.product_name || "",
+      Number(m.quantity || 0), String(m.transaction_date || m.created_at || "").slice(0, 10),
+    ].join("|");
+    const sharpeningKeys = new Set(rawItems.filter(isSharpening).map(keyOf));
+    const seen = new Set();
+    const cleanItems = rawItems.filter((m) => {
+      const key = keyOf(m);
+      // Aynı ürün/miktar/tarihte bileme hareketi varsa normal işleme çıkışını kaldır.
+      if (!isSharpening(m) && sharpeningKeys.has(key)) return false;
+      const uniqueKey = `${m.id || key}|${m.type || ""}`;
+      if (seen.has(uniqueKey)) return false;
+      seen.add(uniqueKey);
+      return true;
+    });
+    setItems(cleanItems);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [type, dateFrom, dateTo]);
 
