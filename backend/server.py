@@ -202,6 +202,31 @@ class ToolHolderStockOut(BaseModel):
     note: Optional[str] = ""
 
 
+class GloveIn(BaseModel):
+    name: str
+    size: Optional[str] = ""
+    brand: Optional[str] = ""
+    unit: str = "çift"
+    min_stock: float = 0.0
+    current_stock: float = 0.0
+    location: Optional[str] = ""
+    note: Optional[str] = ""
+
+
+class GloveStockIn(BaseModel):
+    quantity: float
+    supplier: Optional[str] = ""
+    note: Optional[str] = ""
+    transaction_date: Optional[str] = ""
+
+
+class GloveStockOut(BaseModel):
+    quantity: float
+    personnel_id: str
+    transaction_date: str
+    note: Optional[str] = ""
+
+
 class ToolHolderScrapIn(BaseModel):
     quantity: float
     scrap_reason: str
@@ -1701,6 +1726,111 @@ async def report_by_supplier(user=Depends(get_current_user),
         agg[key]["total"] += m.get("total", 0)
         agg[key]["count"] += 1
     return [{"name": k, **v} for k, v in sorted(agg.items(), key=lambda x: -x[1]["total"])]
+
+
+# ==================== Gloves (Eldiven Takip) ====================
+@api.get("/gloves")
+async def list_gloves(user=Depends(get_current_user)):
+    return await db.gloves.find({}, {"_id": 0}).sort("name", 1).to_list(2000)
+
+
+@api.post("/gloves")
+async def create_glove(body: GloveIn, user=Depends(require_admin)):
+    doc = {**body.model_dump(), "id": new_id(), "created_at": now_utc().isoformat()}
+    await db.gloves.insert_one(doc)
+    return clean(doc)
+
+
+@api.put("/gloves/{gid}")
+async def update_glove(gid: str, body: GloveIn, user=Depends(require_admin)):
+    existing = await db.gloves.find_one({"id": gid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Eldiven kaydı bulunamadı")
+    await db.gloves.update_one({"id": gid}, {"$set": body.model_dump()})
+    return await db.gloves.find_one({"id": gid}, {"_id": 0})
+
+
+@api.delete("/gloves/{gid}")
+async def delete_glove(gid: str, user=Depends(require_admin)):
+    result = await db.gloves.delete_one({"id": gid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Eldiven kaydı bulunamadı")
+    return {"ok": True}
+
+
+@api.post("/gloves/{gid}/in")
+async def glove_in(gid: str, body: GloveStockIn, user=Depends(require_admin)):
+    glove = await db.gloves.find_one({"id": gid})
+    if not glove:
+        raise HTTPException(status_code=404, detail="Eldiven kaydı bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
+    new_stock = float(glove.get("current_stock", 0)) + body.quantity
+    await db.gloves.update_one({"id": gid}, {"$set": {"current_stock": new_stock}})
+    movement = {
+        "id": new_id(), "type": "in", "glove_id": gid, "glove_name": glove.get("name", ""),
+        "size": glove.get("size", ""), "brand": glove.get("brand", ""), "quantity": body.quantity,
+        "supplier": body.supplier or "", "note": body.note or "", "transaction_date": body.transaction_date or now_utc().date().isoformat(),
+        "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat(),
+    }
+    await db.glove_movements.insert_one(movement)
+    return {"ok": True, "new_stock": new_stock, "movement": clean(movement)}
+
+
+@api.post("/gloves/{gid}/out")
+async def glove_out(gid: str, body: GloveStockOut, user=Depends(require_admin)):
+    glove = await db.gloves.find_one({"id": gid})
+    if not glove:
+        raise HTTPException(status_code=404, detail="Eldiven kaydı bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
+    if body.quantity > float(glove.get("current_stock", 0)):
+        raise HTTPException(status_code=400, detail="Yetersiz eldiven stoku")
+    person = await db.personnel.find_one({"id": body.personnel_id})
+    if not person:
+        raise HTTPException(status_code=404, detail="Personel bulunamadı")
+    new_stock = float(glove.get("current_stock", 0)) - body.quantity
+    await db.gloves.update_one({"id": gid}, {"$set": {"current_stock": new_stock}})
+    movement = {
+        "id": new_id(), "type": "out", "glove_id": gid, "glove_name": glove.get("name", ""),
+        "size": glove.get("size", ""), "brand": glove.get("brand", ""), "quantity": body.quantity,
+        "personnel_id": person["id"], "personnel_name": f"{person.get('first_name', '')} {person.get('last_name', '')}".strip(),
+        "note": body.note or "", "transaction_date": body.transaction_date, "user_id": user["id"],
+        "user_name": user.get("name", ""), "created_at": now_utc().isoformat(),
+    }
+    await db.glove_movements.insert_one(movement)
+    return {"ok": True, "new_stock": new_stock, "movement": clean(movement)}
+
+
+@api.get("/glove-movements")
+async def list_glove_movements(user=Depends(get_current_user), glove_id: Optional[str] = None, personnel_id: Optional[str] = None, type: Optional[str] = None):
+    query = {}
+    if glove_id: query["glove_id"] = glove_id
+    if personnel_id: query["personnel_id"] = personnel_id
+    if type: query["type"] = type
+    return await db.glove_movements.find(query, {"_id": 0}).sort([("transaction_date", -1), ("created_at", -1)]).to_list(5000)
+
+
+@api.get("/reports/glove-consumption")
+async def glove_consumption_report(user=Depends(get_current_user), date_from: Optional[str] = None, date_to: Optional[str] = None):
+    query = {"type": "out"}
+    if date_from or date_to:
+        query["transaction_date"] = {}
+        if date_from: query["transaction_date"]["$gte"] = date_from
+        if date_to: query["transaction_date"]["$lte"] = date_to
+    rows = await db.glove_movements.find(query, {"_id": 0}).sort("transaction_date", -1).to_list(5000)
+    totals = {}
+    for row in rows:
+        key = (row.get("personnel_id", ""), row.get("glove_id", ""), row.get("transaction_date", ""))
+        item = totals.setdefault(key, {
+            "transaction_date": row.get("transaction_date", ""), "personnel_id": row.get("personnel_id", ""),
+            "personnel_name": row.get("personnel_name", ""), "glove_id": row.get("glove_id", ""),
+            "glove_name": row.get("glove_name", ""), "size": row.get("size", ""), "brand": row.get("brand", ""),
+            "quantity": 0, "movement_count": 0,
+        })
+        item["quantity"] += float(row.get("quantity", 0) or 0)
+        item["movement_count"] += 1
+    return list(totals.values())
 
 
 # ==================== Tool Holders (Takım Tutucular) ====================

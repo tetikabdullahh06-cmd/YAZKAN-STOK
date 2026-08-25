@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
-  LayoutDashboard, Package, Users, Settings2, ArrowDownToLine, ArrowUp,
+  LayoutDashboard, Package, Users, Settings2, ArrowDownToLine, ArrowUp, PackagePlus,
   ArrowUpFromLine, History, AlertTriangle, FileBarChart2, LogOut, Wrench,
   Building2, ClipboardList, Eye, ShieldCheck, Cog, BarChart3, Cable, PackageX
 } from "lucide-react";
@@ -12,6 +12,7 @@ const NAV = [
   { to: "/", label: "Panel", icon: LayoutDashboard, end: true, testid: "nav-dashboard" },
   { to: "/stok-cikis", label: "Stok Çıkışı", icon: ArrowUpFromLine, testid: "nav-stock-out", adminOnly: true },
   { to: "/stok-giris", label: "Stok Girişi", icon: ArrowDownToLine, testid: "nav-stock-in", adminOnly: true },
+  { to: "/eldiven", label: "Eldiven Takip", icon: PackagePlus, testid: "nav-gloves", adminOnly: true },
   { to: "/bileme", label: "Bilemeye Giden / Gelen", icon: Wrench, testid: "nav-sharpening", adminOnly: true },
   { to: "/denemeler", label: "Kesici Takım Denemeleri", icon: BarChart3, testid: "nav-tool-trials", adminOnly: true },
   { to: "/receteler", label: "İşleme Reçeteleri", icon: Cable, testid: "nav-recipes", adminOnly: true },
