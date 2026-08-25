@@ -1403,8 +1403,9 @@ async def consumption_detail(user=Depends(get_current_user), personnel_id: Optio
         row["machine_name"] = row.get("machine_name") or machine.get("name", "-")
     totals = {}
     for row in rows:
-        key = (row.get("product_id", ""), row.get("product_code", ""), row.get("product_name", "-"), row.get("machine_id", ""), row.get("machine_code", ""), row.get("machine_name", "-"), row.get("production_product", "") or "-")
-        item = totals.setdefault(key, {"personnel_name": row.get("personnel_name", "-"), "product_id": key[0], "product_code": key[1], "product_name": key[2], "machine_id": key[3], "machine_code": key[4], "machine_name": key[5], "production_product": key[6], "quantity": 0, "movement_count": 0})
+        transaction_date = row.get("transaction_date") or (row.get("created_at", "")[:10] if row.get("created_at") else "-")
+        key = (transaction_date, row.get("product_id", ""), row.get("product_code", ""), row.get("product_name", "-"), row.get("machine_id", ""), row.get("machine_code", ""), row.get("machine_name", "-"), row.get("production_product", "") or "-")
+        item = totals.setdefault(key, {"transaction_date": key[0], "personnel_name": row.get("personnel_name", "-"), "product_id": key[1], "product_code": key[2], "product_name": key[3], "machine_id": key[4], "machine_code": key[5], "machine_name": key[6], "production_product": key[7], "quantity": 0, "movement_count": 0})
         item["quantity"] += float(row.get("quantity", 0) or 0)
         item["movement_count"] += 1
     return {"rows": list(totals.values()), "movements": rows}
