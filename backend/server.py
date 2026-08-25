@@ -1435,7 +1435,7 @@ async def dashboard(user=Depends(get_current_user)):
         "critical_count": critical_count,
         "month_total_cost": 0,
         "critical_products": critical[:10],
-        "out_of_stock_products": out_of_stock[:100],
+        "out_of_stock_products": out_of_stock,
         "top_personnel": [{"name": n, "qty": round(q, 2)} for n, q in top_personnel],
         "top_machines": [{"name": n, "qty": round(q, 2)} for n, q in top_machines],
         "personnel_list": personnel_list,
