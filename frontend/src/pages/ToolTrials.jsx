@@ -55,6 +55,7 @@ export default function ToolTrials() {
   const downloadWorkbook = (rows, filename) => {
     const ws = XLSX.utils.json_to_sheet(exportRows(rows));
     ws["!cols"] = Object.keys(exportRows(rows)[0] || {}).map((key) => ({ wch: Math.max(14, Math.min(32, key.length + 4)) }));
+    ws["!autofilter"] = { ref: `A1:W${Math.max(1, exportRows(rows).length + 1)}` };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Deneme Raporları");
     XLSX.writeFile(wb, filename);

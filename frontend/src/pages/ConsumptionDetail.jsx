@@ -59,6 +59,7 @@ export default function ConsumptionDetail() {
     const wb = utils.book_new();
     const ws = utils.aoa_to_sheet(sheetData);
     ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } }];
+    ws["!autofilter"] = { ref: `A4:H${Math.max(4, sheetData.length)}` };
     utils.book_append_sheet(wb, ws, "Tüketim Detayı");
     writeFile(wb, `${isPersonnel ? "personel" : "tezgah"}_tuketim_${label.replace(/[^a-z0-9çğıöşü -]/gi, "_")}.xlsx`);
   };

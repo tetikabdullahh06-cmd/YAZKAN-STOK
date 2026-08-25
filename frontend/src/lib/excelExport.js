@@ -14,6 +14,10 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
   worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
 
   rows.forEach((row) => worksheet.addRow(row));
+  if (headers.length) {
+    worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rows.length + 1), column: headers.length } };
+    worksheet.views = [{ state: "frozen", ySplit: 1 }];
+  }
   const imageColumn = headers.indexOf(imageKey);
   if (includeImages && imageColumn >= 0) {
     rows.forEach((row, index) => {
@@ -53,6 +57,10 @@ export async function downloadPlainWorkbook({ sheetName, rows, filename }) {
     headers.forEach((header) => { plain[header] = row[header] ?? ""; });
     worksheet.addRow(plain);
   });
+  if (headers.length) {
+    worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rows.length + 1), column: headers.length } };
+    worksheet.views = [{ state: "frozen", ySplit: 1 }];
+  }
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);

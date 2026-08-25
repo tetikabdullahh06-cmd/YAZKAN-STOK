@@ -1546,6 +1546,8 @@ async def report_excel(user=Depends(get_current_user),
             m.get("production_product", ""), m.get("helix_length", ""), m.get("diameter", ""), m.get("full_length", ""),
             m.get("supplier", ""), m.get("note", ""), m.get("user_name", ""),
         ])
+    ws1.freeze_panes = "A2"
+    ws1.auto_filter.ref = ws1.dimensions
 
     def _summary(sheet, key, header):
         ws = wb.create_sheet(sheet)
@@ -1558,6 +1560,8 @@ async def report_excel(user=Depends(get_current_user),
             agg[k] = agg.get(k, 0) + m.get("quantity", 0)
         for k, v in agg.items():
             ws.append([k, v])
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
 
     _summary("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar"])
 
@@ -1591,6 +1595,8 @@ async def report_excel(user=Depends(get_current_user),
             m.get("product_code", ""), m.get("production_product", ""), m.get("quantity", 0),
             "Bilemeye gönderildi" if m.get("sharpening_record_id") else "Üretimde kullanım",
         ])
+    detail_ws.freeze_panes = "A2"
+    detail_ws.auto_filter.ref = detail_ws.dimensions
 
     buf = io.BytesIO()
     wb.save(buf)
