@@ -1116,16 +1116,14 @@ async def list_movements(
             movement for movement in movements
             if not any(same_sharpening_movement(record, movement) for record in sharpening_records)
         ]
-        existing_sharpening_ids = {m.get("sharpening_record_id") for m in movements if m.get("sharpening_record_id")}
+        existing_sharpening_ids = {(m.get("sharpening_record_id"), m.get("sharpening_movement_kind") or ("in" if m.get("type") == "in" else "out")) for m in movements if m.get("sharpening_record_id")}
         for record in sharpening_records:
             record_id = record.get("id")
-            if record_id in existing_sharpening_ids:
-                continue
             sent_date = record.get("sent_date") or record.get("created_at", "")[:10]
             received_date = record.get("received_date") or record.get("updated_at", "")[:10]
             sent_in_range = (not date_from or (sent_date or "") >= date_from) and (not date_to or (sent_date or "") <= date_to)
             received_in_range = (not date_from or (received_date or "") >= date_from) and (not date_to or (received_date or "") <= date_to)
-            if type in (None, "", "out") and sent_in_range:
+            if type in (None, "", "out") and sent_in_range and (record_id, "out") not in existing_sharpening_ids:
                 movements.append({
                     "id": f"sharpening-out-{record_id}", "type": "out", "movement_category": "Bilemeye Giden",
                     "movement_purpose": "Bilemeye gitti", "sharpening_record_id": record_id,
@@ -1138,7 +1136,7 @@ async def list_movements(
                     "full_length": record.get("full_length", ""),
                 })
             returned_quantity = float(record.get("returned_quantity", 0) or 0)
-            if returned_quantity > 0 and (type in (None, "", "in")) and received_in_range:
+            if returned_quantity > 0 and (type in (None, "", "in")) and received_in_range and (record_id, "in") not in existing_sharpening_ids:
                 movements.append({
                     "id": f"sharpening-in-{record_id}", "type": "in", "movement_category": "Bilemeden Gelen",
                     "movement_purpose": "Bilemeden geldi", "sharpening_record_id": record_id,
@@ -1193,6 +1191,18 @@ async def sharpening_out(body: SharpeningOutIn, user=Depends(require_admin)):
     }
     await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
     await db.sharpening_records.insert_one(record)
+    # Bilemeye gidiş zaten stoktan düşen işlemdir; ayrıca /stock/out çağrılmaz.
+    await db.movements.insert_one({
+        "id": new_id(), "type": "out", "movement_category": "Bilemeye Giden",
+        "movement_purpose": "Bilemeye gitti", "sharpening_record_id": record["id"],
+        "sharpening_movement_kind": "out", "product_id": product["id"],
+        "product_code": product.get("code", ""), "product_name": product.get("name", ""),
+        "quantity": body.quantity, "transaction_date": body.sent_date,
+        "created_at": record["created_at"], "supplier": company, "destination": company,
+        "note": body.note or "", "user_name": user.get("name", ""),
+        "process_type": body.process_type, "helix_length": body.helix_length or "",
+        "diameter": body.diameter or "", "full_length": body.full_length or "",
+    })
     return {"ok": True, "new_stock": new_stock, "record": clean(record)}
 
 
@@ -1231,6 +1241,21 @@ async def sharpening_in(body: SharpeningInIn, user=Depends(require_admin)):
     }
     await db.products.update_one({"id": return_product_id}, {"$set": {"current_stock": new_stock}})
     await db.sharpening_records.update_one({"id": record["id"]}, {"$set": update})
+    # Stoğa dönüş için ayrıca stok girişi yapılmaz; yukarıdaki stok güncellemesi
+    # işlemin tek stok etkisidir. Yalnızca geçmiş hareketi kayda alıyoruz.
+    await db.movements.insert_one({
+        "id": new_id(), "type": "in", "movement_category": "Bilemeden Gelen",
+        "movement_purpose": "Bilemeden geldi", "sharpening_record_id": record["id"],
+        "sharpening_movement_kind": "in", "product_id": return_product_id,
+        "product_code": return_product.get("code", ""), "product_name": return_product.get("name", ""),
+        "quantity": qty, "transaction_date": body.received_date,
+        "created_at": now_utc().isoformat(), "supplier": body.company.strip(),
+        "destination": body.company.strip(), "note": f"İrsaliye: {body.waybill_number.strip()}",
+        "user_name": user.get("name", ""), "process_type": record.get("process_type", ""),
+        "helix_length": body.return_helix_length or record.get("helix_length", ""),
+        "diameter": body.return_diameter or record.get("diameter", ""),
+        "full_length": body.return_full_length or record.get("full_length", ""),
+    })
     updated = await db.sharpening_records.find_one({"id": record["id"]}, {"_id": 0})
     return {"ok": True, "new_stock": new_stock, "record": updated}
 
