@@ -1013,7 +1013,7 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         "quantity": body.quantity, "unit_price": 0, "total": 0,
         "personnel_id": personnel["id"],
         "personnel_name": f"{personnel['first_name']} {personnel['last_name']}",
-        "machine_id": machine["id"], "machine_name": machine["name"],
+        "machine_id": machine["id"], "machine_code": machine.get("code", ""), "machine_name": machine["name"],
         "note": body.note or "",
         "production_product": body.production_product or "",
         "user_id": user["id"], "user_name": user["name"],
@@ -1384,6 +1384,13 @@ async def consumption_detail(user=Depends(get_current_user), personnel_id: Optio
     if machine_id:
         movement_filter["machine_id"] = machine_id
     rows = await db.movements.find(movement_filter, {"_id": 0}).sort("created_at", -1).to_list(50000)
+    machine_ids = {row.get("machine_id") for row in rows if row.get("machine_id")}
+    machine_docs = await db.machines.find({"id": {"$in": list(machine_ids)}}, {"_id": 0, "id": 1, "code": 1, "name": 1}).to_list(2000) if machine_ids else []
+    machine_map = {m.get("id"): m for m in machine_docs}
+    for row in rows:
+        machine = machine_map.get(row.get("machine_id"), {})
+        row["machine_code"] = row.get("machine_code") or machine.get("code", "")
+        row["machine_name"] = row.get("machine_name") or machine.get("name", "-")
     totals = {}
     for row in rows:
         key = (row.get("product_id", ""), row.get("product_code", ""), row.get("product_name", "-"), row.get("machine_id", ""), row.get("machine_code", ""), row.get("machine_name", "-"), row.get("production_product", "") or "-")
