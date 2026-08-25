@@ -1652,7 +1652,7 @@ async def report_excel(user=Depends(get_current_user),
         ws1.append([
             m.get("transaction_date") or m.get("created_at", "")[:19].replace("T", " "),
             "GİRİŞ" if m.get("type") == "in" else "ÇIKIŞ",
-            m.get("movement_purpose") or ("Bilemeye gitti" if m.get("sharpening_record_id") else ("Stok girişi" if m.get("type") == "in" else ("İşleme için verildi" if m.get("machine_name") else "Üretimde kullanım"))),
+            m.get("movement_category") or ("Bilemeden Gelen" if m.get("sharpening_movement_kind") == "in" else ("Bilemeye Giden" if m.get("sharpening_record_id") else (m.get("movement_purpose") or ("Stok girişi" if m.get("type") == "in" else ("İşleme için verildi" if m.get("machine_name") else "Üretimde kullanım"))))),
             m.get("destination") or (m.get("machine_name", "") if m.get("type") == "out" else m.get("supplier", "")),
             m.get("process_type", ""), m.get("product_code", ""), m.get("product_name", ""),
             m.get("quantity", 0), m.get("personnel_name", ""), m.get("machine_name", ""),
@@ -1689,7 +1689,7 @@ async def report_excel(user=Depends(get_current_user),
                 m.get("transaction_date") or m.get("created_at", "")[:10],
                 m.get("personnel_name", ""), m.get("machine_name", ""), m.get("product_name", ""),
                 m.get("product_code", ""), m.get("production_product", ""), m.get("quantity", 0),
-                "Bilemeye gönderildi" if m.get("sharpening_record_id") else "Üretimde kullanım",
+                m.get("movement_category") or ("Bilemeye Giden" if m.get("sharpening_record_id") else "Üretimde kullanım"),
             ])
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
