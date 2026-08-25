@@ -198,3 +198,96 @@ main p, main small, main td, main dd { color: #111827; }
 main input::placeholder, main textarea::placeholder { color: #374151 !important; opacity: 1; }
 main .text-slate-400 svg, main .text-slate-500 svg { color: #111827 !important; }
 
+
+/* Dynamic contrast theme: vivid surfaces, clear hierarchy, and responsive interaction states */
+.app-shell {
+    background:
+      radial-gradient(circle at 8% 0%, rgba(14, 165, 233, .13), transparent 24%),
+      radial-gradient(circle at 94% 16%, rgba(20, 184, 166, .14), transparent 25%),
+      linear-gradient(135deg, #eaf4ff 0%, #f8fbff 46%, #e9fbf7 100%);
+}
+.app-shell::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(115deg, transparent 0 42%, rgba(59, 130, 246, .035) 50%, transparent 58%);
+}
+.app-sidebar {
+    background: linear-gradient(180deg, #0b1f35 0%, #102b48 52%, #0d223b 100%) !important;
+    border-right: 1px solid #2d557b !important;
+}
+.app-sidebar nav a {
+    color: #dbeafe !important;
+    border: 1px solid transparent;
+    box-shadow: inset 3px 0 0 transparent;
+}
+.app-sidebar nav a:hover {
+    color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(14, 165, 233, .28), rgba(20, 184, 166, .14)) !important;
+    border-color: rgba(103, 232, 249, .24);
+    box-shadow: inset 3px 0 0 #22d3ee;
+    transform: translateX(3px);
+}
+.app-sidebar nav a[aria-current="page"] {
+    background: linear-gradient(105deg, #2563eb 0%, #0891b2 55%, #0d9488 100%) !important;
+    border-color: rgba(165, 243, 252, .7);
+    box-shadow: 0 12px 28px rgba(8, 145, 178, .28), inset 3px 0 0 #cffafe;
+}
+main .bg-slate-800\/60 {
+    border-color: #c7d9ec !important;
+    box-shadow: 0 12px 30px rgba(30, 64, 175, .08);
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+main .bg-slate-800\/60:hover {
+    border-color: #7dd3fc !important;
+    box-shadow: 0 16px 36px rgba(14, 116, 144, .13);
+}
+main button:not(:disabled) {
+    box-shadow: 0 5px 14px rgba(15, 23, 42, .10);
+}
+main button:not(:disabled):hover {
+    box-shadow: 0 9px 20px rgba(14, 116, 144, .18);
+}
+main button.bg-blue-600, main button.bg-blue-700,
+main button.bg-emerald-600, main button.bg-emerald-700 {
+    background-image: linear-gradient(105deg, #2563eb, #0891b2 58%, #0d9488) !important;
+    border: 1px solid rgba(14, 116, 144, .35);
+}
+main button.bg-red-600, main button.bg-red-700 {
+    background-image: linear-gradient(105deg, #dc2626, #e11d48) !important;
+}
+main table thead {
+    background: linear-gradient(90deg, #dbeafe 0%, #cffafe 52%, #ccfbf1 100%) !important;
+    border-bottom: 2px solid #67e8f9;
+}
+main table tbody tr:nth-child(even) { background-color: rgba(239, 246, 255, .62); }
+main table tbody tr:hover {
+    background: linear-gradient(90deg, #e0f2fe, #ecfeff) !important;
+    box-shadow: inset 4px 0 0 #06b6d4;
+}
+main input:focus, main select:focus, main textarea:focus {
+    border-color: #0284c7 !important;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, .22), 0 5px 16px rgba(14, 116, 144, .10) !important;
+}
+main .text-blue-400, main .text-blue-300 { color: #0369a1 !important; }
+main .text-cyan-300, main .text-cyan-400 { color: #0e7490 !important; }
+main .text-emerald-300, main .text-emerald-400 { color: #047857 !important; }
+main .text-violet-300, main .text-violet-400 { color: #6d28d9 !important; }
+main .text-amber-300, main .text-amber-400 { color: #a16207 !important; }
+main .text-red-300, main .text-red-400 { color: #b91c1c !important; }
+main .border-blue-500\/40, main .border-cyan-500\/40 { border-color: #7dd3fc !important; }
+main .border-emerald-500\/40 { border-color: #6ee7b7 !important; }
+main .border-violet-500\/40 { border-color: #c4b5fd !important; }
+main ::-webkit-scrollbar { width: 10px; height: 10px; }
+main ::-webkit-scrollbar-track { background: #e5edf6; border-radius: 999px; }
+main ::-webkit-scrollbar-thumb { background: linear-gradient(#38bdf8, #0d9488); border-radius: 999px; border: 2px solid #e5edf6; }
+main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047857); }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+@media (max-width: 768px) {
+    .app-sidebar nav a { min-height: 52px; }
+    main .bg-slate-800\/60 { box-shadow: 0 8px 22px rgba(30, 64, 175, .08); }
+}
