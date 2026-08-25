@@ -38,19 +38,27 @@ export default function ConsumptionDetail() {
 
   const exportExcel = () => {
     if (!data?.rows?.length) return toast.error("Dışa aktarılacak tüketim kaydı yok");
-    const rows = data.rows.map((r) => ({
-      "Personel": r.personnel_name || (isPersonnel ? label : "-"),
-      "Ürün Kodu": r.product_code,
-      "Kullanılan Uç / Ürün": r.product_name,
-      "Tezgâh Kodu": r.machine_code || "Kod yok",
-      "Tezgâh Adı": r.machine_name || "-",
-      "Tezgâh Gösterimi": `${r.machine_code || "Kod yok"} — ${r.machine_name || "-"}`,
-      "Üretim / İşlenen Ürün": r.production_product,
-      "Toplam Tüketim": r.quantity,
-      "Hareket Sayısı": r.movement_count,
-    }));
+    const rows = data.rows.map((r) => [
+      r.product_code || "-",
+      r.product_name || "-",
+      r.machine_code || "Kod yok",
+      r.machine_name || "-",
+      r.production_product || "-",
+      r.quantity,
+      r.movement_count,
+    ]);
+    const personName = isPersonnel ? label : "Tüm Personeller";
+    const sheetData = [
+      ["PERSONEL TÜKETİM DETAY RAPORU"],
+      [`Personel: ${personName}`],
+      [],
+      ["Ürün Kodu", "Kullanılan Uç / Ürün", "Tezgâh Kodu", "Tezgâh Adı", "Üretim / İşlenen Ürün", "Toplam Tüketim", "Hareket Sayısı"],
+      ...rows,
+    ];
     const wb = utils.book_new();
-    utils.book_append_sheet(wb, utils.json_to_sheet(rows), "Tüketim Detayı");
+    const ws = utils.aoa_to_sheet(sheetData);
+    ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }];
+    utils.book_append_sheet(wb, ws, "Tüketim Detayı");
     writeFile(wb, `${isPersonnel ? "personel" : "tezgah"}_tuketim_${label.replace(/[^a-z0-9çğıöşü -]/gi, "_")}.xlsx`);
   };
 
@@ -61,7 +69,7 @@ export default function ConsumptionDetail() {
         <div><Link to="/" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 mb-3"><ArrowLeft className="w-4 h-4" /> Ana panele dön</Link><div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold">{title}</div><h1 className="font-display text-4xl font-black">{label}</h1><p className="text-slate-400 text-sm mt-1">Hangi uçtan ne kadar tüketildiğinin toplamı.</p></div>
         <button onClick={exportExcel} className="inline-flex items-center gap-2 h-12 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold"><Download className="w-5 h-5" /> Excel’e Aktar</button>
       </div>
-      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden"><div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2"><PackageSearch className="w-5 h-5 text-blue-400" /><h2 className="font-display text-xl font-bold">Ürün Bazlı Tüketim</h2></div><div className="overflow-auto"><table className="w-full text-sm"><thead className="bg-slate-900/60"><tr className="text-left text-slate-300"><th className="px-6 py-3">Personel</th><th className="px-6 py-3">Ürün Kodu</th><th className="px-6 py-3">Kullanılan Uç / Ürün</th><th className="px-6 py-3">Tezgâh</th><th className="px-6 py-3">Üretim / İşlenen Ürün</th><th className="px-6 py-3">Toplam Tüketim</th><th className="px-6 py-3">İşlem Sayısı</th></tr></thead><tbody className="divide-y divide-slate-700">{!data?.rows?.length ? <tr><td colSpan="7" className="px-6 py-8 text-center text-slate-500">Henüz tüketim kaydı yok.</td></tr> : data.rows.map((r) => <tr key={`${r.product_id}-${r.production_product}`} className="hover:bg-slate-700/40"><td className="px-6 py-3 font-semibold text-blue-200">{r.personnel_name || (isPersonnel ? label : "-")}</td><td className="px-6 py-3 font-mono-tab text-slate-400">{r.product_code || "-"}</td><td className="px-6 py-3 font-semibold">{r.product_name}</td><td className="px-6 py-3 text-slate-300"><div className="font-bold text-cyan-300">KOD: {r.machine_code || "Kod yok"}</div><div className="text-xs text-slate-200">ADI: {r.machine_name || "-"}</div></td><td className="px-6 py-3 text-slate-300">{r.production_product}</td><td className="px-6 py-3 font-black text-emerald-400">{r.quantity}</td><td className="px-6 py-3 text-slate-300">{r.movement_count}</td></tr>)}</tbody></table></div></div>
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden"><div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2"><PackageSearch className="w-5 h-5 text-blue-400" /><h2 className="font-display text-xl font-bold">Ürün Bazlı Tüketim</h2></div><div className="overflow-auto"><table className="w-full text-sm"><thead className="bg-slate-900/60"><tr className="text-left text-slate-300"><th className="px-6 py-3">Ürün Kodu</th><th className="px-6 py-3">Kullanılan Uç / Ürün</th><th className="px-6 py-3">Tezgâh</th><th className="px-6 py-3">Üretim / İşlenen Ürün</th><th className="px-6 py-3">Toplam Tüketim</th><th className="px-6 py-3">İşlem Sayısı</th></tr></thead><tbody className="divide-y divide-slate-700">{!data?.rows?.length ? <tr><td colSpan="6" className="px-6 py-8 text-center text-slate-500">Henüz tüketim kaydı yok.</td></tr> : data.rows.map((r) => <tr key={`${r.product_id}-${r.production_product}`} className="hover:bg-slate-700/40"><td className="px-6 py-3 font-mono-tab text-slate-400">{r.product_code || "-"}</td><td className="px-6 py-3 font-semibold">{r.product_name}</td><td className="px-6 py-3 text-slate-300"><div className="font-bold text-cyan-300">KOD: {r.machine_code || "Kod yok"}</div><div className="text-xs text-slate-200">ADI: {r.machine_name || "-"}</div></td><td className="px-6 py-3 text-slate-300">{r.production_product}</td><td className="px-6 py-3 font-black text-emerald-400">{r.quantity}</td><td className="px-6 py-3 text-slate-300">{r.movement_count}</td></tr>)}</tbody></table></div></div>
     </div>
   );
 }
