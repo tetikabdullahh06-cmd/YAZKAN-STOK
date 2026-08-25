@@ -29,10 +29,17 @@ export default function Movements() {
     ].join("|");
     const sharpeningKeys = new Set(rawItems.filter(isSharpening).map(keyOf));
     const seen = new Set();
+    const seenSharpening = new Set();
     const cleanItems = rawItems.filter((m) => {
       const key = keyOf(m);
       // Aynı ürün/miktar/tarihte bileme hareketi varsa normal işleme çıkışını kaldır.
       if (!isSharpening(m) && sharpeningKeys.has(key)) return false;
+      // Aynı bileme hareketi canlı eski API’den birden fazla gelirse tek satır bırak.
+      if (isSharpening(m)) {
+        const sharpeningKey = `${key}|${m.movement_category || (m.type === "in" ? "Bilemeden Gelen" : "Bilemeye Giden")}`;
+        if (seenSharpening.has(sharpeningKey)) return false;
+        seenSharpening.add(sharpeningKey);
+      }
       const uniqueKey = `${m.id || key}|${m.type || ""}`;
       if (seen.has(uniqueKey)) return false;
       seen.add(uniqueKey);
