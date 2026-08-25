@@ -86,6 +86,7 @@ export default function Movements() {
               <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
                 <th className="px-4 py-3">Tarih</th>
                 <th className="px-4 py-3">Tip</th>
+                <th className="px-4 py-3">İşlem / Amaç</th>
                 <th className="px-4 py-3">Ürün</th>
                 <th className="px-4 py-3 text-right">Miktar</th>
                 <th className="px-4 py-3">Personel</th>
@@ -95,16 +96,18 @@ export default function Movements() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {items.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-slate-500">Hareket yok</td></tr>}
+              {items.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-slate-500">Hareket yok</td></tr>}
               {items.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-700/40">
                   <td className="px-4 py-3 font-mono-tab text-slate-400 whitespace-nowrap">{m.transaction_date ? new Date(`${m.transaction_date}T12:00:00`).toLocaleDateString("tr-TR") : new Date(m.created_at).toLocaleString("tr-TR")}</td>
-                  <td className="px-4 py-3">
+                                    <td className="px-4 py-3">
                     <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${m.type === "in" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" : "text-amber-400 bg-amber-500/10 border-amber-500/30"}`}>
                       {m.type === "in" ? "Giriş" : "Çıkış"}
                     </span>
                   </td>
-                  <td className="px-4 py-3"><div className="font-medium">{m.product_name}</div><div className="text-xs text-slate-500 font-mono-tab">{m.product_code}</div></td>
+                  <td className="px-4 py-3 font-semibold">{m.movement_category || m.movement_purpose || (m.type === "in" ? "Stok girişi" : "Stok çıkışı")}</td>
+                  <td className="px-4 py-3"><div className="font-medium">{m.product_name}</div>
+<div className="text-xs text-slate-500 font-mono-tab">{m.product_code}</div></td>
                   <td className="px-4 py-3 text-right font-mono-tab font-bold">{m.quantity}</td>
                   <td className="px-4 py-3 text-slate-300">{m.personnel_name || "-"}</td>
                   <td className="px-4 py-3 text-slate-300">{m.machine_name || "-"}</td>

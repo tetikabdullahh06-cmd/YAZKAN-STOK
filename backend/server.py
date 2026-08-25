@@ -1066,7 +1066,58 @@ async def list_movements(
             {"transaction_date": date_query},
             {"transaction_date": {"$exists": False}, "created_at": {"$gte": date_from or "", "$lte": (date_to + "T23:59:59") if date_to else "9999-12-31T23:59:59"}},
         ]
-    return await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    movements = await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+    # Bileme kayıtları movements koleksiyonunda tutulmadığından, Hareketler
+    # ekranında ayrı ve tekil hareket satırları olarak gösterilir.
+    # Normal stok çıkışıyla mükerrer oluşmaması için sharpening_record_id
+    # bulunan eski hareketler tekrar eklenmez.
+    sharpening_q = {}
+    if product_id:
+        sharpening_q["product_id"] = product_id
+    if personnel_id or machine_id:
+        sharpening_q = None  # Bileme kayıtlarında bu alanlar bulunmaz.
+    if sharpening_q is not None:
+        sharpening_records = await db.sharpening_records.find(sharpening_q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+        existing_sharpening_ids = {m.get("sharpening_record_id") for m in movements if m.get("sharpening_record_id")}
+        for record in sharpening_records:
+            record_id = record.get("id")
+            if record_id in existing_sharpening_ids:
+                continue
+            sent_date = record.get("sent_date") or record.get("created_at", "")[:10]
+            received_date = record.get("received_date") or record.get("updated_at", "")[:10]
+            sent_in_range = (not date_from or (sent_date or "") >= date_from) and (not date_to or (sent_date or "") <= date_to)
+            received_in_range = (not date_from or (received_date or "") >= date_from) and (not date_to or (received_date or "") <= date_to)
+            if type in (None, "", "out") and sent_in_range:
+                movements.append({
+                    "id": f"sharpening-out-{record_id}", "type": "out", "movement_category": "Bilemeye Giden",
+                    "movement_purpose": "Bilemeye gitti", "sharpening_record_id": record_id,
+                    "product_id": record.get("product_id"), "product_code": record.get("product_code", ""),
+                    "product_name": record.get("product_name", ""), "quantity": record.get("quantity", 0),
+                    "transaction_date": sent_date, "created_at": record.get("created_at", ""),
+                    "supplier": record.get("company", ""), "note": record.get("note", ""),
+                    "user_name": record.get("sent_by", ""), "process_type": record.get("process_type", ""),
+                    "helix_length": record.get("helix_length", ""), "diameter": record.get("diameter", ""),
+                    "full_length": record.get("full_length", ""),
+                })
+            returned_quantity = float(record.get("returned_quantity", 0) or 0)
+            if returned_quantity > 0 and (type in (None, "", "in")) and received_in_range:
+                movements.append({
+                    "id": f"sharpening-in-{record_id}", "type": "in", "movement_category": "Bilemeden Gelen",
+                    "movement_purpose": "Bilemeden geldi", "sharpening_record_id": record_id,
+                    "product_id": record.get("return_product_id") or record.get("product_id"),
+                    "product_code": record.get("return_product_code") or record.get("product_code", ""),
+                    "product_name": record.get("return_product_name") or record.get("product_name", ""),
+                    "quantity": returned_quantity, "transaction_date": received_date,
+                    "created_at": record.get("updated_at") or record.get("created_at", ""),
+                    "supplier": record.get("return_company", ""),
+                    "note": f"İrsaliye: {record.get('waybill_number', '')}".strip(),
+                    "user_name": record.get("received_by", ""), "process_type": record.get("process_type", ""),
+                    "helix_length": record.get("return_helix_length", ""),
+                    "diameter": record.get("return_diameter", ""), "full_length": record.get("return_full_length", ""),
+                })
+        movements.sort(key=lambda m: m.get("created_at") or m.get("transaction_date") or "", reverse=True)
+    return movements[:limit]
 
 
 # ---------- Sharpening / Bileme ----------
