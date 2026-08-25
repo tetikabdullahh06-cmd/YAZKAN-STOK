@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import * as XLSX from "xlsx";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Movements() {
   const [items, setItems] = useState([]);
@@ -17,11 +20,45 @@ export default function Movements() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [type, dateFrom, dateTo]);
 
+  const exportExcel = () => {
+    if (!items.length) return toast.info("Dışa aktarılacak hareket bulunamadı");
+    const rows = items.map((m) => ({
+      "İşlem Tarihi": m.transaction_date || (m.created_at ? new Date(m.created_at).toLocaleString("tr-TR") : ""),
+      "Tip": m.type === "in" ? "Giriş" : "Çıkış",
+      "İşlem / Amaç": m.movement_purpose || (m.sharpening_record_id ? "Bilemeye gitti" : (m.type === "in" ? "Stok girişi" : "İşleme için verildi")),
+      "Hedef": m.destination || m.machine_name || m.supplier || "",
+      "Ürün Kodu": m.product_code || "",
+      "Ürün Adı": m.product_name || "",
+      "Miktar": m.quantity ?? 0,
+      "Personel": m.personnel_name || "",
+      "Tezgâh Kodu": m.machine_code || "",
+      "Tezgâh Adı": m.machine_name || "",
+      "Takım Tutucu Kodu": m.toolholder_code || "",
+      "Takım Tutucu": m.toolholder_name || "",
+      "Üretim / İşlenen Ürün": m.production_product || "",
+      "Tedarikçi": m.supplier || "",
+      "Not": m.note || "",
+      "Kullanıcı": m.user_name || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const headers = Object.keys(rows[0]);
+    ws["!autofilter"] = { ref: `A1:P${rows.length + 1}` };
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    ws["!cols"] = headers.map((h) => ({ wch: Math.max(14, Math.min(32, h.length + 4)) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Hareketler");
+    XLSX.writeFile(wb, `hareketler-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success(`${rows.length} hareket Excel'e aktarıldı`);
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <div className="text-xs text-blue-400 uppercase tracking-[0.2em] font-semibold mb-2">Kayıtlar</div>
-        <h1 className="font-display text-4xl font-black">Hareket Geçmişi</h1>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <h1 className="font-display text-4xl font-black">Hareket Geçmişi</h1>
+          <button onClick={exportExcel} data-testid="movements-export" className="h-12 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold inline-flex items-center gap-2"><Download className="w-5 h-5" /> Excel’e Aktar</button>
+        </div>
       </div>
 
       <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4 flex gap-3 flex-wrap items-end">
