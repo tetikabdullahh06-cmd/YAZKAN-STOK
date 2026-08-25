@@ -1386,8 +1386,8 @@ async def consumption_detail(user=Depends(get_current_user), personnel_id: Optio
     rows = await db.movements.find(movement_filter, {"_id": 0}).sort("created_at", -1).to_list(50000)
     totals = {}
     for row in rows:
-        key = (row.get("product_id", ""), row.get("product_code", ""), row.get("product_name", "-"), row.get("production_product", "") or "-")
-        item = totals.setdefault(key, {"product_id": key[0], "product_code": key[1], "product_name": key[2], "production_product": key[3], "quantity": 0, "movement_count": 0})
+        key = (row.get("product_id", ""), row.get("product_code", ""), row.get("product_name", "-"), row.get("machine_id", ""), row.get("machine_code", ""), row.get("machine_name", "-"), row.get("production_product", "") or "-")
+        item = totals.setdefault(key, {"product_id": key[0], "product_code": key[1], "product_name": key[2], "machine_id": key[3], "machine_code": key[4], "machine_name": key[5], "production_product": key[6], "quantity": 0, "movement_count": 0})
         item["quantity"] += float(row.get("quantity", 0) or 0)
         item["movement_count"] += 1
     return {"rows": list(totals.values()), "movements": rows}
