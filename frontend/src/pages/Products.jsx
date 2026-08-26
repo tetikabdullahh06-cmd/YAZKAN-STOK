@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Plus, Minus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } from "lucide-react";
 import ProductImport from "@/components/ProductImport";
 import ImageUpload, { ImageHover } from "@/components/ImageUpload";
+import QrScannerButton from "@/components/QrScanner";
 import { useAuth } from "@/context/AuthContext";
 
 const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", is_special: false, image_url: "" };
@@ -94,6 +95,25 @@ export default function Products() {
   };
 
   const existingMatches = items.filter((p) => { const s = stockAdd.query.toLowerCase().trim(); return !s || `${p.code || ""} ${p.name || ""} ${p.brand || ""} ${p.quality || ""}`.toLowerCase().includes(s); });
+  const nameMatches = form.name.trim().length >= 2
+    ? items.filter((p) => (p.name || "").trim().toLocaleLowerCase("tr-TR") === form.name.trim().toLocaleLowerCase("tr-TR"))
+    : [];
+
+  const selectExistingForStock = (p) => {
+    setStockAdd({ query: `${p.name}${p.brand ? ` ${p.brand}` : ""}`, productId: p.id, quantity: "" });
+    toast.info(`${p.name} mevcut stok kartı seçildi. Eklenecek adedi girin.`);
+  };
+
+  const handleProductScan = (code) => {
+    const value = String(code || "").trim().toLocaleLowerCase("tr-TR");
+    const match = items.find((p) => (p.code || "").trim().toLocaleLowerCase("tr-TR") === value);
+    if (!match) {
+      setStockAdd({ query: code, productId: "", quantity: "" });
+      return toast.error(`Kodla eşleşen ürün bulunamadı: ${code}`);
+    }
+    selectExistingForStock(match);
+    toast.success(`Kod eşleşti: ${match.name}${match.brand ? ` — ${match.brand}` : ""}`);
+  };
 
   const addExistingStock = async () => {
     const qty = Number(stockAdd.quantity);
@@ -208,7 +228,7 @@ export default function Products() {
         <div className="bg-emerald-950/30 border border-emerald-700/50 rounded-2xl p-6 space-y-4">
           <div><div className="text-xs text-emerald-300 uppercase tracking-wider font-semibold">Mevcut stok kartına ekle</div><p className="text-sm text-slate-400 mt-1">Ürün zaten kayıtlıysa yeni kart oluşturma; ürünü seçip yalnızca eklenecek adedi gir.</p></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input value={stockAdd.query} onChange={(e) => setStockAdd({ ...stockAdd, query: e.target.value, productId: "" })} placeholder="Kod, ürün adı, marka veya kalite ara..." className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+            <div className="flex gap-2 md:col-span-1"><input value={stockAdd.query} onChange={(e) => setStockAdd({ ...stockAdd, query: e.target.value, productId: "" })} placeholder="Kod, ürün adı, marka veya kalite ara..." className="h-12 min-w-0 flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3" /><QrScannerButton onScan={handleProductScan} label="Tara" testid="product-stock-qr" /></div>
             <select value={stockAdd.productId} onChange={(e) => setStockAdd({ ...stockAdd, productId: e.target.value })} className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3"><option value="">Stoktaki ürünü seçin</option>{existingMatches.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name} | Marka: {p.brand || "Marka yok"} | Kalite: {p.quality || "-"} | Mevcut: {p.current_stock}</option>)}</select>
             <input type="number" min="0.01" step="0.01" value={stockAdd.quantity} onChange={(e) => setStockAdd({ ...stockAdd, quantity: e.target.value })} placeholder="Eklenecek adet" className="h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
           </div>
@@ -229,7 +249,8 @@ export default function Products() {
           </div>
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ad</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="pf-name" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+            <div className="flex gap-2"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="pf-name" placeholder="Yeni ürün adı yazın veya mevcut adı kontrol edin" className="flex-1 h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /><QrScannerButton onScan={handleProductScan} label="Kod Tara" testid="product-form-qr" /></div>
+            {nameMatches.length > 0 && !editId && <div className="mt-2 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3"><div className="text-xs font-bold text-amber-200 mb-2">Bu isimde mevcut stok kartı bulundu. Yeni kart açmak yerine buradan seçip stok artırın:</div>{nameMatches.map((p) => <button type="button" key={p.id} onClick={() => selectExistingForStock(p)} className="w-full text-left rounded-md border border-amber-400/40 bg-slate-900/70 hover:bg-amber-500/20 px-3 py-2 text-sm text-white"><span className="font-bold">{p.code} — {p.name}</span><span className="ml-2 text-cyan-300 font-bold">Marka: {p.brand || "Marka yok"}</span><span className="ml-2 text-emerald-300">Mevcut: {p.current_stock} {p.unit}</span></button>)}</div>}
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Kategori</label>
