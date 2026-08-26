@@ -26,10 +26,10 @@ export default function StockIn() {
  const filteredProducts = useMemo(() => {
   const query = productQuery.trim().toLocaleLowerCase("tr-TR");
   if (!query) return products;
-  return products.filter((p) => `${p.code || ""} ${p.name || ""}`.toLocaleLowerCase("tr-TR").includes(query));
+  return products.filter((p) => `${p.code || ""} ${p.name || ""} ${p.brand || ""} ${p.category || ""}`.toLocaleLowerCase("tr-TR").includes(query));
  }, [products, productQuery]);
 
- const formatProduct = (p) => `${p.code || "Kodsuz"} — ${p.name} (Mevcut: ${p.current_stock} ${p.unit})`;
+ const formatProduct = (p) => `${p.code || "Kodsuz"} — ${p.name} • Marka: ${p.brand || "Marka yok"} (Mevcut: ${p.current_stock} ${p.unit})`;
  const chooseProduct = (product) => {
   setProductId(product.id);
   setProductQuery(formatProduct(product));
@@ -97,7 +97,8 @@ export default function StockIn() {
         {filteredProducts.length > 0 ? filteredProducts.map((p) => (
          <button type="button" key={p.id} onClick={() => chooseProduct(p)} className="block w-full border-b border-slate-800 px-4 py-3 text-left text-sm text-slate-200 hover:bg-emerald-900/40 last:border-b-0">
           <span className="font-semibold">{p.code || "Kodsuz"}</span> — {p.name}
-          <span className="ml-2 text-xs text-slate-400">Mevcut: {p.current_stock} {p.unit}</span>
+          <span className="ml-2 text-xs font-bold text-cyan-300">Marka: {p.brand || "Marka yok"}</span>
+          <span className="ml-2 text-xs text-slate-300">Mevcut: {p.current_stock} {p.unit}</span>
          </button>
         )) : <div className="px-4 py-3 text-sm text-slate-400">Eşleşen ürün bulunamadı.</div>}
        </div>
