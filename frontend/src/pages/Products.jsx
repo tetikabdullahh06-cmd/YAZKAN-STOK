@@ -13,6 +13,32 @@ const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", mi
 const DEFAULT_CATS = ["Kesici Uç", "Matkap", "Kater", "Apparat", "Ölçüm Aleti", "Diğer"];
 const CATS_STORAGE_KEY = "cnc_extra_categories";
 
+const normalizeCameraValue = (value) => String(value || "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase("tr-TR")
+  .replace(/[^a-z0-9]+/gi, " ")
+  .trim().replace(/\s+/g, " ");
+
+const findProductByScanValue = (products, rawValue) => {
+  const scanned = normalizeCameraValue(rawValue);
+  if (!scanned) return null;
+  const scored = products.map((p) => {
+    const code = normalizeCameraValue(p.code);
+    const name = normalizeCameraValue(p.name);
+    const brand = normalizeCameraValue(p.brand);
+    const full = normalizeCameraValue(`${p.code || ""} ${p.name || ""} ${p.brand || ""}`);
+    let score = 0;
+    if (code && scanned === code) score = 100;
+    else if (name && scanned === name) score = 95;
+    else if (brand && scanned === brand) score = 25;
+    else if (full && (full.includes(scanned) || scanned.includes(full))) score = 80;
+    else if (code && (scanned.includes(code) || code.includes(scanned))) score = 75;
+    else if (name && (scanned.includes(name) || name.includes(scanned))) score = 70;
+    return { product: p, score };
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
+  return scored[0]?.product || null;
+};
+
 export default function Products() {
   const { isAdmin } = useAuth();
   const [items, setItems] = useState([]);
@@ -105,14 +131,13 @@ export default function Products() {
   };
 
   const handleProductScan = (code) => {
-    const value = String(code || "").trim().toLocaleLowerCase("tr-TR");
-    const match = items.find((p) => (p.code || "").trim().toLocaleLowerCase("tr-TR") === value);
+    const match = findProductByScanValue(items, code);
     if (!match) {
       setStockAdd({ query: code, productId: "", quantity: "" });
-      return toast.error(`Kodla eşleşen ürün bulunamadı: ${code}`);
+      return toast.error(`Kare kod metniyle eşleşen kayıtlı ürün bulunamadı: ${code}`);
     }
     selectExistingForStock(match);
-    toast.success(`Kod eşleşti: ${match.name}${match.brand ? ` — ${match.brand}` : ""}`);
+    toast.success(`Kayıtlı ürün bulundu: ${match.name}${match.brand ? ` — ${match.brand}` : ""}`);
   };
 
   const addExistingStock = async () => {

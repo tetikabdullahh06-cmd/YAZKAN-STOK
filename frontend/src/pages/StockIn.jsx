@@ -4,6 +4,22 @@ import { toast } from "sonner";
 import { ArrowDownToLine, Loader2 } from "lucide-react";
 import QrScannerButton from "@/components/QrScanner";
 
+const normalizeScan = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("tr-TR").replace(/[^a-z0-9]+/gi, " ").trim().replace(/\s+/g, " ");
+const findProduct = (list, raw) => {
+ const scanned = normalizeScan(raw);
+ if (!scanned) return null;
+ return list.map((p) => {
+  const code = normalizeScan(p.code); const name = normalizeScan(p.name); const full = normalizeScan(`${p.code || ""} ${p.name || ""} ${p.brand || ""}`);
+  let score = 0;
+  if (code && scanned === code) score = 100;
+  else if (name && scanned === name) score = 95;
+  else if (full && (full.includes(scanned) || scanned.includes(full))) score = 80;
+  else if (code && (scanned.includes(code) || code.includes(scanned))) score = 75;
+  else if (name && (scanned.includes(name) || name.includes(scanned))) score = 70;
+  return { p, score };
+ }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score)[0]?.p || null;
+};
+
 export default function StockIn() {
  const [products, setProducts] = useState([]);
  const [suppliers, setSuppliers] = useState([]);
@@ -36,10 +52,9 @@ export default function StockIn() {
  };
 
  const onScan = (code) => {
-  const c = String(code).trim().toUpperCase();
-  const match = products.find((p) => (p.code || "").toUpperCase() === c);
-  if (match) { chooseProduct(match); toast.success(`Ürün seçildi: ${match.name}`); }
-  else toast.error(`Kod bulunamadı: ${code}`);
+  const match = findProduct(products, code);
+  if (match) { chooseProduct(match); toast.success(`Kayıtlı ürün bulundu: ${match.name}${match.brand ? ` — ${match.brand}` : ""}`); }
+  else toast.error(`Kare kod metniyle eşleşen kayıtlı ürün bulunamadı: ${code}`);
  };
 
  const submit = async (e) => {
