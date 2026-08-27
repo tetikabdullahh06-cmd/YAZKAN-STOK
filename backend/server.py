@@ -2137,9 +2137,16 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     pdf.drawCentredString(width / 2, y - 8, "FORMEN")
     pdf.drawCentredString(width - 140, y - 8, "ONAYLAYAN")
     pdf.setFont(regular_font, 9)
-    pdf.drawCentredString(140, y - 30, scrap.get("prepared_by") or "Abdullah Tetik")
-    pdf.drawCentredString(width / 2, y - 30, scrap.get("foreman_name") or "Celal")
-    pdf.drawCentredString(width - 140, y - 30, scrap.get("approved_by") or "")
+    prepared_name = str(scrap.get("prepared_by") or "Abdullah Tetik").strip()
+    operator_name_for_signature = str(scrap.get("operator_name") or "").strip()
+    # Eski kayıtlarda hazırlayan alanı operatör adıyla doldurulmuş olabilir; bu yanlış eşleşmeyi düzelt.
+    if not prepared_name or prepared_name.casefold() == operator_name_for_signature.casefold():
+        prepared_name = "Abdullah Tetik"
+    foreman_name = str(scrap.get("foreman_name") or "Celal").strip() or "Celal"
+    approved_name = str(scrap.get("approved_by") or "").strip()
+    pdf.drawCentredString(140, y - 30, prepared_name)
+    pdf.drawCentredString(width / 2, y - 30, foreman_name)
+    pdf.drawCentredString(width - 140, y - 30, approved_name)
     pdf.line(width / 3, y - 48, width / 3, y + 7); pdf.line(width * 2 / 3, y - 48, width * 2 / 3, y + 7)
     y -= 62
     image_rows = []
