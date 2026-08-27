@@ -240,6 +240,8 @@ class ToolHolderScrapIn(BaseModel):
     witness: Optional[str] = ""
     before_image_url: Optional[str] = ""
     after_image_url: Optional[str] = ""
+    before_image_urls: List[str] = []
+    after_image_urls: List[str] = []
 
 
 class PersonnelIn(BaseModel):
@@ -1962,6 +1964,9 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
         "witness": witness_name, "operator_personnel_id": body.operator_personnel_id or "",
         "approver_personnel_id": body.approver_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "",
         "operator_name": operator_name, "user_id": user["id"], "user_name": user.get("name", ""),
+        "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
+        "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
+        "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
         "created_at": now, "new_stock": new_stock,
     }
     await db.toolholders.update_one({"id": tid}, {"$set": {"current_stock": new_stock}})
@@ -2002,8 +2007,11 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
         "scrap_date": body.scrap_date, "location": body.location or holder.get("location", ""),
         "operator_personnel_id": body.operator_personnel_id or "", "approver_personnel_id": body.approver_personnel_id or "",
         "witness_personnel_id": body.witness_personnel_id or "", "operator_name": operator_name,
-        "approved_by": approver_name, "witness": witness_name, "new_stock": new_stock,
-        "updated_at": now_utc().isoformat(), "updated_by": user.get("name", ""),
+        "approved_by": approver_name, "witness": witness_name,
+        "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
+        "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
+        "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
+        "new_stock": new_stock, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", ""),
     }
     await db.toolholders.update_one({"id": holder["id"]}, {"$set": {"current_stock": new_stock}})
     await db.toolholder_scraps.update_one({"id": scrap_id}, {"$set": update})
@@ -2072,7 +2080,11 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         y -= 22
         if y < 100:
             pdf.showPage(); y = height - 60
-    image_rows = [("Eski Hâli / Stoktaki Görsel", scrap.get("before_image_url", "")), ("Yeni Hasarlı Hâli", scrap.get("after_image_url", ""))]
+    image_rows = []
+    before_images = scrap.get("before_image_urls") or ([scrap.get("before_image_url")] if scrap.get("before_image_url") else [])
+    after_images = scrap.get("after_image_urls") or ([scrap.get("after_image_url")] if scrap.get("after_image_url") else [])
+    image_rows.extend([("Eski Hâli / Stoktaki Görsel", image) for image in before_images])
+    image_rows.extend([("Yeni Hasarlı Hâli", image) for image in after_images])
     for caption, data_url in image_rows:
         if not data_url or not str(data_url).startswith("data:image/"):
             continue
