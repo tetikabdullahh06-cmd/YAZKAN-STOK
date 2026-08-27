@@ -14,6 +14,7 @@ def _category_key(value):
 
 
 import os
+import asyncio
 import io
 import uuid
 import base64
@@ -1407,16 +1408,20 @@ async def list_recipe_movements(user=Depends(get_current_user), recipe_id: Optio
 # ---------- Dashboard ----------
 @api.get("/dashboard")
 async def dashboard(user=Depends(get_current_user)):
-    products = await db.products.find({}, {"_id": 0}).to_list(10000)
+    product_projection = {"_id": 0, "id": 1, "code": 1, "name": 1, "location": 1, "unit": 1, "current_stock": 1, "min_stock": 1}
+    movement_projection = {"_id": 0, "id": 1, "created_at": 1, "type": 1, "product_name": 1, "product_code": 1, "quantity": 1, "total": 1, "personnel_name": 1, "machine_name": 1}
+    month_start = now_utc().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    products, month_movements, recent, personnel_list, machine_list = await asyncio.gather(
+        db.products.find({}, product_projection).to_list(10000),
+        db.movements.find({"type": "out", "created_at": {"$gte": month_start.isoformat()}}, movement_projection).to_list(5000),
+        db.movements.find({}, movement_projection).sort("created_at", -1).to_list(10),
+        db.personnel.find({}, {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "department": 1}).sort("first_name", 1).to_list(2000),
+        db.machines.find({}, {"_id": 0, "id": 1, "code": 1, "name": 1, "brand": 1, "model": 1}).sort("code", 1).to_list(2000),
+    )
     total_products = len(products)
-    critical = [p for p in products if p.get("current_stock", 0) <= p.get("min_stock", 0)]
+    critical = [p for p in products if float(p.get("current_stock", 0) or 0) <= float(p.get("min_stock", 0) or 0)]
     critical_count = len(critical)
     out_of_stock = [p for p in products if float(p.get("current_stock", 0) or 0) <= 0]
-
-    month_start = now_utc().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    month_movements = await db.movements.find(
-        {"type": "out", "created_at": {"$gte": month_start.isoformat()}}, {"_id": 0}
-    ).to_list(5000)
     month_total = sum(m.get("total", 0) for m in month_movements)
 
     p_totals, m_totals = {}, {}
@@ -1428,9 +1433,6 @@ async def dashboard(user=Depends(get_current_user)):
     top_personnel = sorted(p_totals.items(), key=lambda x: -x[1])[:5]
     top_machines = sorted(m_totals.items(), key=lambda x: -x[1])[:5]
 
-    recent = await db.movements.find({}, {"_id": 0}).sort("created_at", -1).to_list(10)
-    personnel_list = await db.personnel.find({}, {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "department": 1}).sort("first_name", 1).to_list(2000)
-    machine_list = await db.machines.find({}, {"_id": 0, "id": 1, "code": 1, "name": 1, "brand": 1, "model": 1}).sort("code", 1).to_list(2000)
     personnel_totals = {name: round(qty, 2) for name, qty in p_totals.items()}
     machine_totals = {name: round(qty, 2) for name, qty in m_totals.items()}
     for person in personnel_list:
