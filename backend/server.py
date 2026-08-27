@@ -2064,11 +2064,26 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     else:
         pdf.setFont("Helvetica", 11)
     width, height = A4
-    y = height - 60
-    pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 16)
+    regular_font = "DejaVu" if os.path.exists(font_path) else "Helvetica"
+    bold_font = "DejaVu" if os.path.exists(font_path) else "Helvetica-Bold"
+    logo_path = ROOT_DIR / "assets" / "yazkan-logo.jpg"
+    if logo_path.exists():
+        pdf.drawImage(str(logo_path), 55, height - 88, width=180, height=50, preserveAspectRatio=True, anchor="sw", mask="auto")
+    pdf.setFont(regular_font, 8)
+    pdf.setFillColorRGB(0.15, 0.2, 0.28)
+    pdf.drawRightString(width - 55, height - 55, "YAZKAN DÖKÜM SANAYİ VE TİCARET A.Ş.")
+    pdf.drawRightString(width - 55, height - 68, "A: ASO 2. O.S.B. 2011 Cad. No:21 Temelli / ANKARA - TURKEY")
+    pdf.drawRightString(width - 55, height - 81, "T: +90 (312) 641 32 10  |  E: yazkan@yazkan.com.tr")
+    pdf.setStrokeColorRGB(0.05, 0.25, 0.45); pdf.setLineWidth(1.2); pdf.line(55, height - 102, width - 55, height - 102)
+    def draw_footer():
+        pdf.setStrokeColorRGB(0.05, 0.25, 0.45); pdf.setLineWidth(0.7); pdf.line(55, 42, width - 55, 42)
+        pdf.setFont(regular_font, 7.5); pdf.setFillColorRGB(0.25, 0.3, 0.38)
+        pdf.drawCentredString(width / 2, 27, "YAZKAN DÖKÜM SANAYİ VE TİCARET A.Ş.  |  A: ASO 2. O.S.B. 2011 Cad. No:21 Temelli / ANKARA - TURKEY  |  T: +90 (312) 641 32 10  |  E: yazkan@yazkan.com.tr")
+    y = height - 135
+    pdf.setFont(bold_font, 16)
     pdf.drawCentredString(width / 2, y, "TAKIM TUTUCU HURDA / KULLANIM DIŞI TUTANAĞI")
     y -= 35
-    pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 10)
+    pdf.setFont(regular_font, 10)
     rows = [
         ("Tutanak No", scrap.get("record_no") or f"YAZKANİŞLEME{str(scrap.get('id', ''))[:6].upper()}"), ("Tarih", scrap.get("scrap_date", "")),
         ("Tutucu", scrap.get("name", "")), ("Marka", scrap.get("brand", "")),
@@ -2081,13 +2096,13 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         ("Onaylayan", scrap.get("approved_by", "")), ("Teslim Alan / Tanık", scrap.get("witness", "")),
     ]
     for label, value in rows:
-        pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
+        pdf.setFont(bold_font, 10)
         pdf.drawString(55, y, f"{label}:")
-        pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 10)
+        pdf.setFont(regular_font, 10)
         pdf.drawString(215, y, str(value)[:100])
         y -= 22
         if y < 100:
-            pdf.showPage(); y = height - 60
+            draw_footer(); pdf.showPage(); y = height - 60
     image_rows = []
     before_images = scrap.get("before_image_urls") or ([scrap.get("before_image_url")] if scrap.get("before_image_url") else [])
     after_images = scrap.get("after_image_urls") or ([scrap.get("after_image_url")] if scrap.get("after_image_url") else [])
@@ -2104,7 +2119,7 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
             continue
     if valid_images:
         if y < 230:
-            pdf.showPage(); y = height - 60
+            draw_footer(); pdf.showPage(); y = height - 60
         pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
         pdf.drawString(55, y, "Görsel Kayıtları")
         y -= 18
@@ -2114,7 +2129,7 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
             if index > 0 and column == 0:
                 y -= 130
                 if y < 150:
-                    pdf.showPage(); y = height - 60
+                    draw_footer(); pdf.showPage(); y = height - 60
                     pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
                     pdf.drawString(55, y, "Görsel Kayıtları (devam)")
                     y -= 18
@@ -2126,6 +2141,7 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     y -= 15
     pdf.drawString(70, y, "Düzenleyen İmza: ____________________")
     pdf.drawString(330, y, "Onay İmza: ____________________")
+    draw_footer()
     pdf.save(); buf.seek(0)
     return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="hurda-tutanagi-{scrap_id[:8]}.pdf"'})
 
