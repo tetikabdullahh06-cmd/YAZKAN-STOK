@@ -2081,8 +2081,7 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     pdf.setStrokeColorRGB(0.05, 0.25, 0.45); pdf.setLineWidth(1.2); pdf.line(55, height - 102, width - 55, height - 102)
     def draw_footer():
         pdf.setStrokeColorRGB(0.05, 0.25, 0.45); pdf.setLineWidth(0.7); pdf.line(55, 42, width - 55, 42)
-        pdf.setFont(regular_font, 7.5); pdf.setFillColorRGB(0.25, 0.3, 0.38)
-        pdf.drawCentredString(width / 2, 27, "YAZKAN • Hurda / Kullanım Dışı Takım Tutanağı")
+        # Alt şirket adresi ve iletişim metni bilinçli olarak gösterilmez; yalnızca ayırıcı çizgi korunur.
     y = height - 135
     pdf.setFont(bold_font, 16)
     pdf.drawCentredString(width / 2, y, "TAKIM TUTUCU HURDA / KULLANIM DIŞI TUTANAĞI")
@@ -2164,9 +2163,6 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
             pdf.rect(x, y - tile_height - 8, tile_width, tile_height + 8, stroke=1, fill=0)
             pdf.drawImage(img, x + 3, y - tile_height - 4, width=tile_width - 6, height=tile_height - 6, preserveAspectRatio=True, anchor="sw", mask="auto")
         y -= 170
-    y -= 15
-    pdf.drawString(70, y, "Düzenleyen İmza: ____________________")
-    pdf.drawString(330, y, "Onay İmza: ____________________")
     draw_footer()
     pdf.save(); buf.seek(0)
     return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="hurda-tutanagi-{scrap_id[:8]}.pdf"'})
