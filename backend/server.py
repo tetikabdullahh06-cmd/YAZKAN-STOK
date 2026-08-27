@@ -245,6 +245,10 @@ class ToolHolderScrapIn(BaseModel):
     after_image_urls: List[str] = []
     machine_id: Optional[str] = ""
     production_product: Optional[str] = ""
+    root_cause: Optional[str] = ""
+    corrective_action: Optional[str] = ""
+    preventive_action: Optional[str] = ""
+    disposition: Optional[str] = ""
 
 
 class PersonnelIn(BaseModel):
@@ -1967,7 +1971,7 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
         "quantity": body.quantity, "unit": "adet", "scrap_reason": body.scrap_reason.strip(),
         "description": body.description or "", "scrap_date": body.scrap_date,
         "location": body.location or holder.get("location", ""), "approved_by": approver_name,
-        "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "operator_personnel_id": body.operator_personnel_id or "",
+        "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "root_cause": body.root_cause or "", "corrective_action": body.corrective_action or "", "preventive_action": body.preventive_action or "", "disposition": body.disposition or "", "operator_personnel_id": body.operator_personnel_id or "",
         "approver_personnel_id": body.approver_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "",
         "operator_name": operator_name, "user_id": user["id"], "user_name": user.get("name", ""),
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
@@ -2014,7 +2018,7 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
         "scrap_date": body.scrap_date, "location": body.location or holder.get("location", ""),
         "operator_personnel_id": body.operator_personnel_id or "", "approver_personnel_id": body.approver_personnel_id or "",
         "witness_personnel_id": body.witness_personnel_id or "", "operator_name": operator_name,
-        "approved_by": approver_name, "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "",
+        "approved_by": approver_name, "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "root_cause": body.root_cause or "", "corrective_action": body.corrective_action or "", "preventive_action": body.preventive_action or "", "disposition": body.disposition or "",
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
         "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
         "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
@@ -2085,24 +2089,34 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     y -= 35
     pdf.setFont(regular_font, 10)
     rows = [
-        ("Tutanak No", scrap.get("record_no") or f"YAZKANİŞLEME{str(scrap.get('id', ''))[:6].upper()}"), ("Tarih", scrap.get("scrap_date", "")),
-        ("Tutucu", scrap.get("name", "")), ("Marka", scrap.get("brand", "")),
-        ("Tutucu Tipi", scrap.get("holder_type", "")), ("Kesici Uç Kodu / İsmi", scrap.get("cutting_tool_code_name", "")),
-        ("Tezgâh", f"{scrap.get('machine_code', '')} — {scrap.get('machine_name', '')}".strip(" —")), ("İşlenen Parça / Üretim", scrap.get("production_product", "")),
-        ("Ölçüler", f"Boy: {scrap.get('length', '')} | Çap: {scrap.get('diameter', '')}"),
-        ("Hurda Miktarı", f"{scrap.get('quantity', 0)} {scrap.get('unit', 'adet')}"),
-        ("Hurda Nedeni", scrap.get("scrap_reason", "")), ("Açıklama", scrap.get("description", "")),
-        ("Konum", scrap.get("location", "")), ("İşlemi Yapan", scrap.get("operator_name") or scrap.get("user_name", "")),
-        ("Onaylayan", scrap.get("approved_by", "")), ("Teslim Alan / Tanık", scrap.get("witness", "")),
+        ("TUTANAK NO", scrap.get("record_no") or f"YAZKANİŞLEME{str(scrap.get('id', ''))[:6].upper()}"), ("TARİH", scrap.get("scrap_date", "")),
+        ("TAKIM ÜRETİCİ / MARKA", scrap.get("brand", "")), ("TAKIM ADI / KODU", scrap.get("name", "")),
+        ("PARÇA ADI / ÜRETİM", scrap.get("production_product", "")), ("PARÇA NO", scrap.get("part_no", "")),
+        ("İŞLEMİ YAPAN / OPERATÖR", scrap.get("operator_name") or scrap.get("user_name", "")), ("TEZGAH NO / ADI", f"{scrap.get('machine_code', '')} — {scrap.get('machine_name', '')}".strip(" —")),
+        ("ÖLÇÜLER", f"Boy: {scrap.get('length', '')} | Çap: {scrap.get('diameter', '')}"), ("HURDA MİKTARI", f"{scrap.get('quantity', 0)} {scrap.get('unit', 'adet')}"),
+        ("TUTUCU TİPİ", scrap.get("holder_type", "")), ("KESİCİ UÇ KODU / İSMİ", scrap.get("cutting_tool_code_name", "")),
+        ("KONUM", scrap.get("location", "")), ("TESLİM ALAN / TANIK", scrap.get("witness", "")),
+        ("KÖK NEDEN", scrap.get("root_cause", "")), ("UYGUNSUZLUK KARARI", scrap.get("disposition", "")),
+        ("DÜZELTİCİ FAALİYET", scrap.get("corrective_action", "")), ("ÖNLEYİCİ FAALİYET", scrap.get("preventive_action", "")),
     ]
-    for label, value in rows:
-        pdf.setFont(bold_font, 10)
-        pdf.drawString(55, y, f"{label}:")
-        pdf.setFont(regular_font, 10)
-        pdf.drawString(215, y, str(value)[:100])
-        y -= 22
-        if y < 100:
-            draw_footer(); pdf.showPage(); y = height - 60
+    cell_x, cell_w, row_h = 55, (width - 110) / 2, 25
+    for row_index in range(0, len(rows), 2):
+        top = y + 8
+        pdf.setStrokeColorRGB(0.25, 0.3, 0.36); pdf.setLineWidth(0.6)
+        pdf.rect(cell_x, y - 16, cell_w * 2, row_h, stroke=1, fill=0)
+        pdf.line(cell_x + cell_w, y - 16, cell_x + cell_w, y + 9)
+        for col, (label, value) in enumerate(rows[row_index:row_index + 2]):
+            x = cell_x + col * cell_w
+            pdf.setFont(bold_font, 7.5); pdf.setFillColorRGB(0.2, 0.25, 0.32); pdf.drawString(x + 6, y, label)
+            pdf.setFont(regular_font, 8.5); pdf.setFillColorRGB(0.05, 0.08, 0.12); pdf.drawString(x + 6, y - 11, str(value or "-")[:52])
+        y -= row_h
+    y -= 7
+    pdf.setFillColorRGB(0.9, 0.94, 0.98); pdf.rect(55, y - 18, width - 110, 22, stroke=1, fill=1)
+    pdf.setFillColorRGB(0.05, 0.12, 0.22); pdf.setFont(bold_font, 9); pdf.drawCentredString(width / 2, y - 10, "KIRILMA / HURDA SEBEBİ - UYARILAR - ÖNLEMLER")
+    y -= 30
+    pdf.setFillColorRGB(0.05, 0.08, 0.12); pdf.setFont(regular_font, 9)
+    cause_text = f"Neden: {scrap.get('scrap_reason', '-')}. Açıklama: {scrap.get('description', '-') or '-'}"
+    pdf.drawString(62, y, cause_text[:125]); y -= 24
     image_rows = []
     before_images = scrap.get("before_image_urls") or ([scrap.get("before_image_url")] if scrap.get("before_image_url") else [])
     after_images = scrap.get("after_image_urls") or ([scrap.get("after_image_url")] if scrap.get("after_image_url") else [])
@@ -2120,25 +2134,36 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     if valid_images:
         if y < 230:
             draw_footer(); pdf.showPage(); y = height - 60
-        pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
-        pdf.drawString(55, y, "Görsel Kayıtları")
+        pdf.setFont(bold_font, 10)
+        pdf.drawString(55, y, "GÖRSEL 1 / GÖRSEL 2 — İLK VE SON DURUM")
         y -= 18
-        tile_width, tile_height = 160, 105
+        tile_width, tile_height = 245, 145
         for index, (caption, img) in enumerate(valid_images):
-            column = index % 3
+            column = index % 2
             if index > 0 and column == 0:
-                y -= 130
+                y -= 170
                 if y < 150:
                     draw_footer(); pdf.showPage(); y = height - 60
                     pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
                     pdf.drawString(55, y, "Görsel Kayıtları (devam)")
                     y -= 18
-            x = 55 + column * 175
+            x = 55 + column * 255
             pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 7)
             pdf.drawString(x, y, f"{index + 1}. {caption[:24]}")
-            pdf.drawImage(img, x, y - tile_height - 4, width=tile_width, height=tile_height, preserveAspectRatio=True, anchor="sw", mask="auto")
-        y -= 135
+            pdf.rect(x, y - tile_height - 8, tile_width, tile_height + 8, stroke=1, fill=0)
+            pdf.drawImage(img, x + 3, y - tile_height - 4, width=tile_width - 6, height=tile_height - 6, preserveAspectRatio=True, anchor="sw", mask="auto")
+        y -= 170
     y -= 15
+    pdf.setStrokeColorRGB(0.25, 0.3, 0.36); pdf.rect(55, y - 48, width - 110, 55, stroke=1, fill=0)
+    pdf.setFont(bold_font, 8); pdf.drawCentredString(140, y - 8, "HAZIRLAYAN")
+    pdf.drawCentredString(width / 2, y - 8, "FORMEN")
+    pdf.drawCentredString(width - 140, y - 8, "ONAYLAYAN")
+    pdf.setFont(regular_font, 9)
+    pdf.drawCentredString(140, y - 30, scrap.get("operator_name") or scrap.get("user_name", "") or "-")
+    pdf.drawCentredString(width / 2, y - 30, scrap.get("approved_by", "") or "-")
+    pdf.drawCentredString(width - 140, y - 30, scrap.get("witness", "") or "-")
+    pdf.line(width / 3, y - 48, width / 3, y + 7); pdf.line(width * 2 / 3, y - 48, width * 2 / 3, y + 7)
+    y -= 62
     pdf.drawString(70, y, "Düzenleyen İmza: ____________________")
     pdf.drawString(330, y, "Onay İmza: ____________________")
     draw_footer()
