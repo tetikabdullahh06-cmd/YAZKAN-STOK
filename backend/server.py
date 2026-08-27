@@ -2082,7 +2082,7 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     def draw_footer():
         pdf.setStrokeColorRGB(0.05, 0.25, 0.45); pdf.setLineWidth(0.7); pdf.line(55, 42, width - 55, 42)
         pdf.setFont(regular_font, 7.5); pdf.setFillColorRGB(0.25, 0.3, 0.38)
-        pdf.drawCentredString(width / 2, 27, "YAZKAN DÖKÜM SANAYİ VE TİCARET A.Ş.  |  A: ASO 2. O.S.B. 2011 Cad. No:21 Temelli / ANKARA - TURKEY  |  T: +90 (312) 641 32 10  |  E: yazkan@yazkan.com.tr")
+        pdf.drawCentredString(width / 2, 27, "YAZKAN • Hurda / Kullanım Dışı Takım Tutanağı")
     y = height - 135
     pdf.setFont(bold_font, 16)
     pdf.drawCentredString(width / 2, y, "TAKIM TUTUCU HURDA / KULLANIM DIŞI TUTANAĞI")
@@ -2117,6 +2117,17 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     pdf.setFillColorRGB(0.05, 0.08, 0.12); pdf.setFont(regular_font, 9)
     cause_text = f"Neden: {scrap.get('scrap_reason', '-')}. Açıklama: {scrap.get('description', '-') or '-'}"
     pdf.drawString(62, y, cause_text[:125]); y -= 24
+    # İmza bloğu, şablondaki gibi bilgi alanlarının hemen altında tutulur.
+    pdf.setStrokeColorRGB(0.25, 0.3, 0.36); pdf.rect(55, y - 48, width - 110, 55, stroke=1, fill=0)
+    pdf.setFont(bold_font, 8); pdf.drawCentredString(140, y - 8, "HAZIRLAYAN")
+    pdf.drawCentredString(width / 2, y - 8, "FORMEN")
+    pdf.drawCentredString(width - 140, y - 8, "ONAYLAYAN")
+    pdf.setFont(regular_font, 9)
+    pdf.drawCentredString(140, y - 30, scrap.get("operator_name") or scrap.get("user_name", "") or "-")
+    pdf.drawCentredString(width / 2, y - 30, scrap.get("approved_by", "") or "-")
+    pdf.drawCentredString(width - 140, y - 30, scrap.get("witness", "") or "-")
+    pdf.line(width / 3, y - 48, width / 3, y + 7); pdf.line(width * 2 / 3, y - 48, width * 2 / 3, y + 7)
+    y -= 62
     image_rows = []
     before_images = scrap.get("before_image_urls") or ([scrap.get("before_image_url")] if scrap.get("before_image_url") else [])
     after_images = scrap.get("after_image_urls") or ([scrap.get("after_image_url")] if scrap.get("after_image_url") else [])
@@ -2154,16 +2165,6 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
             pdf.drawImage(img, x + 3, y - tile_height - 4, width=tile_width - 6, height=tile_height - 6, preserveAspectRatio=True, anchor="sw", mask="auto")
         y -= 170
     y -= 15
-    pdf.setStrokeColorRGB(0.25, 0.3, 0.36); pdf.rect(55, y - 48, width - 110, 55, stroke=1, fill=0)
-    pdf.setFont(bold_font, 8); pdf.drawCentredString(140, y - 8, "HAZIRLAYAN")
-    pdf.drawCentredString(width / 2, y - 8, "FORMEN")
-    pdf.drawCentredString(width - 140, y - 8, "ONAYLAYAN")
-    pdf.setFont(regular_font, 9)
-    pdf.drawCentredString(140, y - 30, scrap.get("operator_name") or scrap.get("user_name", "") or "-")
-    pdf.drawCentredString(width / 2, y - 30, scrap.get("approved_by", "") or "-")
-    pdf.drawCentredString(width - 140, y - 30, scrap.get("witness", "") or "-")
-    pdf.line(width / 3, y - 48, width / 3, y + 7); pdf.line(width * 2 / 3, y - 48, width * 2 / 3, y + 7)
-    y -= 62
     pdf.drawString(70, y, "Düzenleyen İmza: ____________________")
     pdf.drawString(330, y, "Onay İmza: ____________________")
     draw_footer()
