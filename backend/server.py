@@ -31,6 +31,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depend
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4
@@ -1953,8 +1954,10 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
     approver_name = await personnel_name(body.approver_personnel_id or "") or body.approved_by or ""
     witness_name = await personnel_name(body.witness_personnel_id or "") or body.witness or ""
     now = now_utc().isoformat()
+    counter = await db.counters.find_one_and_update({"_id": "toolholder_scrap_record"}, {"$inc": {"value": 1}}, upsert=True, return_document=ReturnDocument.AFTER)
+    record_no = f"İŞLEME TUTANAK {int(counter.get('value', 1)):06d}"
     doc = {
-        "id": new_id(), "tool_holder_id": holder["id"], "name": holder.get("name", ""),
+        "id": new_id(), "record_no": record_no, "tool_holder_id": holder["id"], "name": holder.get("name", ""),
         "brand": holder.get("brand", ""), "holder_type": holder.get("type", ""),
         "cutting_tool_code_name": holder.get("cutting_tool_code_name", ""),
         "length": holder.get("length", ""), "diameter": holder.get("diameter", ""),
@@ -2063,14 +2066,14 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     y -= 35
     pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 10)
     rows = [
-        ("Tutanak No", scrap.get("id", "")), ("Tarih", scrap.get("scrap_date", "")),
+        ("Tutanak No", scrap.get("record_no") or f"İŞLEME TUTANAK {str(scrap.get('id', ''))[:6].upper()}"), ("Tarih", scrap.get("scrap_date", "")),
         ("Tutucu", scrap.get("name", "")), ("Marka", scrap.get("brand", "")),
         ("Tutucu Tipi", scrap.get("holder_type", "")), ("Kesici Uç Kodu / İsmi", scrap.get("cutting_tool_code_name", "")),
         ("Ölçüler", f"Boy: {scrap.get('length', '')} | Çap: {scrap.get('diameter', '')}"),
         ("Hurda Miktarı", f"{scrap.get('quantity', 0)} {scrap.get('unit', 'adet')}"),
         ("Hurda Nedeni", scrap.get("scrap_reason", "")), ("Açıklama", scrap.get("description", "")),
-        ("Konum", scrap.get("location", "")), ("İşlemi Yapan", scrap.get("user_name", "")),
-        ("Onaylayan", scrap.get("approved_by", "")), ("Tanık / Teslim Alan", scrap.get("witness", "")),
+        ("Konum", scrap.get("location", "")), ("İşlemi Yapan", scrap.get("operator_name") or scrap.get("user_name", "")),
+        ("Onaylayan", scrap.get("approved_by", "")), ("Teslim Alan / Tanık", scrap.get("witness", "")),
     ]
     for label, value in rows:
         pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
@@ -2085,21 +2088,36 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     after_images = scrap.get("after_image_urls") or ([scrap.get("after_image_url")] if scrap.get("after_image_url") else [])
     image_rows.extend([("Eski Hâli / Stoktaki Görsel", image) for image in before_images])
     image_rows.extend([("Yeni Hasarlı Hâli", image) for image in after_images])
+    valid_images = []
     for caption, data_url in image_rows:
         if not data_url or not str(data_url).startswith("data:image/"):
             continue
         try:
             raw = base64.b64decode(str(data_url).split(",", 1)[1])
-            img = ImageReader(io.BytesIO(raw))
-            if y < 240:
-                pdf.showPage(); y = height - 60
-            pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
-            pdf.drawString(55, y, caption)
-            y -= 10
-            pdf.drawImage(img, 55, y - 175, width=220, height=165, preserveAspectRatio=True, anchor="sw", mask="auto")
-            y -= 195
+            valid_images.append((caption, ImageReader(io.BytesIO(raw))))
         except Exception:
             continue
+    if valid_images:
+        if y < 230:
+            pdf.showPage(); y = height - 60
+        pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
+        pdf.drawString(55, y, "Görsel Kayıtları")
+        y -= 18
+        tile_width, tile_height = 160, 105
+        for index, (caption, img) in enumerate(valid_images):
+            column = index % 3
+            if index > 0 and column == 0:
+                y -= 130
+                if y < 150:
+                    pdf.showPage(); y = height - 60
+                    pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
+                    pdf.drawString(55, y, "Görsel Kayıtları (devam)")
+                    y -= 18
+            x = 55 + column * 175
+            pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 7)
+            pdf.drawString(x, y, f"{index + 1}. {caption[:24]}")
+            pdf.drawImage(img, x, y - tile_height - 4, width=tile_width, height=tile_height, preserveAspectRatio=True, anchor="sw", mask="auto")
+        y -= 135
     y -= 15
     pdf.drawString(70, y, "Düzenleyen İmza: ____________________")
     pdf.drawString(330, y, "Onay İmza: ____________________")
