@@ -243,6 +243,8 @@ class ToolHolderScrapIn(BaseModel):
     after_image_url: Optional[str] = ""
     before_image_urls: List[str] = []
     after_image_urls: List[str] = []
+    machine_id: Optional[str] = ""
+    production_product: Optional[str] = ""
 
 
 class PersonnelIn(BaseModel):
@@ -1953,6 +1955,7 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
     operator_name = await personnel_name(body.operator_personnel_id or "") or user.get("name", "")
     approver_name = await personnel_name(body.approver_personnel_id or "") or body.approved_by or ""
     witness_name = await personnel_name(body.witness_personnel_id or "") or body.witness or ""
+    machine = await db.machines.find_one({"id": body.machine_id}) if body.machine_id else None
     now = now_utc().isoformat()
     counter = await db.counters.find_one_and_update({"_id": "toolholder_scrap_record"}, {"$inc": {"value": 1}}, upsert=True, return_document=ReturnDocument.AFTER)
     record_no = f"İŞLEME TUTANAK {int(counter.get('value', 1)):06d}"
@@ -1964,7 +1967,7 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
         "quantity": body.quantity, "unit": "adet", "scrap_reason": body.scrap_reason.strip(),
         "description": body.description or "", "scrap_date": body.scrap_date,
         "location": body.location or holder.get("location", ""), "approved_by": approver_name,
-        "witness": witness_name, "operator_personnel_id": body.operator_personnel_id or "",
+        "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "operator_personnel_id": body.operator_personnel_id or "",
         "approver_personnel_id": body.approver_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "",
         "operator_name": operator_name, "user_id": user["id"], "user_name": user.get("name", ""),
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
@@ -2005,12 +2008,13 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
     operator_name = await personnel_name(body.operator_personnel_id or "") or record.get("operator_name", "") or user.get("name", "")
     approver_name = await personnel_name(body.approver_personnel_id or "") or body.approved_by or ""
     witness_name = await personnel_name(body.witness_personnel_id or "") or body.witness or ""
+    machine = await db.machines.find_one({"id": body.machine_id}) if body.machine_id else None
     update = {
         "quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "description": body.description or "",
         "scrap_date": body.scrap_date, "location": body.location or holder.get("location", ""),
         "operator_personnel_id": body.operator_personnel_id or "", "approver_personnel_id": body.approver_personnel_id or "",
         "witness_personnel_id": body.witness_personnel_id or "", "operator_name": operator_name,
-        "approved_by": approver_name, "witness": witness_name,
+        "approved_by": approver_name, "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "",
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
         "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
         "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
@@ -2069,6 +2073,7 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         ("Tutanak No", scrap.get("record_no") or f"İŞLEME TUTANAK {str(scrap.get('id', ''))[:6].upper()}"), ("Tarih", scrap.get("scrap_date", "")),
         ("Tutucu", scrap.get("name", "")), ("Marka", scrap.get("brand", "")),
         ("Tutucu Tipi", scrap.get("holder_type", "")), ("Kesici Uç Kodu / İsmi", scrap.get("cutting_tool_code_name", "")),
+        ("Tezgâh", f"{scrap.get('machine_code', '')} — {scrap.get('machine_name', '')}".strip(" —")), ("İşlenen Parça / Üretim", scrap.get("production_product", "")),
         ("Ölçüler", f"Boy: {scrap.get('length', '')} | Çap: {scrap.get('diameter', '')}"),
         ("Hurda Miktarı", f"{scrap.get('quantity', 0)} {scrap.get('unit', 'adet')}"),
         ("Hurda Nedeni", scrap.get("scrap_reason", "")), ("Açıklama", scrap.get("description", "")),
