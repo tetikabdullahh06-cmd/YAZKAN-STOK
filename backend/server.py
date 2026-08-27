@@ -1958,7 +1958,7 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
     machine = await db.machines.find_one({"id": body.machine_id}) if body.machine_id else None
     now = now_utc().isoformat()
     counter = await db.counters.find_one_and_update({"_id": "toolholder_scrap_record"}, {"$inc": {"value": 1}}, upsert=True, return_document=ReturnDocument.AFTER)
-    record_no = f"İŞLEME TUTANAK {int(counter.get('value', 1)):06d}"
+    record_no = f"YAZKANİŞLEME{int(counter.get('value', 1)):06d}"
     doc = {
         "id": new_id(), "record_no": record_no, "tool_holder_id": holder["id"], "name": holder.get("name", ""),
         "brand": holder.get("brand", ""), "holder_type": holder.get("type", ""),
@@ -2070,7 +2070,7 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     y -= 35
     pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 10)
     rows = [
-        ("Tutanak No", scrap.get("record_no") or f"İŞLEME TUTANAK {str(scrap.get('id', ''))[:6].upper()}"), ("Tarih", scrap.get("scrap_date", "")),
+        ("Tutanak No", scrap.get("record_no") or f"YAZKANİŞLEME{str(scrap.get('id', ''))[:6].upper()}"), ("Tarih", scrap.get("scrap_date", "")),
         ("Tutucu", scrap.get("name", "")), ("Marka", scrap.get("brand", "")),
         ("Tutucu Tipi", scrap.get("holder_type", "")), ("Kesici Uç Kodu / İsmi", scrap.get("cutting_tool_code_name", "")),
         ("Tezgâh", f"{scrap.get('machine_code', '')} — {scrap.get('machine_name', '')}".strip(" —")), ("İşlenen Parça / Üretim", scrap.get("production_product", "")),
