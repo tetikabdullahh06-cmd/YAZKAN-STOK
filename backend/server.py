@@ -2142,27 +2142,25 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         except Exception:
             continue
     if valid_images:
-        if y < 230:
-            draw_footer(); pdf.showPage(); y = height - 60
         pdf.setFont(bold_font, 10)
-        pdf.drawString(55, y, "GÖRSEL 1 / GÖRSEL 2 — İLK VE SON DURUM")
+        pdf.drawString(55, y, "GÖRSELLER — İLK VE SON DURUM")
         y -= 18
-        tile_width, tile_height = 245, 145
+        # İkinci sayfa açılmaz; görsel sayısı arttıkça kutular kalan alana göre küçülür.
+        columns = 2
+        image_rows_count = (len(valid_images) + columns - 1) // columns
+        available_height = max(70, y - 55)
+        tile_width = 245
+        tile_height = max(22, min(120, (available_height - (image_rows_count - 1) * 18) / image_rows_count - 18))
+        row_step = tile_height + 24
         for index, (caption, img) in enumerate(valid_images):
-            column = index % 2
-            if index > 0 and column == 0:
-                y -= 170
-                if y < 150:
-                    draw_footer(); pdf.showPage(); y = height - 60
-                    pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica-Bold", 10)
-                    pdf.drawString(55, y, "Görsel Kayıtları (devam)")
-                    y -= 18
+            column = index % columns
+            row = index // columns
             x = 55 + column * 255
-            pdf.setFont("DejaVu" if os.path.exists(font_path) else "Helvetica", 7)
-            pdf.drawString(x, y, f"{index + 1}. {caption[:24]}")
-            pdf.rect(x, y - tile_height - 8, tile_width, tile_height + 8, stroke=1, fill=0)
-            pdf.drawImage(img, x + 3, y - tile_height - 4, width=tile_width - 6, height=tile_height - 6, preserveAspectRatio=True, anchor="sw", mask="auto")
-        y -= 170
+            image_y = y - row * row_step
+            pdf.setFont(regular_font, 6.5)
+            pdf.drawString(x, image_y, f"{index + 1}. {caption[:24]}")
+            pdf.rect(x, image_y - tile_height - 5, tile_width, tile_height + 5, stroke=1, fill=0)
+            pdf.drawImage(img, x + 3, image_y - tile_height - 2, width=tile_width - 6, height=max(14, tile_height - 4), preserveAspectRatio=True, anchor="sw", mask="auto")
     draw_footer()
     pdf.save(); buf.seek(0)
     return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="hurda-tutanagi-{scrap_id[:8]}.pdf"'})
