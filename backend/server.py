@@ -240,6 +240,8 @@ class ToolHolderScrapIn(BaseModel):
     witness_personnel_id: Optional[str] = ""
     approved_by: Optional[str] = ""
     witness: Optional[str] = ""
+    prepared_by: Optional[str] = "Abdullah Tetik"
+    foreman_name: Optional[str] = "Celal"
     before_image_url: Optional[str] = ""
     after_image_url: Optional[str] = ""
     before_image_urls: List[str] = []
@@ -1972,8 +1974,8 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
         "length": holder.get("length", ""), "diameter": holder.get("diameter", ""),
         "quantity": body.quantity, "unit": "adet", "scrap_reason": body.scrap_reason.strip(),
         "description": body.description or "", "scrap_date": body.scrap_date,
-        "location": body.location or holder.get("location", ""), "approved_by": approver_name,
-        "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "root_cause": body.root_cause or "", "corrective_action": body.corrective_action or "", "preventive_action": body.preventive_action or "", "disposition": body.disposition or "", "operator_personnel_id": body.operator_personnel_id or "",
+        "location": body.location or holder.get("location", ""), "approved_by": body.approved_by or "",
+        "witness": witness_name, "prepared_by": body.prepared_by or "Abdullah Tetik", "foreman_name": body.foreman_name or "Celal", "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "root_cause": body.root_cause or "", "corrective_action": body.corrective_action or "", "preventive_action": body.preventive_action or "", "disposition": body.disposition or "", "operator_personnel_id": body.operator_personnel_id or "",
         "approver_personnel_id": body.approver_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "",
         "operator_name": operator_name, "user_id": user["id"], "user_name": user.get("name", ""),
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
@@ -2019,8 +2021,8 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
         "quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "description": body.description or "",
         "scrap_date": body.scrap_date, "location": body.location or holder.get("location", ""),
         "operator_personnel_id": body.operator_personnel_id or "", "approver_personnel_id": body.approver_personnel_id or "",
-        "witness_personnel_id": body.witness_personnel_id or "", "operator_name": operator_name,
-        "approved_by": approver_name, "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "root_cause": body.root_cause or "", "corrective_action": body.corrective_action or "", "preventive_action": body.preventive_action or "", "disposition": body.disposition or "",
+        "witness_personnel_id": body.witness_personnel_id or "", "prepared_by": body.prepared_by or "Abdullah Tetik", "foreman_name": body.foreman_name or "Celal", "operator_name": operator_name,
+        "approved_by": body.approved_by or "", "witness": witness_name, "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "", "production_product": body.production_product or "", "root_cause": body.root_cause or "", "corrective_action": body.corrective_action or "", "preventive_action": body.preventive_action or "", "disposition": body.disposition or "",
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
         "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
         "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
@@ -2135,9 +2137,9 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     pdf.drawCentredString(width / 2, y - 8, "FORMEN")
     pdf.drawCentredString(width - 140, y - 8, "ONAYLAYAN")
     pdf.setFont(regular_font, 9)
-    pdf.drawCentredString(140, y - 30, scrap.get("operator_name") or scrap.get("user_name", "") or "-")
-    pdf.drawCentredString(width / 2, y - 30, scrap.get("approved_by", "") or "-")
-    pdf.drawCentredString(width - 140, y - 30, scrap.get("witness", "") or "-")
+    pdf.drawCentredString(140, y - 30, scrap.get("prepared_by") or "Abdullah Tetik")
+    pdf.drawCentredString(width / 2, y - 30, scrap.get("foreman_name") or "Celal")
+    pdf.drawCentredString(width - 140, y - 30, scrap.get("approved_by") or "")
     pdf.line(width / 3, y - 48, width / 3, y + 7); pdf.line(width * 2 / 3, y - 48, width * 2 / 3, y + 7)
     y -= 62
     image_rows = []
