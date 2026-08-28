@@ -198,7 +198,7 @@ export default function Products() {
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
   };
 
-  const edit = (p) => { setForm({ ...emptyForm, ...p }); setEditId(p.id); setShowForm(true); };
+  const edit = (p) => { setForm({ ...emptyForm, ...p }); setEditId(p.id); setShowForm(true); requestAnimationFrame(() => document.getElementById(`product-row-${p.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })); };
   const del = async (p) => {
     if (!window.confirm(`${p.name} silinsin mi?`)) return;
     try { await api.delete(`/products/${p.id}`); toast.success("Silindi"); load(); }
@@ -261,7 +261,7 @@ export default function Products() {
         </div>
       )}
 
-      {showForm && (
+      {showForm && !editId && (
         <form onSubmit={submit} data-testid="product-form" className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-3 bg-blue-950/30 border border-blue-800/40 rounded-lg p-3 flex items-center gap-2 text-xs">
             <Wand2 className="w-4 h-4 text-blue-400" />
@@ -363,7 +363,32 @@ export default function Products() {
               {filtered.map((p) => {
                 const crit = p.current_stock <= p.min_stock;
                 return (
-                  <tr key={p.id} data-testid={`product-row-${p.code}`} className="h-16 hover:bg-slate-700/40">
+                  <>
+                    {showForm && editId === p.id && (
+                      <tr key={`product-edit-${p.id}`} data-testid={`product-edit-form-row-${p.code}`}>
+                        <td colSpan={8} className="p-3 md:p-5 bg-gradient-to-r from-blue-50 via-cyan-50 to-teal-50 border-y-2 border-cyan-300">
+                          <form onSubmit={submit} data-testid={`product-inline-form-${p.code}`} className="rounded-2xl border border-cyan-300 bg-white p-4 md:p-5 shadow-lg grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div className="md:col-span-4 flex items-center justify-between gap-3 border-b border-cyan-100 pb-3">
+                              <div><div className="text-xs font-black uppercase tracking-widest text-cyan-700">Satır içi ürün düzeltme</div><div className="font-bold text-slate-900">{p.code} — {p.name}</div></div>
+                              <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-9 px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs">Kapat</button>
+                            </div>
+                            <label className="text-xs font-bold text-slate-700">Kod<input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="md:col-span-2 text-xs font-bold text-slate-700">Ad<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Kategori<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3">{allCats.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
+                            <label className="text-xs font-bold text-slate-700">Birim<input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Marka<input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Kalite<input value={form.quality} onChange={(e) => setForm({ ...form, quality: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Konum<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Minimum stok<input type="number" step="0.01" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Mevcut stok<input type="number" step="0.01" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <div className="md:col-span-4"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Ürün görseli" /></div>
+                            <label className="md:col-span-3 flex items-center gap-2 text-sm font-bold text-slate-800"><input type="checkbox" checked={!!form.is_special} onChange={(e) => setForm({ ...form, is_special: e.target.checked })} className="w-5 h-5 accent-blue-600" /> Özel takım</label>
+                            <div className="flex justify-end gap-2"><button type="submit" className="h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black">Kaydet</button></div>
+                          </form>
+                        </td>
+                      </tr>
+                    )}
+                    <tr key={p.id} id={`product-row-${p.id}`} data-testid={`product-row-${p.code}`} className="h-16 hover:bg-slate-700/40">
                     <td className="px-4 font-mono-tab font-semibold text-slate-300">{p.code}</td>
                     <td className="px-4 font-medium">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -401,7 +426,8 @@ export default function Products() {
                         </form>}
                       </>}
                     </td>
-                  </tr>
+                    </tr>
+                  </>
                 );
               })}
               {filtered.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-slate-500">Ürün bulunamadı</td></tr>}

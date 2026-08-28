@@ -155,7 +155,7 @@ export default function TakimTutucular() {
     } catch (err) { toast.error(err.response?.data?.detail || "Hata"); }
   };
 
-  const edit = (t) => { setForm({ ...emptyForm, ...t }); setCatalogKind(""); setEditId(t.id); setShowForm(true); };
+  const edit = (t) => { setForm({ ...emptyForm, ...t }); setCatalogKind(""); setEditId(t.id); setShowForm(true); requestAnimationFrame(() => document.getElementById(`th-row-${t.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })); };
   const applyCatalogPreset = (value) => {
     setCatalogKind(value);
     if (!value || value === "manual") return;
@@ -269,7 +269,7 @@ export default function TakimTutucular() {
           className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg pl-12 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" />
       </div>
 
-      {showForm && (
+      {showForm && !editId && (
         <form onSubmit={submit} data-testid="th-form" className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-3 bg-blue-950/30 border border-blue-800/40 rounded-lg p-4 space-y-3">
             <div className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Standart kater / tutucu seçimi</div>
@@ -362,7 +362,28 @@ export default function TakimTutucular() {
               {filtered.map((t) => {
                 const crit = t.current_stock <= t.min_stock;
                 return (
-                  <tr key={t.id} data-testid={`th-row-${t.id}`} className={`h-16 hover:bg-slate-700/40 ${crit ? "bg-red-950/20" : ""}`}>
+                  <>
+                    {showForm && editId === t.id && (
+                      <tr key={`th-edit-${t.id}`} data-testid={`th-edit-form-row-${t.id}`}>
+                        <td colSpan={9} className="p-3 md:p-5 bg-gradient-to-r from-blue-50 via-cyan-50 to-teal-50 border-y-2 border-cyan-300">
+                          <form onSubmit={submit} data-testid={`th-inline-form-${t.id}`} className="rounded-2xl border border-cyan-300 bg-white p-4 md:p-5 shadow-lg grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div className="md:col-span-4 flex items-center justify-between gap-3 border-b border-cyan-100 pb-3"><div><div className="text-xs font-black uppercase tracking-widest text-cyan-700">Satır içi tutucu düzeltme</div><div className="font-bold text-slate-900">{t.name}</div></div><button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-9 px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs">Kapat</button></div>
+                            <label className="md:col-span-2 text-xs font-bold text-slate-700">Tutucu adı<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Marka<input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Kesici uç kodu / ismi<input value={form.cutting_tool_code_name} onChange={(e) => setForm({ ...form, cutting_tool_code_name: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Tipi<input list="th-inline-types" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /><datalist id="th-inline-types">{DEFAULT_TYPES.map((x) => <option key={x} value={x} />)}</datalist></label>
+                            <label className="text-xs font-bold text-slate-700">Boy (mm)<input value={form.length} onChange={(e) => setForm({ ...form, length: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Çap (mm)<input value={form.diameter} onChange={(e) => setForm({ ...form, diameter: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Konum<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Minimum stok<input type="number" step="1" min="0" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Mevcut stok<input type="number" step="1" min="0" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <div className="md:col-span-4"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Takım tutucu görseli" /></div>
+                            <div className="md:col-span-4 flex justify-end"><button type="submit" className="h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black">Kaydet</button></div>
+                          </form>
+                        </td>
+                      </tr>
+                    )}
+                    <tr key={t.id} id={`th-row-${t.id}`} data-testid={`th-row-${t.id}`} className={`h-16 hover:bg-slate-700/40 ${crit ? "bg-red-950/20" : ""}`}>
                     <td className="px-4 font-medium">{t.name}<ImageHover src={t.image_url} alt={t.name} /></td>
                     <td className="px-4 text-slate-300">{t.brand || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-slate-300">{t.cutting_tool_code_name || <span className="text-slate-600">-</span>}</td>
@@ -395,7 +416,8 @@ export default function TakimTutucular() {
                         )}
                       </div>
                     </td>
-                  </tr>
+                    </tr>
+                  </>
                 );
               })}
               {filtered.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-slate-500">Tutucu yok. Yukarıdan ekleyin.</td></tr>}
