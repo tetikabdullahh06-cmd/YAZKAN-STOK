@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { createWorker } from "tesseract.js";
 import { QrCode, X, Camera, Upload, Loader2 } from "lucide-react";
 
@@ -17,11 +17,46 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
   useEffect(() => {
     if (!open) return undefined;
     let cancelled = false;
-    const scanner = new Html5Qrcode(containerId);
+    const scanner = new Html5Qrcode(containerId, {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+        Html5QrcodeSupportedFormats.PDF_417,
+        Html5QrcodeSupportedFormats.AZTEC,
+      ],
+    });
     scannerRef.current = scanner;
     setError("");
 
-    const config = { fps: 10, qrbox: { width: 260, height: 160 }, aspectRatio: 1.777778 };
+    const config = {
+      fps: 10,
+      qrbox: { width: 260, height: 160 },
+      aspectRatio: 1.777778,
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+        Html5QrcodeSupportedFormats.PDF_417,
+        Html5QrcodeSupportedFormats.AZTEC,
+      ],
+    };
     const stopScanner = async () => {
       const current = scannerRef.current;
       scannerRef.current = null;
