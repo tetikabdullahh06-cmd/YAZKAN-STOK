@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { QrCode, X, Camera } from "lucide-react";
+import { QrCode, X, Camera, Upload, Loader2 } from "lucide-react";
 
 /**
  * QR / barcode scanner button.
@@ -10,6 +10,8 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const scannerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [fileScanning, setFileScanning] = useState(false);
   const containerId = "qr-reader-region";
 
   useEffect(() => {
@@ -86,6 +88,34 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
 
   const close = () => setOpen(false);
 
+  const scanUploadedImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Lütfen QR veya barkod içeren bir görsel seçin.");
+      return;
+    }
+    setError("");
+    setFileScanning(true);
+    const scanner = scannerRef.current || new Html5Qrcode(containerId);
+    scannerRef.current = scanner;
+    try {
+      try { await scanner.stop(); } catch (_) {}
+      try { await scanner.clear(); } catch (_) {}
+      const decoded = await scanner.scanFile(file, true);
+      scannerRef.current = null;
+      setOpen(false);
+      onScan?.(decoded);
+    } catch (_) {
+      setError("Görselde okunabilir QR/kare kod veya barkod bulunamadı. Daha net bir görsel deneyin.");
+      try { await scanner.clear(); } catch (_) {}
+      scannerRef.current = null;
+    } finally {
+      setFileScanning(false);
+    }
+  };
+
   return (
     <>
       <button
@@ -110,8 +140,13 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
             </div>
             <div className="p-4">
               <div id={containerId} className="rounded-lg overflow-hidden bg-black min-h-[300px] w-full" />
-              {error && <div className="mt-3 text-sm bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg p-3">{error}</div>}
-              <p className="text-xs text-slate-400 mt-3 text-center">Ürün kodunu veya barkodu kameraya gösterin.</p>
+              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={scanUploadedImage} className="hidden" data-testid={`${testid}-image-input`} />
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={fileScanning} data-testid={`${testid}-image-upload`} className="mt-3 w-full h-11 rounded-lg border border-cyan-500/60 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+                {fileScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {fileScanning ? "Görsel okunuyor..." : "Bilgisayardan / Telefondan Görsel Yükle"}
+              </button>
+              {error && <div className="mt-3 text-sm bg-red-500/10 border border-red-500/30 text-red-700 rounded-lg p-3">{error}</div>}
+              <p className="text-xs text-slate-500 mt-3 text-center">Kamerayı kullanabilir veya QR/kare kod ya da barkod görseli yükleyebilirsiniz.</p>
             </div>
           </div>
         </div>
