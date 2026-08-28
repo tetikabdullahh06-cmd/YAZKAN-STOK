@@ -22,20 +22,22 @@ const normalizeCameraValue = (value) => String(value || "")
 const findProductByScanValue = (products, rawValue) => {
   const scanned = normalizeCameraValue(rawValue);
   if (!scanned) return null;
+  const scannedTokens = scanned.split(" ").filter((token) => token.length >= 2);
   const scored = products.map((p) => {
     const code = normalizeCameraValue(p.code);
     const name = normalizeCameraValue(p.name);
     const brand = normalizeCameraValue(p.brand);
     const full = normalizeCameraValue(`${p.code || ""} ${p.name || ""} ${p.brand || ""}`);
-    let score = 0;
-    if (code && scanned === code) score = 100;
-    else if (name && scanned === name) score = 95;
-    else if (brand && scanned === brand) score = 25;
-    else if (full && (full.includes(scanned) || scanned.includes(full))) score = 80;
-    else if (code && (scanned.includes(code) || code.includes(scanned))) score = 75;
-    else if (name && (scanned.includes(name) || name.includes(scanned))) score = 70;
+    const candidateTokens = full.split(" ").filter((token) => token.length >= 2);
+    const tokenHits = scannedTokens.filter((token) => candidateTokens.some((candidate) => token === candidate || (token.length >= 3 && candidate.length >= 3 && (token.includes(candidate) || candidate.includes(token)))));
+    let score = tokenHits.length ? 25 + tokenHits.length * 18 + (tokenHits.length / Math.max(1, Math.min(scannedTokens.length, candidateTokens.length))) * 45 : 0;
+    if (code && scanned === code) score = 180;
+    else if (name && scanned === name) score = 170;
+    else if (full && (full.includes(scanned) || scanned.includes(full))) score = Math.max(score, 130);
+    else if (code && (scanned.includes(code) || code.includes(scanned))) score = Math.max(score, 120);
+    else if (name && (scanned.includes(name) || name.includes(scanned))) score = Math.max(score, 110);
     return { product: p, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
+  }).filter((x) => x.score >= 45).sort((a, b) => b.score - a.score);
   return scored[0]?.product || null;
 };
 

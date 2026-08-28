@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
+import { createWorker } from "tesseract.js";
 import { QrCode, X, Camera, Upload, Loader2 } from "lucide-react";
 
 /** QR / barcode camera scanner with direct local image upload support. */
@@ -8,6 +9,7 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
   const [error, setError] = useState("");
   const [pendingFile, setPendingFile] = useState(null);
   const [fileScanning, setFileScanning] = useState(false);
+  const [ocrScanning, setOcrScanning] = useState(false);
   const scannerRef = useRef(null);
   const fileInputRef = useRef(null);
   const containerId = "qr-reader-region";
@@ -48,10 +50,29 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
           onScan?.(decoded);
         }
       } catch (_) {
-        if (!cancelled) setError("Görselde okunabilir QR/kare kod veya barkod bulunamadı. Daha net bir görsel deneyin.");
+        // Kare kod/barkod yoksa ikinci aşamada görseldeki ürün adı veya kodunu OCR ile oku.
         try { await scanner.clear(); } catch (_) {}
         scannerRef.current = null;
-        setPendingFile(null);
+        if (!cancelled) {
+          setOcrScanning(true);
+          setError("");
+          let worker;
+          try {
+            worker = await createWorker("tur");
+            const result = await worker.recognize(pendingFile);
+            const text = result?.data?.text?.replace(/\s+/g, " ").trim();
+            if (!text) throw new Error("OCR_EMPTY");
+            setPendingFile(null);
+            setOpen(false);
+            onScan?.(text);
+          } catch (ocrError) {
+            if (!cancelled) setError("Görselde QR/barkod bulunamadı ve ürün adı veya kodu okunamadı. Ürün etiketini daha net, yakın ve düz çekerek tekrar deneyin.");
+          } finally {
+            try { await worker?.terminate(); } catch (_) {}
+            if (!cancelled) setOcrScanning(false);
+          }
+        }
+        if (!cancelled) setPendingFile(null);
       } finally {
         if (!cancelled) setFileScanning(false);
       }
@@ -94,7 +115,7 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
     setPendingFile(file);
     setOpen(true);
   };
-  const close = () => { setPendingFile(null); setOpen(false); };
+  const close = () => { setPendingFile(null); setOpen(false); setError(""); setOcrScanning(false); };
 
   return (
     <>
@@ -104,9 +125,9 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
           <QrCode className="w-5 h-5" /> {label}
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={selectImage} className="hidden" data-testid={`${testid}-image-input`} />
-        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={fileScanning} data-testid={`${testid}-image-upload-direct`}
+        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={fileScanning || ocrScanning} data-testid={`${testid}-image-upload-direct`}
           className="h-14 px-5 rounded-lg bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-bold flex items-center gap-2 transition-all active:scale-95 border border-cyan-400/50 shadow-lg shadow-cyan-900/20">
-          {fileScanning ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />} Görsel Yükle
+          {fileScanning || ocrScanning ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />} {ocrScanning ? "Yazı okunuyor..." : "Görsel Yükle"}
         </button>
       </div>
       {open && (
@@ -118,11 +139,11 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
             </div>
             <div className="p-4">
               <div id={containerId} className="rounded-lg overflow-hidden bg-black min-h-[300px] w-full" />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={fileScanning} data-testid={`${testid}-image-upload`} className="mt-3 w-full h-11 rounded-lg border border-cyan-500/60 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 font-bold flex items-center justify-center gap-2 disabled:opacity-60">
-                {fileScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} {fileScanning ? "Görsel okunuyor..." : "Bu pencerede görsel seç"}
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={fileScanning || ocrScanning} data-testid={`${testid}-image-upload`} className="mt-3 w-full h-11 rounded-lg border border-cyan-500/60 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+                {fileScanning || ocrScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} {ocrScanning ? "Ürün yazısı okunuyor..." : fileScanning ? "Kod okunuyor..." : "Bu pencerede görsel seç"}
               </button>
               {error && <div className="mt-3 text-sm bg-red-500/10 border border-red-500/30 text-red-200 rounded-lg p-3">{error}</div>}
-              <p className="text-xs text-slate-400 mt-3 text-center">Kamerayı kullanabilir veya QR/kare kod ya da barkod görseli yükleyebilirsiniz.</p>
+              <p className="text-xs text-slate-400 mt-3 text-center">Kamera, QR/barkod veya üzerinde ürün adı/kodu bulunan net bir görsel yükleyebilirsiniz.</p>
             </div>
           </div>
         </div>
