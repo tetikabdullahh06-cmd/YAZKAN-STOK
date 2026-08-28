@@ -369,6 +369,7 @@ class RecipeLineIn(BaseModel):
     reference_id: str
     quantity: float
     note: Optional[str] = ""
+    pair_id: Optional[str] = ""
 
 
 class RecipeIn(BaseModel):
@@ -1364,7 +1365,7 @@ async def create_recipe(body: RecipeIn, user=Depends(require_admin)):
         item = await collection.find_one({"id": line.reference_id})
         if not item:
             raise HTTPException(status_code=404, detail="Reçete satırındaki stok kaydı bulunamadı")
-        lines.append({"kind": line.kind, "reference_id": item["id"], "name": item.get("name", ""), "code": item.get("code", ""), "quantity": line.quantity, "note": line.note or ""})
+        lines.append({"kind": line.kind, "reference_id": item["id"], "name": item.get("name", ""), "code": item.get("code", ""), "quantity": line.quantity, "note": line.note or "", "pair_id": line.pair_id or ""})
     doc = {"id": new_id(), "name": body.name.strip(), "workpiece_name": body.workpiece_name.strip(), "note": body.note or "", "lines": lines, "status": "draft", "created_at": now_utc().isoformat(), "created_by": user.get("name", "")}
     await db.recipes.insert_one(doc)
     return clean(doc)
