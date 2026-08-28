@@ -121,8 +121,8 @@ export default function Layout() {
         </button>
       </div>
 
-      <main ref={mainRef} className="flex-1 overflow-auto relative z-10 pt-14 md:pt-0">
-        <div className="p-4 md:p-8 lg:p-12 max-w-[1600px]">
+      <main ref={mainRef} className="min-w-0 w-0 flex-1 overflow-y-auto overflow-x-hidden relative z-10 pt-14 md:pt-0">
+        <div className="min-w-0 w-full p-4 md:p-8 lg:p-12 max-w-[1600px]">
           {!isAdmin && (
             <div data-testid="viewer-banner" className="mb-6 flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-xl px-4 py-3">
               <Eye className="w-5 h-5 shrink-0" />
