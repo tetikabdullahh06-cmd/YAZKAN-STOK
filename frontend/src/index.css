@@ -291,3 +291,106 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
     .app-sidebar nav a { min-height: 52px; }
     main .bg-slate-800\/60 { box-shadow: 0 8px 22px rgba(30, 64, 175, .08); }
 }
+
+/* Unified high-contrast palette: final pass for legacy dark utility combinations */
+:root {
+  --ink-strong: #0f172a;
+  --ink: #1e293b;
+  --ink-muted: #475569;
+  --surface: #ffffff;
+  --surface-soft: #f0f7ff;
+  --line: #c7d8ea;
+  --brand-blue: #1d4ed8;
+  --brand-cyan: #0891b2;
+  --brand-teal: #0f766e;
+}
+
+.app-shell main .bg-slate-800\/70,
+.app-shell main .bg-slate-800\/80,
+.app-shell main .bg-slate-900\/70,
+.app-shell main .bg-slate-950\/70 {
+  background: rgba(255,255,255,.94) !important;
+  border-color: var(--line) !important;
+  color: var(--ink-strong) !important;
+}
+.app-shell main .bg-red-950\/30,
+.app-shell main .bg-red-950\/40,
+.app-shell main .bg-red-950\/60,
+.app-shell main .bg-amber-950\/30,
+.app-shell main .bg-amber-950\/40,
+.app-shell main .bg-amber-950\/60,
+.app-shell main .bg-emerald-950\/30,
+.app-shell main .bg-emerald-950\/40,
+.app-shell main .bg-blue-950\/30,
+.app-shell main .bg-violet-950\/30 {
+  background: linear-gradient(135deg, #f8fbff 0%, #eef9ff 52%, #effcf8 100%) !important;
+  border-color: #b7d9eb !important;
+  color: var(--ink-strong) !important;
+}
+.app-shell main .bg-red-950\/30 *,
+.app-shell main .bg-red-950\/40 *,
+.app-shell main .bg-red-950\/60 *,
+.app-shell main .bg-amber-950\/30 *,
+.app-shell main .bg-amber-950\/40 *,
+.app-shell main .bg-amber-950\/60 *,
+.app-shell main .bg-emerald-950\/30 *,
+.app-shell main .bg-emerald-950\/40 *,
+.app-shell main .bg-blue-950\/30 *,
+.app-shell main .bg-violet-950\/30 * {
+  border-color: #c7d8ea;
+}
+.app-shell main .bg-slate-800\/70 .text-white,
+.app-shell main .bg-slate-800\/80 .text-white,
+.app-shell main .bg-slate-900\/70 .text-white {
+  color: var(--ink-strong) !important;
+}
+.app-shell main .bg-slate-800\/70 .text-slate-400,
+.app-shell main .bg-slate-800\/70 .text-slate-500,
+.app-shell main .bg-slate-800\/80 .text-slate-400,
+.app-shell main .bg-slate-900\/70 .text-slate-400 {
+  color: var(--ink-muted) !important;
+}
+.app-shell main .text-white { color: var(--ink-strong); }
+.app-shell main .bg-white .text-white,
+.app-shell main .bg-slate-950 .text-white,
+.app-shell main .bg-slate-900 .text-white { color: var(--ink-strong) !important; }
+.app-shell main .text-slate-700,
+.app-shell main .text-slate-600,
+.app-shell main .text-slate-500,
+.app-shell main .text-slate-400,
+.app-shell main .text-slate-300 { color: var(--ink-muted) !important; }
+.app-shell main .text-slate-100,
+.app-shell main .text-slate-200 { color: var(--ink-strong) !important; }
+.app-shell main button.bg-slate-600,
+.app-shell main button.bg-slate-500 {
+  background: linear-gradient(105deg, #334155, #1e40af) !important;
+  color: #fff !important;
+}
+.app-shell main button.bg-slate-600:hover,
+.app-shell main button.bg-slate-500:hover { background: linear-gradient(105deg, #1e293b, #1d4ed8) !important; }
+.app-shell main button.bg-violet-600,
+.app-shell main button.bg-violet-500 { background: linear-gradient(105deg, #6d28d9, #4f46e5) !important; color: #fff !important; }
+.app-shell main button.bg-amber-600,
+.app-shell main button.bg-amber-500 { background: linear-gradient(105deg, #b45309, #d97706) !important; color: #fff !important; }
+.app-shell main button.bg-red-500 { background: linear-gradient(105deg, #dc2626, #e11d48) !important; color: #fff !important; }
+.app-shell main button:disabled { color: #64748b !important; background: #e2e8f0 !important; }
+.app-shell main select option { background: #ffffff; color: var(--ink-strong); }
+.app-shell main table thead th { color: #173b63 !important; background: #dff4ff !important; }
+.app-shell main table td { color: var(--ink) !important; }
+.app-shell main .text-red-300,
+.app-shell main .text-red-400 { color: #b91c1c !important; }
+.app-shell main .text-amber-200,
+.app-shell main .text-amber-300,
+.app-shell main .text-amber-400 { color: #92400e !important; }
+.app-shell main .text-emerald-300,
+.app-shell main .text-emerald-400 { color: #047857 !important; }
+.app-shell main .text-blue-300,
+.app-shell main .text-blue-400 { color: #075985 !important; }
+.app-shell main .text-violet-200,
+.app-shell main .text-violet-300,
+.app-shell main .text-violet-400 { color: #5b21b6 !important; }
+.app-shell main a:focus-visible,
+.app-shell main button:focus-visible,
+.app-shell main input:focus-visible,
+.app-shell main select:focus-visible,
+.app-shell main textarea:focus-visible { outline: 3px solid #22d3ee; outline-offset: 2px; }
