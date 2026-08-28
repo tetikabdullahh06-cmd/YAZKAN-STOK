@@ -9,7 +9,7 @@ import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 import QrScannerButton from "@/components/QrScanner";
 import { useAuth } from "@/context/AuthContext";
 
-const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", is_special: false, image_url: "" };
+const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", supplier_id: "", supplier_name: "", is_special: false, image_url: "" };
 const DEFAULT_CATS = ["Kesici Uç", "Matkap", "Kater", "Apparat", "Ölçüm Aleti", "Diğer"];
 const CATS_STORAGE_KEY = "cnc_extra_categories";
 
@@ -42,6 +42,7 @@ const findProductByScanValue = (products, rawValue) => {
 export default function Products() {
   const { isAdmin } = useAuth();
   const [items, setItems] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -56,8 +57,12 @@ export default function Products() {
   const [quickStock, setQuickStock] = useState({ productId: "", direction: "in", quantity: "", note: "" });
 
   const load = async () => {
-    const r = await api.get("/products");
-    setItems(r.data);
+    const [productsResponse, suppliersResponse] = await Promise.all([
+      api.get("/products"),
+      api.get("/suppliers").catch(() => ({ data: [] })),
+    ]);
+    setItems(productsResponse.data);
+    setSuppliers(suppliersResponse.data || []);
   };
   useEffect(() => { load(); }, []);
   
@@ -73,6 +78,7 @@ export default function Products() {
       "Kategori": p.category || "",
       "Birim": p.unit || "",
       "Marka": p.brand || "",
+      "Tedarikçi": p.supplier_name || "",
       "Kalite": p.quality || "",
       "Konum": p.location || "",
       "Minimum Stok": p.min_stock ?? 0,
@@ -175,7 +181,8 @@ export default function Products() {
     }
     return (p.code || "").toLowerCase().includes(s) || p.name.toLowerCase().includes(s)
       || (p.category || "").toLowerCase().includes(s) || (p.location || "").toLowerCase().includes(s)
-      || (p.brand || "").toLowerCase().includes(s) || (p.quality || "").toLowerCase().includes(s);
+      || (p.brand || "").toLowerCase().includes(s) || (p.quality || "").toLowerCase().includes(s)
+      || (p.supplier_name || "").toLowerCase().includes(s);
   });
 
   const submit = async (e) => {
@@ -307,6 +314,11 @@ export default function Products() {
               className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
           </div>
           <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tedarikçi</label>
+            <input list="product-suppliers" value={form.supplier_name || ""} onChange={(e) => { const supplier_name = e.target.value; const supplier = suppliers.find((s) => s.name.toLocaleLowerCase("tr-TR") === supplier_name.toLocaleLowerCase("tr-TR")); setForm({ ...form, supplier_name, supplier_id: supplier?.id || "" }); }} data-testid="pf-supplier" placeholder="Tedarikçi adı ara ve seç..." className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+            <datalist id="product-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name}>{s.contact_person || ""}</option>)}</datalist>
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Kalite</label>
             <input value={form.quality} onChange={(e) => setForm({ ...form, quality: e.target.value })} data-testid="pf-quality" placeholder="TiN, HSS, K10..."
               className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
@@ -353,6 +365,7 @@ export default function Products() {
                 <th className="px-4 py-3">Ad</th>
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Marka / Kalite</th>
+                <th className="px-4 py-3">Tedarikçi</th>
                 <th className="px-4 py-3">Konum</th>
                 <th className="px-4 py-3 text-right">Stok / Bilemede</th>
                 <th className="px-4 py-3 text-right">Min</th>
@@ -366,7 +379,7 @@ export default function Products() {
                   <>
                     {showForm && editId === p.id && (
                       <tr key={`product-edit-${p.id}`} data-testid={`product-edit-form-row-${p.code}`}>
-                        <td colSpan={8} className="p-3 md:p-5 bg-gradient-to-r from-blue-50 via-cyan-50 to-teal-50 border-y-2 border-cyan-300">
+                        <td colSpan={9} className="p-3 md:p-5 bg-gradient-to-r from-blue-50 via-cyan-50 to-teal-50 border-y-2 border-cyan-300">
                           <form onSubmit={submit} data-testid={`product-inline-form-${p.code}`} className="rounded-2xl border border-cyan-300 bg-white p-4 md:p-5 shadow-lg grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div className="md:col-span-4 flex items-center justify-between gap-3 border-b border-cyan-100 pb-3">
                               <div><div className="text-xs font-black uppercase tracking-widest text-cyan-700">Satır içi ürün düzeltme</div><div className="font-bold text-slate-900">{p.code} — {p.name}</div></div>
@@ -377,6 +390,7 @@ export default function Products() {
                             <label className="text-xs font-bold text-slate-700">Kategori<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3">{allCats.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
                             <label className="text-xs font-bold text-slate-700">Birim<input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
                             <label className="text-xs font-bold text-slate-700">Marka<input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
+                            <label className="text-xs font-bold text-slate-700">Tedarikçi<input list="product-inline-suppliers" value={form.supplier_name || ""} onChange={(e) => { const supplier_name = e.target.value; const supplier = suppliers.find((s) => s.name.toLocaleLowerCase("tr-TR") === supplier_name.toLocaleLowerCase("tr-TR")); setForm({ ...form, supplier_name, supplier_id: supplier?.id || "" }); }} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /><datalist id="product-inline-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist></label>
                             <label className="text-xs font-bold text-slate-700">Kalite<input value={form.quality} onChange={(e) => setForm({ ...form, quality: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
                             <label className="text-xs font-bold text-slate-700">Konum<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
                             <label className="text-xs font-bold text-slate-700">Minimum stok<input type="number" step="0.01" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
@@ -407,6 +421,7 @@ export default function Products() {
                       {p.quality && <span className="text-slate-400">{p.quality}</span>}
                       {!p.brand && !p.quality && <span className="text-slate-600">-</span>}
                     </td>
+                    <td className="px-4 text-sm font-semibold text-cyan-800">{p.supplier_name || <span className="text-slate-500">-</span>}</td>
                     <td className="px-4 text-slate-400 text-sm">{p.location || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-right font-mono-tab font-bold"><div>{p.current_stock} {p.unit}</div><div className={Number(p.in_sharpening || 0) > 0 ? "mt-1 inline-block text-amber-800 bg-amber-100 border border-amber-300 px-2 py-1 rounded-md text-xs font-black" : "mt-1 text-slate-400 text-xs font-semibold"}>Bilemede: {p.in_sharpening || 0} {p.unit}</div></td>
                     <td className="px-4 text-right font-mono-tab text-slate-400">{p.min_stock}</td>
