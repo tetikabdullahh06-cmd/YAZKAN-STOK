@@ -249,7 +249,7 @@ export default function Products() {
           className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg pl-12 pr-4 focus:ring-2 focus:ring-blue-500 outline-none" />
       </div>
 
-      {showForm && (
+      {showForm && !editId && (
         <div className="bg-emerald-950/30 border border-emerald-700/50 rounded-2xl p-6 space-y-4">
           <div><div className="text-xs text-emerald-300 uppercase tracking-wider font-semibold">Mevcut stok kartına ekle</div><p className="text-sm text-slate-400 mt-1">Ürün zaten kayıtlıysa yeni kart oluşturma; ürünü seçip yalnızca eklenecek adedi gir.</p></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
