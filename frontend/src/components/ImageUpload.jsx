@@ -68,7 +68,7 @@ export function ImageHover({ src, alt = "Görsel" }) {
   return <span className="relative inline-flex align-middle ml-2">
     <ImageLightbox src={src} alt={alt}><img src={src} alt={alt} onMouseEnter={showPreview} onMouseLeave={() => setPreview(null)} className="w-9 h-9 rounded-md object-cover border border-slate-300 cursor-zoom-in" /></ImageLightbox>
     {preview && <span onMouseEnter={() => setPreview(preview)} onMouseLeave={() => setPreview(null)} style={{ position: "fixed", zIndex: 9999, left: preview.left, top: preview.top, width: 224, height: 224 }} className="pointer-events-auto rounded-xl overflow-hidden border-2 border-white shadow-2xl bg-white p-1">
-      <img src={src} alt={alt} className="w-full h-full object-contain" />
+      <ImageLightbox src={src} alt={alt}><img src={src} alt={alt} className="w-full h-full object-contain" /></ImageLightbox>
     </span>}
   </span>;
 }
