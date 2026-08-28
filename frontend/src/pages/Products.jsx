@@ -357,8 +357,8 @@ export default function Products() {
       )}
 
       <div className="min-w-0 bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
-        <div className="overflow-auto">
-          <table className="w-full min-w-[1080px]">
+        <div className="overflow-hidden">
+          <table className="products-table w-full table-fixed">
             <thead className="bg-slate-900/50">
               <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
                 <th className="px-4 py-3">Kod</th>
@@ -404,7 +404,7 @@ export default function Products() {
                     )}
                     <tr key={p.id} id={`product-row-${p.id}`} data-testid={`product-row-${p.code}`} className="h-16 hover:bg-slate-700/40">
                     <td className="px-4 font-mono-tab font-semibold text-slate-300">{p.code}</td>
-                    <td className="px-4 font-medium">
+                    <td className="px-2 font-medium break-words">
                       <div className="flex items-center gap-2 flex-wrap">
                         {crit && <span className="inline-flex items-center rounded-md bg-red-600 px-2 py-1 text-[10px] font-black tracking-wide text-white">KRİTİK STOK UYARI</span>}<span>{p.name}</span><ImageHover src={p.image_url} alt={p.name} />
                         {p.is_special && (
@@ -414,22 +414,22 @@ export default function Products() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 text-slate-400 text-sm">{p.category}</td>
+                    <td className="px-2 text-slate-400 text-sm break-words">{p.category}</td>
                     <td className="px-4 text-slate-400 text-sm">
                       {p.brand && <span className="text-slate-300">{p.brand}</span>}
                       {p.brand && p.quality && <span className="text-slate-600 mx-1">·</span>}
                       {p.quality && <span className="text-slate-400">{p.quality}</span>}
                       {!p.brand && !p.quality && <span className="text-slate-600">-</span>}
                     </td>
-                    <td className="px-4 text-sm font-semibold text-cyan-800">{p.supplier_name || <span className="text-slate-500">-</span>}</td>
-                    <td className="px-4 text-slate-400 text-sm">{p.location || <span className="text-slate-600">-</span>}</td>
+                    <td className="px-2 text-sm font-semibold text-cyan-800 break-words">{p.supplier_name || <span className="text-slate-500">-</span>}</td>
+                    <td className="px-2 text-slate-400 text-sm break-words">{p.location || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-right font-mono-tab font-bold"><div>{p.current_stock} {p.unit}</div><div className={Number(p.in_sharpening || 0) > 0 ? "mt-1 inline-block text-amber-800 bg-amber-100 border border-amber-300 px-2 py-1 rounded-md text-xs font-black" : "mt-1 text-slate-400 text-xs font-semibold"}>Bilemede: {p.in_sharpening || 0} {p.unit}</div></td>
                     <td className="px-4 text-right font-mono-tab text-slate-400">{p.min_stock}</td>
-                    <td className="px-4 min-w-[260px]">
+                    <td className="products-action-cell px-2">
                       {isAdmin && <>
-                        <div className="flex items-center justify-end gap-2">
-                          <button type="button" onClick={() => setQuickStock({ productId: p.id, direction: "in", quantity: "", note: "" })} data-testid={`product-quick-in-${p.code}`} className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs"><Plus className="w-4 h-4" /> Hızlı +</button>
-                          <button type="button" onClick={() => setQuickStock({ productId: p.id, direction: "out", quantity: "", note: "" })} data-testid={`product-quick-out-${p.code}`} className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-900 font-bold text-xs"><Minus className="w-4 h-4" /> Hızlı -</button>
+                        <div className="products-row-actions flex items-center justify-end gap-1 flex-wrap">
+                          <button type="button" onClick={() => setQuickStock({ productId: p.id, direction: "in", quantity: "", note: "" })} data-testid={`product-quick-in-${p.code}`} className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs" aria-label="Hızlı stok artır" title="Hızlı stok artır"><Plus className="w-4 h-4" />+</button>
+                          <button type="button" onClick={() => setQuickStock({ productId: p.id, direction: "out", quantity: "", note: "" })} data-testid={`product-quick-out-${p.code}`} className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-900 font-bold text-xs" aria-label="Hızlı stok eksilt" title="Hızlı stok eksilt"><Minus className="w-4 h-4" />−</button>
                           <button type="button" onClick={() => edit(p)} data-testid={`product-edit-${p.code}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-blue-400" title="Ürünü düzelt"><Pencil className="w-4 h-4" /></button>
                           <button type="button" onClick={() => del(p)} data-testid={`product-delete-${p.code}`} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400" title="Ürünü sil"><Trash2 className="w-4 h-4" /></button>
                         </div>
