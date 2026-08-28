@@ -292,6 +292,21 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
     main .bg-slate-800\/60 { box-shadow: 0 8px 22px rgba(30, 64, 175, .08); }
 }
 
+/* Products page layout: keep toolbar and the wide data table inside their own bounds */
+.products-toolbar { min-width: 0; }
+.products-toolbar-btn { min-width: 0; justify-content: center; white-space: nowrap; }
+@media (min-width: 1024px) {
+  .products-toolbar-btn { flex: 0 1 auto; }
+}
+@media (max-width: 1023px) {
+  .products-toolbar-btn { flex: 1 1 190px; }
+}
+@media (max-width: 640px) {
+  .products-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .products-toolbar-btn { width: 100%; min-width: 0; padding-left: .55rem !important; padding-right: .55rem !important; font-size: .74rem; gap: .35rem; }
+  .products-toolbar-btn svg { width: 1rem; height: 1rem; flex: 0 0 auto; }
+}
+
 /* Unified high-contrast palette: final pass for legacy dark utility combinations */
 :root {
   --ink-strong: #0f172a;

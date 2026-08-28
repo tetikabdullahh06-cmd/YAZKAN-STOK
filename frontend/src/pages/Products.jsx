@@ -220,29 +220,29 @@ export default function Products() {
           <h1 className="font-display text-4xl font-black">Ürünler</h1>
           <p className="text-slate-400 text-sm mt-1">{items.length} ürün</p>
         </div>
-        <div className="flex gap-3 flex-wrap">
+        <div className="products-toolbar flex w-full lg:w-auto lg:max-w-[760px] gap-2 flex-wrap justify-end">
           {isAdmin && (
             <>
               <button onClick={() => { setForm(emptyForm); setEditId(null); setStockAdd({ query: "", productId: "", quantity: "" }); setShowForm(true); }} data-testid="product-add-btn"
-                className="h-14 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
+                className="products-toolbar-btn h-12 lg:h-14 px-3 lg:px-5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-900/30">
                 <Plus className="w-5 h-5" /> Yeni Ürün
               </button>
               <button onClick={() => setShowImport(true)} data-testid="product-import-btn"
-                className="h-14 px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
+                className="products-toolbar-btn h-12 lg:h-14 px-3 lg:px-5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
                 <FileSpreadsheet className="w-5 h-5" /> Excel'den İçe Aktar
               </button>
               <button onClick={downloadImportTemplate} data-testid="product-import-template-btn"
-                className="h-14 px-5 rounded-lg bg-slate-800/70 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
+                className="products-toolbar-btn h-12 lg:h-14 px-3 lg:px-5 rounded-lg bg-slate-800/70 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold flex items-center gap-2 active:scale-95">
                 <FileSpreadsheet className="w-5 h-5" /> Örnek İçe Aktar Şablonu
               </button>
         </>
       )}
       <button onClick={() => exportExcel(true)} data-testid="product-export-image-btn"
-        className="h-14 px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95">
+        className="products-toolbar-btn h-12 lg:h-14 px-3 lg:px-5 rounded-lg bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white font-semibold flex items-center gap-2 active:scale-95">
         <FileSpreadsheet className="w-5 h-5" /> Resimli Excel
       </button>
       <button onClick={() => exportExcel(false)} data-testid="product-export-plain-btn"
-        className="h-14 px-5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white font-semibold flex items-center gap-2 active:scale-95">
+        className="products-toolbar-btn h-12 lg:h-14 px-3 lg:px-5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white font-semibold flex items-center gap-2 active:scale-95">
         <FileSpreadsheet className="w-5 h-5" /> Resimsiz Excel
       </button>
     </div>
@@ -356,9 +356,9 @@ export default function Products() {
         </form>
       )}
 
-      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+      <div className="min-w-0 bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
         <div className="overflow-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[1080px]">
             <thead className="bg-slate-900/50">
               <tr className="text-left text-slate-400 uppercase tracking-wider text-xs">
                 <th className="px-4 py-3">Kod</th>
