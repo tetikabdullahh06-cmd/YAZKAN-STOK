@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Loader2, PackageX, Search, Download, ShieldAlert, Pencil, Trash2, X, ImagePlus } from "lucide-react";
 import api from "@/lib/api";
-import ImageUpload, { ImageHover } from "@/components/ImageUpload";
+import ImageUpload, { ImageHover, ImageLightbox } from "@/components/ImageUpload";
 import { toast } from "sonner";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -32,7 +32,7 @@ function MultiPhotoUpload({ value = [], onChange, label }) {
     } catch (error) { toast.error(error.response?.data?.detail || "Görseller yüklenemedi"); }
     finally { setUploading(false); event.target.value = ""; }
   };
-  return <div><label className="block text-sm font-black text-slate-800 mb-2">{label}</label><div className="flex flex-wrap items-center gap-3"><label className="inline-flex items-center gap-2 px-4 h-11 rounded-lg bg-slate-900 hover:bg-slate-700 text-white font-black cursor-pointer">{uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}{uploading ? "Yükleniyor..." : "Fotoğraf ekle"}<input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={onFiles} className="hidden" /></label>{files.map((src, index) => <div key={`${src}-${index}`} className="relative group w-20 h-20 rounded-lg overflow-hidden border-2 border-slate-300 bg-slate-100"><img src={src} alt={`${label} ${index + 1}`} className="w-full h-full object-cover" /><button type="button" onClick={() => onChange(files.filter((_, i) => i !== index))} className="absolute top-0 right-0 hidden group-hover:flex bg-red-700 text-white rounded-bl p-1" aria-label="Görseli kaldır"><X className="w-3 h-3" /></button><span className="absolute bottom-0 left-0 bg-slate-900/80 text-white text-[10px] px-1">{index + 1}</span></div>)}</div><p className="text-xs text-slate-500 mt-2">Birden fazla fotoğraf seçebilirsiniz. Fotoğraf başına en fazla 5 MB.</p></div>;
+  return <div><label className="block text-sm font-black text-slate-800 mb-2">{label}</label><div className="flex flex-wrap items-center gap-3"><label className="inline-flex items-center gap-2 px-4 h-11 rounded-lg bg-slate-900 hover:bg-slate-700 text-white font-black cursor-pointer">{uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}{uploading ? "Yükleniyor..." : "Fotoğraf ekle"}<input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={onFiles} className="hidden" /></label>{files.map((src, index) => <div key={`${src}-${index}`} className="relative group w-20 h-20 rounded-lg overflow-hidden border-2 border-slate-300 bg-slate-100"><ImageLightbox src={src} alt={`${label} ${index + 1}`}><img src={src} alt={`${label} ${index + 1}`} className="w-full h-full object-cover" /></ImageLightbox><button type="button" onClick={() => onChange(files.filter((_, i) => i !== index))} className="absolute top-0 right-0 hidden group-hover:flex bg-red-700 text-white rounded-bl p-1" aria-label="Görseli kaldır"><X className="w-3 h-3" /></button><span className="absolute bottom-0 left-0 bg-slate-900/80 text-white text-[10px] px-1">{index + 1}</span></div>)}</div><p className="text-xs text-slate-500 mt-2">Birden fazla fotoğraf seçebilirsiniz. Fotoğraf başına en fazla 5 MB.</p></div>;
 }
 
 export default function HurdaTutucular() {
