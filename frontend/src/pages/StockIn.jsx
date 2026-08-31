@@ -8,19 +8,11 @@ const normalizeScan = (value) => String(value || "").normalize("NFD").replace(/[
 const findProduct = (list, raw) => {
  const scanned = normalizeScan(raw);
  if (!scanned) return null;
- const scannedTokens = scanned.split(" ").filter((token) => token.length >= 2);
- return list.map((p) => {
-  const code = normalizeScan(p.code); const name = normalizeScan(p.name); const full = normalizeScan(`${p.code || ""} ${p.name || ""} ${p.brand || ""}`);
-  const candidateTokens = full.split(" ").filter((token) => token.length >= 2);
-  const hits = scannedTokens.filter((token) => candidateTokens.some((candidate) => token === candidate || (token.length >= 3 && candidate.length >= 3 && (token.includes(candidate) || candidate.includes(token)))));
-  let score = hits.length ? 25 + hits.length * 18 + (hits.length / Math.max(1, Math.min(scannedTokens.length, candidateTokens.length))) * 45 : 0;
-  if (code && scanned === code) score = 180;
-  else if (name && scanned === name) score = 170;
-  else if (full && (full.includes(scanned) || scanned.includes(full))) score = Math.max(score, 130);
-  else if (code && (scanned.includes(code) || code.includes(scanned))) score = Math.max(score, 120);
-  else if (name && (scanned.includes(name) || name.includes(scanned))) score = Math.max(score, 110);
-  return { p, score };
- }).filter((x) => x.score >= 45).sort((a, b) => b.score - a.score)[0]?.p || null;
+ const matches = list.filter((p) => {
+  const code = normalizeScan(p.code); const name = normalizeScan(p.name);
+  return (code && (scanned === code || scanned.includes(code))) || (name && (scanned === name || scanned.includes(name)));
+ });
+ return matches.length === 1 ? matches[0] : null;
 };
 
 export default function StockIn() {
