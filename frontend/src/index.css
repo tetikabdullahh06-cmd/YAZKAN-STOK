@@ -451,3 +451,27 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
   .products-table .products-action-cell button { padding: .25rem !important; }
   .products-table .products-action-cell svg { width: .85rem; height: .85rem; }
 }
+
+/* Final high-contrast readability pass */
+.app-shell main table tbody tr,
+.app-shell main table tbody tr:nth-child(odd),
+.app-shell main table tbody tr:nth-child(even) { background: #ffffff !important; color: #0f172a !important; }
+.app-shell main table tbody tr:hover { background: #f0f9ff !important; color: #0f172a !important; }
+.app-shell main .text-slate-300,
+.app-shell main .text-slate-400,
+.app-shell main .text-slate-500,
+.app-shell main .text-slate-600,
+.app-shell main .text-gray-300,
+.app-shell main .text-gray-400,
+.app-shell main .text-gray-500,
+.app-shell main .text-gray-600,
+.app-shell main .text-zinc-300,
+.app-shell main .text-zinc-400,
+.app-shell main .text-zinc-500,
+.app-shell main .text-zinc-600 { color: #334155 !important; }
+.app-shell main input, .app-shell main select, .app-shell main textarea { color: #0f172a !important; }
+.app-shell main input::placeholder, .app-shell main textarea::placeholder, .app-shell main select::placeholder { color: #475569 !important; opacity: 1 !important; }
+.app-shell main label, .app-shell main small { color: #1e293b !important; }
+.app-shell main .bg-slate-900\/80, .app-shell main .bg-slate-900\/70, .app-shell main .bg-slate-900\/60, .app-shell main .bg-slate-900\/50 { background-color: #eef5fb !important; }
+.app-shell main .bg-slate-800\/60 { background-color: rgba(255,255,255,.94) !important; }
+@media (max-width: 768px) { .app-shell main { overflow-x: hidden !important; } }
