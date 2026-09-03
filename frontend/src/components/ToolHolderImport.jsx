@@ -121,7 +121,7 @@ export default function ToolHolderImport({ onClose, onCommitted }) {
               <div className="bg-slate-800 border border-slate-700 rounded-lg p-3"><div className="text-xs text-slate-500 uppercase tracking-widest">Toplam</div><div className="text-2xl font-black font-mono-tab">{stats.total}</div></div>
               <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-lg p-3"><div className="text-xs text-emerald-400 uppercase tracking-widest">Yeni</div><div className="text-2xl font-black font-mono-tab text-emerald-300">{stats.create}</div></div>
               <div className="bg-amber-950/40 border border-amber-800/50 rounded-lg p-3"><div className="text-xs text-amber-400 uppercase tracking-widest">Güncelle</div><div className="text-2xl font-black font-mono-tab text-amber-300">{stats.update}</div></div>
-              <div className="bg-red-950/40 border border-red-800/50 rounded-lg p-3"><div className="text-xs text-red-400 uppercase tracking-widest">Atlanan</div><div className="text-2xl font-black font-mono-tab text-red-300">{stats.skip}</div></div>
+              <div className="bg-red-50 border border-red-300 rounded-lg p-3"><div className="text-xs text-red-800 uppercase tracking-widest">Atlanan</div><div className="text-2xl font-black font-mono-tab text-red-900">{stats.skip}</div></div>
             </div>
           )}
 
@@ -147,9 +147,9 @@ export default function ToolHolderImport({ onClose, onCommitted }) {
                       <td className="px-3 py-2">
                         {p.action === "create" && <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-bold uppercase"><CheckCircle2 className="w-3 h-3" /> Yeni</span>}
                         {p.action === "update" && <span className="inline-flex items-center gap-1 text-amber-400 text-xs font-bold uppercase"><CheckCircle2 className="w-3 h-3" /> Güncelle</span>}
-                        {p.action === "skip" && <span className="inline-flex items-center gap-1 text-red-400 text-xs font-bold uppercase" title={p.error}><AlertCircle className="w-3 h-3" /> Atla</span>}
+                        {p.action === "skip" && <span className="inline-flex items-center gap-1 text-red-800 text-xs font-bold uppercase" title={p.error}><AlertCircle className="w-3 h-3" /> Atla</span>}
                       </td>
-                      <td className="px-3 py-2">{p.data.name || <span className="text-red-400 italic text-xs">{p.error}</span>}</td>
+                      <td className="px-3 py-2">{p.data.name || <span className="text-red-800 italic text-xs">{p.error}</span>}</td>
                       <td className="px-3 py-2 text-slate-400">{p.data.brand}</td>
                       <td className="px-3 py-2 text-slate-400">{p.data.type}</td>
                       <td className="px-3 py-2 text-right font-mono-tab">{p.data.length ?? "-"}</td>

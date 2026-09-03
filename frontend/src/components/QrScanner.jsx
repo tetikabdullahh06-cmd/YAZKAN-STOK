@@ -177,7 +177,7 @@ export default function QrScannerButton({ onScan, label = "Kamera ile Tara", tes
               <button type="button" onClick={() => fileInputRef.current?.click()} disabled={fileScanning || ocrScanning} data-testid={`${testid}-image-upload`} className="mt-3 w-full h-11 rounded-lg border border-cyan-500/60 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 font-bold flex items-center justify-center gap-2 disabled:opacity-60">
                 {fileScanning || ocrScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} {ocrScanning ? "Ürün yazısı okunuyor..." : fileScanning ? "Kod okunuyor..." : "Bu pencerede görsel seç"}
               </button>
-              {error && <div className="mt-3 text-sm bg-red-500/10 border border-red-500/30 text-red-200 rounded-lg p-3">{error}</div>}
+              {error && <div className="mt-3 text-sm bg-red-50 border border-red-300 text-red-900 rounded-lg p-3">{error}</div>}
               <p className="text-xs text-slate-400 mt-3 text-center">Kamera, QR/barkod veya üzerinde ürün adı/kodu bulunan net bir görsel yükleyebilirsiniz.</p>
             </div>
           </div>
