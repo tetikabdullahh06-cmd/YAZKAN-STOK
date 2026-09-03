@@ -5,7 +5,7 @@ import { X, Loader2, PackageCheck } from "lucide-react";
 
 export default function OrderReceive({ order, onClose, onReceived }) {
   const initial = order.items.map((it) => ({
-    key: it.product_id || it.product_code || it.product_name,
+    key: it.toolholder_id || it.product_id || it.product_code || it.product_name,
     qty: String(Math.max(0, (it.quantity || 0) - (it.received_qty || 0))),
   }));
   const [rows, setRows] = useState(initial);
@@ -17,7 +17,7 @@ export default function OrderReceive({ order, onClose, onReceived }) {
     const items = rows
       .map((r, i) => {
         const it = order.items[i];
-        return { product_id: it.product_id || it.product_code || it.product_name, quantity: parseFloat(r.qty) || 0 };
+        return { kind: it.kind === "toolholder" ? "toolholder" : "product", item_id: it.toolholder_id || it.product_id || it.product_code || it.product_name, product_id: it.product_id || it.product_code || it.product_name, quantity: parseFloat(r.qty) || 0 };
       })
       .filter((r) => r.quantity > 0);
     if (items.length === 0) return toast.error("En az bir kalem için teslim miktarı girin");
@@ -67,10 +67,10 @@ export default function OrderReceive({ order, onClose, onReceived }) {
                     <tr key={i} className={done ? "opacity-50" : ""}>
                       <td className="px-3 py-2">
                         <div className="font-medium flex items-center gap-2">
-                          {it.manual && !it.product_id && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/30">Manuel</span>}
+                          {it.kind === "toolholder" ? <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/30">Takım Tutucu</span> : it.manual && !it.product_id && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-700 border border-blue-500/30">Manuel</span>}
                           {it.product_name}
                         </div>
-                        <div className="text-xs text-slate-500 font-mono-tab">{it.product_code || "-"}</div>
+                        <div className="text-xs text-slate-500 font-mono-tab">{it.product_code || "-"}{it.kind === "toolholder" ? " • Tutucu stoğuna girecek" : " • Ürün stoğuna girecek"}</div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono-tab">{it.quantity}</td>
                       <td className="px-3 py-2 text-right font-mono-tab text-emerald-400">{it.received_qty || 0}</td>

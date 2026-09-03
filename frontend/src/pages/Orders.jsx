@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2, Package, Loader2, X, PackageCheck } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Package, Loader2, X, PackageCheck, Pencil } from "lucide-react";
 import OrderReceive from "@/components/OrderReceive";
 import { useAuth } from "@/context/AuthContext";
 
 // Item mode: 'select' = pick from products list; 'manual' = type product info by hand
-const emptyItem = { mode: "select", product_id: "", product_code: "", product_name: "", category: "Diğer", unit: "adet", quantity: "" };
+const emptyItem = { mode: "select", kind: "product", product_id: "", toolholder_id: "", product_code: "", product_name: "", category: "Diğer", unit: "adet", quantity: "" };
 
 export default function Orders() {
   const { isAdmin } = useAuth();
   const [orders, setOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [toolholders, setToolholders] = useState([]);
+  const [editingOrder, setEditingOrder] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -26,12 +28,13 @@ export default function Orders() {
   const load = async () => {
     const p = {};
     if (statusFilter) p.status = statusFilter;
-    const [o, s, pr] = await Promise.all([
+    const [o, s, pr, th] = await Promise.all([
       api.get("/orders", { params: p }),
       api.get("/suppliers"),
       api.get("/products"),
+      api.get("/toolholders"),
     ]);
-    setOrders(o.data); setSuppliers(s.data); setProducts(pr.data);
+    setOrders(o.data); setSuppliers(s.data); setProducts(pr.data); setToolholders(th.data);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
 
@@ -44,13 +47,34 @@ export default function Orders() {
   const removeItem = (i) => setItems(items.filter((_, idx) => idx !== i));
   const updateItem = (i, patch) => setItems(items.map((it, idx) => idx === i ? { ...it, ...patch } : it));
 
-  const onProductChange = (i, pid) => {
-    updateItem(i, { product_id: pid });
+  const onProductChange = (i, pid) => updateItem(i, { product_id: pid, toolholder_id: "" });
+  const onToolholderChange = (i, tid) => updateItem(i, { toolholder_id: tid, product_id: "" });
+  const toggleKind = (i, kind) => updateItem(i, { kind, product_id: "", toolholder_id: "", product_code: "", product_name: "" });
+
+  const openEdit = (order) => {
+    if (order.status === "closed") return toast.error("Kapalı sipariş düzenlenemez");
+    setEditingOrder(order);
+    setSupplierId(order.supplier_id || "");
+    setDeliveryDate(order.delivery_date || "");
+    setNote(order.note || "");
+    setItems((order.items || []).map((it) => ({
+      ...emptyItem,
+      mode: it.manual ? "manual" : "select",
+      kind: it.kind === "toolholder" ? "toolholder" : "product",
+      product_id: it.product_id || "",
+      toolholder_id: it.toolholder_id || "",
+      product_code: it.product_code || "",
+      product_name: it.product_name || "",
+      category: it.category || "Diğer",
+      unit: it.unit || "adet",
+      quantity: it.quantity || "",
+    })));
+    setShowForm(true);
   };
 
   const toggleMode = (i) => {
     const it = items[i];
-    if (it.mode === "select") updateItem(i, { mode: "manual", product_id: "" });
+    if (it.mode === "select") updateItem(i, { mode: "manual", product_id: "", toolholder_id: "", kind: "product" });
     else updateItem(i, { mode: "select", product_code: "", product_name: "" });
   };
 
@@ -62,13 +86,18 @@ export default function Orders() {
       const qty = parseFloat(it.quantity);
       if (!qty || qty <= 0) continue;
       if (it.mode === "select") {
-        if (!it.product_id) continue;
-        cleaned.push({ product_id: it.product_id, quantity: qty });
+        if (it.kind === "toolholder") {
+          if (!it.toolholder_id) continue;
+          cleaned.push({ kind: "toolholder", toolholder_id: it.toolholder_id, quantity: qty });
+        } else {
+          if (!it.product_id) continue;
+          cleaned.push({ kind: "product", product_id: it.product_id, quantity: qty });
+        }
       } else {
         const name = (it.product_name || "").trim();
         if (!name) { toast.error("Manuel kalem için ürün adı gerekli"); return; }
         cleaned.push({
-          product_id: null,
+          kind: "product", product_id: null,
           product_code: (it.product_code || "").trim(),
           product_name: name,
           category: it.category || "Diğer",
@@ -80,14 +109,11 @@ export default function Orders() {
     if (cleaned.length === 0) return toast.error("En az bir kalem ekleyin");
     setSaving(true);
     try {
-      await api.post("/orders", {
-        supplier_id: supplierId,
-        delivery_date: deliveryDate || null,
-        note,
-        items: cleaned,
-      });
-      toast.success("Sipariş oluşturuldu");
-      resetForm(); setShowForm(false); load();
+      const payload = { supplier_id: supplierId, delivery_date: deliveryDate || null, note, items: cleaned };
+      if (editingOrder) await api.put(`/orders/${editingOrder.id}`, payload);
+      else await api.post("/orders", payload);
+      toast.success(editingOrder ? "Sipariş güncellendi" : "Sipariş oluşturuldu");
+      resetForm(); setEditingOrder(null); setShowForm(false); load();
     } catch (e) { toast.error(e.response?.data?.detail || "Hata"); }
     setSaving(false);
   };
@@ -135,7 +161,7 @@ export default function Orders() {
       {showForm && (
         <form onSubmit={submit} className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 space-y-5">
           <div className="flex items-center justify-between">
-            <h3 className="font-display text-lg font-bold">Yeni Sipariş</h3>
+            <h3 className="font-display text-lg font-bold">{editingOrder ? "Sipariş Düzelt" : "Yeni Sipariş"}</h3>
             <button type="button" onClick={() => setShowForm(false)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400"><X className="w-5 h-5" /></button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -176,19 +202,32 @@ export default function Orders() {
                     </div>
                   </div>
                   {it.mode === "select" ? (
-                    <div className="grid grid-cols-12 gap-2">
-                      <div className="col-span-9">
-                        <select value={it.product_id} onChange={(e) => onProductChange(i, e.target.value)} className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm">
-                          <option value="">-- Ürün --</option>
-                          {products.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-                        </select>
+                    <>
+                      <div className="flex gap-2 flex-wrap">
+                        <button type="button" onClick={() => toggleKind(i, "product")} className={`h-9 px-3 rounded-lg text-xs font-bold ${it.kind === "product" ? "bg-blue-600 text-white" : "bg-slate-950 text-slate-400 border border-slate-700"}`}>Normal Ürün</button>
+                        <button type="button" onClick={() => toggleKind(i, "toolholder")} className={`h-9 px-3 rounded-lg text-xs font-bold ${it.kind === "toolholder" ? "bg-amber-600 text-white" : "bg-slate-950 text-slate-400 border border-slate-700"}`}>Takım Tutucu</button>
                       </div>
-                      <div className="col-span-3">
-                        <input type="number" step="0.01" min="0" placeholder="Miktar" value={it.quantity}
-                          onChange={(e) => updateItem(i, { quantity: e.target.value })}
-                          className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm font-mono-tab" />
+                      <div className="grid grid-cols-12 gap-2">
+                        <div className="col-span-9">
+                          {it.kind === "toolholder" ? (
+                            <select value={it.toolholder_id} onChange={(e) => onToolholderChange(i, e.target.value)} className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm">
+                              <option value="">-- Takım Tutucu --</option>
+                              {toolholders.map((h) => <option key={h.id} value={h.id}>{h.code || "Kodsuz"} — {h.name}{h.brand ? ` • ${h.brand}` : ""}</option>)}
+                            </select>
+                          ) : (
+                            <select value={it.product_id} onChange={(e) => onProductChange(i, e.target.value)} className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm">
+                              <option value="">-- Ürün --</option>
+                              {products.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}{p.brand ? ` • ${p.brand}` : ""}</option>)}
+                            </select>
+                          )}
+                        </div>
+                        <div className="col-span-3">
+                          <input type="number" step="0.01" min="0" placeholder="Miktar" value={it.quantity}
+                            onChange={(e) => updateItem(i, { quantity: e.target.value })}
+                            className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm font-mono-tab" />
+                        </div>
                       </div>
-                    </div>
+                    </>
                   ) : (
                     <div className="grid grid-cols-12 gap-2">
                       <div className="col-span-3">
@@ -228,7 +267,7 @@ export default function Orders() {
 
           <div className="flex gap-3">
             <button type="submit" disabled={saving} data-testid="ord-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 disabled:opacity-50">
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />} Sipariş Oluştur
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />} {editingOrder ? "Siparişi Güncelle" : "Sipariş Oluştur"}
             </button>
             <button type="button" onClick={() => { resetForm(); setShowForm(false); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600">İptal</button>
           </div>
@@ -274,6 +313,9 @@ export default function Orders() {
                       </button>
                     </>
                   )}
+                  {isAdmin && o.status !== "closed" && (
+                    <button onClick={() => openEdit(o)} data-testid={`ord-edit-${o.id.slice(0,8)}`} title="Siparişi düzelt" className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-700"><Pencil className="w-4 h-4" /></button>
+                  )}
                   {isAdmin && (
                     <button onClick={() => del(o)} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                   )}
@@ -286,7 +328,7 @@ export default function Orders() {
                   return (
                     <div key={i} className="flex justify-between items-center px-5 py-2 text-sm gap-3">
                       <div className="min-w-0 flex items-center gap-2">
-                        {it.manual && !it.product_id && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/30">Manuel</span>}
+                        {it.kind === "toolholder" ? <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/30">Takım Tutucu</span> : it.manual && !it.product_id && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-700 border border-blue-500/30">Manuel</span>}
                         <span className="font-mono-tab text-slate-500">{it.product_code || "-"}</span>
                         <span className="text-slate-200">{it.product_name}</span>
                       </div>

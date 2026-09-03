@@ -410,6 +410,24 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
 .app-shell main select:focus-visible,
 .app-shell main textarea:focus-visible { outline: 3px solid #22d3ee; outline-offset: 2px; }
 
+/* Unified readable table rows: remove dark/light zebra striping across the whole app */
+.app-shell main table tbody tr,
+.app-shell main table tbody tr:nth-child(odd),
+.app-shell main table tbody tr:nth-child(even) {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #d7e3ef !important;
+}
+.app-shell main table tbody tr:hover { background: #effaff !important; }
+.app-shell main table tbody tr td { color: #1e293b !important; }
+.app-shell main table tbody tr td .text-slate-400,
+.app-shell main table tbody tr td .text-slate-500,
+.app-shell main table tbody tr td .text-slate-600 { color: #475569 !important; }
+.app-shell main table tbody tr td .text-white,
+.app-shell main table tbody tr td .text-slate-100,
+.app-shell main table tbody tr td .text-slate-200,
+.app-shell main table tbody tr td .text-slate-300 { color: #1e293b !important; }
+
 /* Products: no page-level horizontal scrolling; all columns stay within the card */
 .products-table { table-layout: fixed; width: 100%; }
 .products-table th, .products-table td { min-width: 0 !important; overflow-wrap: anywhere; word-break: break-word; }

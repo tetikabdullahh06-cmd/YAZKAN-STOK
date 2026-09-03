@@ -395,7 +395,9 @@ class SupplierIn(BaseModel):
 
 
 class OrderItemIn(BaseModel):
+    kind: str = "product"  # product | toolholder
     product_id: Optional[str] = None
+    toolholder_id: Optional[str] = None
     product_code: Optional[str] = ""
     product_name: Optional[str] = ""
     category: Optional[str] = "Diğer"
@@ -411,7 +413,9 @@ class OrderIn(BaseModel):
 
 
 class ReceiveItemIn(BaseModel):
-    product_id: str
+    kind: str = "product"
+    item_id: Optional[str] = None
+    product_id: Optional[str] = None
     quantity: float
 
 
@@ -2389,12 +2393,22 @@ async def create_order(body: OrderIn, user=Depends(require_admin)):
     for it in body.items:
         if it.quantity <= 0:
             raise HTTPException(status_code=400, detail="Kalem miktarı 0'dan büyük olmalı")
-        if it.product_id:
+        if it.kind == "toolholder":
+            holder = await db.toolholders.find_one({"id": it.toolholder_id})
+            if not holder:
+                raise HTTPException(status_code=404, detail=f"Takım tutucu bulunamadı: {it.toolholder_id}")
+            items.append({
+                "kind": "toolholder", "toolholder_id": holder["id"],
+                "product_code": holder.get("code", ""), "product_name": holder["name"],
+                "category": "Takım Tutucu", "unit": holder.get("unit", "adet"),
+                "quantity": it.quantity, "received_qty": 0, "manual": False,
+            })
+        elif it.product_id:
             prod = await db.products.find_one({"id": it.product_id})
             if not prod:
                 raise HTTPException(status_code=404, detail=f"Ürün bulunamadı: {it.product_id}")
             items.append({
-                "product_id": prod["id"], "product_code": prod["code"], "product_name": prod["name"],
+                "kind": "product", "product_id": prod["id"], "product_code": prod["code"], "product_name": prod["name"],
                 "category": prod.get("category", "Diğer"), "unit": prod.get("unit", "adet"),
                 "quantity": it.quantity, "received_qty": 0, "manual": False,
             })
@@ -2403,7 +2417,7 @@ async def create_order(body: OrderIn, user=Depends(require_admin)):
             if not name:
                 raise HTTPException(status_code=400, detail="Manuel kalem için ürün adı gerekli")
             items.append({
-                "product_id": None,
+                "kind": "product", "product_id": None,
                 "product_code": (it.product_code or "").strip(),
                 "product_name": name,
                 "category": (it.category or "Diğer").strip() or "Diğer",
@@ -2425,6 +2439,41 @@ async def create_order(body: OrderIn, user=Depends(require_admin)):
     await db.orders.insert_one(order)
     order.pop("_id", None)
     return order
+
+
+@api.put("/orders/{oid}")
+async def update_order(oid: str, body: OrderIn, user=Depends(require_admin)):
+    order = await db.orders.find_one({"id": oid})
+    if not order:
+        raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
+    if order.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Kapalı sipariş düzenlenemez")
+    supplier = await db.suppliers.find_one({"id": body.supplier_id})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    if not body.items:
+        raise HTTPException(status_code=400, detail="En az bir kalem eklemelisiniz")
+    items = []
+    for it in body.items:
+        if it.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Kalem miktarı 0'dan büyük olmalı")
+        if it.kind == "toolholder":
+            holder = await db.toolholders.find_one({"id": it.toolholder_id})
+            if not holder:
+                raise HTTPException(status_code=404, detail="Takım tutucu bulunamadı")
+            items.append({"kind": "toolholder", "toolholder_id": holder["id"], "product_code": holder.get("code", ""), "product_name": holder["name"], "category": "Takım Tutucu", "unit": holder.get("unit", "adet"), "quantity": it.quantity, "received_qty": 0, "manual": False})
+        elif it.product_id:
+            prod = await db.products.find_one({"id": it.product_id})
+            if not prod:
+                raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+            items.append({"kind": "product", "product_id": prod["id"], "product_code": prod["code"], "product_name": prod["name"], "category": prod.get("category", "Diğer"), "unit": prod.get("unit", "adet"), "quantity": it.quantity, "received_qty": 0, "manual": False})
+        else:
+            name = (it.product_name or "").strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Manuel kalem için ürün adı gerekli")
+            items.append({"kind": "product", "product_id": None, "product_code": (it.product_code or "").strip(), "product_name": name, "category": (it.category or "Diğer").strip() or "Diğer", "unit": (it.unit or "adet").strip() or "adet", "quantity": it.quantity, "received_qty": 0, "manual": True})
+    await db.orders.update_one({"id": oid}, {"$set": {"supplier_id": supplier["id"], "supplier_name": supplier["name"], "delivery_date": body.delivery_date or "", "note": body.note or "", "items": items}})
+    return await db.orders.find_one({"id": oid}, {"_id": 0})
 
 
 async def _ensure_product_for_item(item: dict) -> dict:
@@ -2457,6 +2506,14 @@ async def _ensure_product_for_item(item: dict) -> dict:
     return doc
 
 
+async def _get_toolholder_for_order_item(item: dict) -> dict:
+    holder_id = item.get("toolholder_id")
+    holder = await db.toolholders.find_one({"id": holder_id}) if holder_id else None
+    if not holder:
+        raise HTTPException(status_code=404, detail=f"Takım tutucu bulunamadı: {item.get('product_name', '')}")
+    return holder
+
+
 @api.post("/orders/{oid}/close")
 async def close_order(oid: str, user=Depends(require_admin)):
     order = await db.orders.find_one({"id": oid})
@@ -2464,30 +2521,39 @@ async def close_order(oid: str, user=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
     if order.get("status") == "closed":
         raise HTTPException(status_code=400, detail="Sipariş zaten kapalı")
-    # Convert each item to a stock-in movement and update product stock.
-    # For manual items missing a product, auto-create one.
+    # Convert each item to the correct stock-in movement and update the order.
     new_items = [dict(it) for it in order.get("items", [])]
     for it in new_items:
         remaining = it["quantity"] - it.get("received_qty", 0)
         if remaining <= 0:
             continue
-        prod = await _ensure_product_for_item(it)
-        it["product_id"] = prod["id"]
-        it["product_code"] = prod["code"]
-        it["product_name"] = prod["name"]
-        it["manual"] = False
-        new_stock = prod.get("current_stock", 0) + remaining
-        await db.products.update_one({"id": prod["id"]}, {"$set": {"current_stock": new_stock}})
-        await db.movements.insert_one({
-            "id": new_id(), "type": "in", "product_id": prod["id"],
-            "product_code": prod["code"], "product_name": prod["name"],
-            "quantity": remaining, "unit_price": 0, "total": 0,
-            "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
-            "note": f"Sipariş #{order['id'][:8]} kapatma",
-            "order_id": order["id"],
-            "user_id": user["id"], "user_name": user["name"],
-            "created_at": now_utc().isoformat(),
-        })
+        if it.get("kind") == "toolholder":
+            holder = await _get_toolholder_for_order_item(it)
+            new_stock = holder.get("current_stock", 0) + remaining
+            await db.toolholders.update_one({"id": holder["id"]}, {"$set": {"current_stock": new_stock}})
+            await db.toolholder_movements.insert_one({
+                "id": new_id(), "type": "in", "tool_holder_id": holder["id"], "name": holder["name"],
+                "brand": holder.get("brand", ""), "holder_type": holder.get("type", ""),
+                "quantity": remaining, "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
+                "note": f"Sipariş #{order['id'][:8]} kapatma", "order_id": order["id"],
+                "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
+            })
+        else:
+            prod = await _ensure_product_for_item(it)
+            it["product_id"] = prod["id"]
+            it["product_code"] = prod["code"]
+            it["product_name"] = prod["name"]
+            it["manual"] = False
+            new_stock = prod.get("current_stock", 0) + remaining
+            await db.products.update_one({"id": prod["id"]}, {"$set": {"current_stock": new_stock}})
+            await db.movements.insert_one({
+                "id": new_id(), "type": "in", "product_id": prod["id"],
+                "product_code": prod["code"], "product_name": prod["name"],
+                "quantity": remaining, "unit_price": 0, "total": 0,
+                "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
+                "note": f"Sipariş #{order['id'][:8]} kapatma", "order_id": order["id"],
+                "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
+            })
         it["received_qty"] = it["quantity"]
     await db.orders.update_one({"id": oid},
                                {"$set": {"status": "closed",
@@ -2520,13 +2586,14 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
     for rcv in body.items:
         if rcv.quantity <= 0:
             continue
+        lookup_id = rcv.item_id or rcv.product_id
         it = None
-        if rcv.product_id:
-            it = next((x for x in new_items if x.get("product_id") == rcv.product_id
-                       or (x.get("product_id") is None and x.get("product_code") == rcv.product_id)), None)
-        if it is None:
-            # rcv.product_id may actually be the code for manual items
-            it = next((x for x in new_items if x.get("product_code") == rcv.product_id), None)
+        if rcv.kind == "toolholder":
+            it = next((x for x in new_items if x.get("kind") == "toolholder" and (x.get("toolholder_id") == lookup_id or x.get("product_code") == lookup_id)), None)
+        else:
+            it = next((x for x in new_items if x.get("kind", "product") != "toolholder" and (x.get("product_id") == lookup_id or (x.get("product_id") is None and x.get("product_code") == lookup_id))), None)
+            if it is None:
+                it = next((x for x in new_items if x.get("kind", "product") != "toolholder" and x.get("product_code") == lookup_id), None)
         if not it:
             raise HTTPException(status_code=400, detail="Kalem sipariste yok")
         remaining = it["quantity"] - it.get("received_qty", 0)
@@ -2536,23 +2603,33 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
         it["received_qty"] = it.get("received_qty", 0) + rcv.quantity
         any_received_now = True
 
-        prod = await _ensure_product_for_item(it)
-        it["product_id"] = prod["id"]
-        it["product_code"] = prod["code"]
-        it["product_name"] = prod["name"]
-        it["manual"] = False
-        new_stock = prod.get("current_stock", 0) + rcv.quantity
-        await db.products.update_one({"id": prod["id"]}, {"$set": {"current_stock": new_stock}})
-        await db.movements.insert_one({
-            "id": new_id(), "type": "in", "product_id": prod["id"],
-            "product_code": prod["code"], "product_name": prod["name"],
-            "quantity": rcv.quantity, "unit_price": 0, "total": 0,
-            "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
-            "note": f"Sipariş #{order['id'][:8]} kısmi teslimat",
-            "order_id": order["id"],
-            "user_id": user["id"], "user_name": user["name"],
-            "created_at": now_utc().isoformat(),
-        })
+        if it.get("kind") == "toolholder":
+            holder = await _get_toolholder_for_order_item(it)
+            new_stock = holder.get("current_stock", 0) + rcv.quantity
+            await db.toolholders.update_one({"id": holder["id"]}, {"$set": {"current_stock": new_stock}})
+            await db.toolholder_movements.insert_one({
+                "id": new_id(), "type": "in", "tool_holder_id": holder["id"], "name": holder["name"],
+                "brand": holder.get("brand", ""), "holder_type": holder.get("type", ""),
+                "quantity": rcv.quantity, "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
+                "note": f"Sipariş #{order['id'][:8]} kısmi teslimat", "order_id": order["id"],
+                "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
+            })
+        else:
+            prod = await _ensure_product_for_item(it)
+            it["product_id"] = prod["id"]
+            it["product_code"] = prod["code"]
+            it["product_name"] = prod["name"]
+            it["manual"] = False
+            new_stock = prod.get("current_stock", 0) + rcv.quantity
+            await db.products.update_one({"id": prod["id"]}, {"$set": {"current_stock": new_stock}})
+            await db.movements.insert_one({
+                "id": new_id(), "type": "in", "product_id": prod["id"],
+                "product_code": prod["code"], "product_name": prod["name"],
+                "quantity": rcv.quantity, "unit_price": 0, "total": 0,
+                "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
+                "note": f"Sipariş #{order['id'][:8]} kısmi teslimat", "order_id": order["id"],
+                "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
+            })
 
     if not any_received_now:
         raise HTTPException(status_code=400, detail="Geçerli teslim miktarı yok")
