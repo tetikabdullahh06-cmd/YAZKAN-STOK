@@ -475,3 +475,41 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
 .app-shell main .bg-slate-900\/80, .app-shell main .bg-slate-900\/70, .app-shell main .bg-slate-900\/60, .app-shell main .bg-slate-900\/50 { background-color: #eef5fb !important; }
 .app-shell main .bg-slate-800\/60 { background-color: rgba(255,255,255,.94) !important; }
 @media (max-width: 768px) { .app-shell main { overflow-x: hidden !important; } }
+
+/* Red surfaces must never use low-contrast red text */
+.app-shell main .bg-red-500\/10,
+.app-shell main .bg-red-950\/20,
+.app-shell main .bg-red-950\/30,
+.app-shell main .bg-red-950\/40,
+.app-shell main .bg-red-950\/60 {
+  background: #fff1f2 !important;
+  border-color: #fda4af !important;
+}
+.app-shell main .bg-red-500\/10 .text-red-100,
+.app-shell main .bg-red-500\/10 .text-red-200,
+.app-shell main .bg-red-500\/10 .text-red-300,
+.app-shell main .bg-red-500\/10 .text-red-400,
+.app-shell main .bg-red-950\/20 .text-red-100,
+.app-shell main .bg-red-950\/20 .text-red-200,
+.app-shell main .bg-red-950\/20 .text-red-300,
+.app-shell main .bg-red-950\/20 .text-red-400,
+.app-shell main .bg-red-950\/30 .text-red-100,
+.app-shell main .bg-red-950\/30 .text-red-200,
+.app-shell main .bg-red-950\/30 .text-red-300,
+.app-shell main .bg-red-950\/30 .text-red-400,
+.app-shell main .bg-red-950\/40 .text-red-100,
+.app-shell main .bg-red-950\/40 .text-red-200,
+.app-shell main .bg-red-950\/40 .text-red-300,
+.app-shell main .bg-red-950\/40 .text-red-400,
+.app-shell main .bg-red-950\/60 .text-red-100,
+.app-shell main .bg-red-950\/60 .text-red-200,
+.app-shell main .bg-red-950\/60 .text-red-300,
+.app-shell main .bg-red-950\/60 .text-red-400 {
+  color: #991b1b !important;
+}
+.app-shell main button.bg-red-600,
+.app-shell main button.bg-red-700,
+.app-shell main button.bg-rose-600,
+.app-shell main button.bg-rose-700 {
+  color: #ffffff !important;
+}
