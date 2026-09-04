@@ -513,3 +513,37 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
 .app-shell main button.bg-rose-700 {
   color: #ffffff !important;
 }
+
+/* Solid red controls/badges: always use white foreground */
+.app-shell main .bg-red-500.text-white,
+.app-shell main .bg-red-600.text-white,
+.app-shell main .bg-red-700.text-white,
+.app-shell main .bg-rose-500.text-white,
+.app-shell main .bg-rose-600.text-white,
+.app-shell main .bg-rose-700.text-white,
+.app-shell main .bg-red-500 .text-white,
+.app-shell main .bg-red-600 .text-white,
+.app-shell main .bg-red-700 .text-white,
+.app-shell main .bg-rose-500 .text-white,
+.app-shell main .bg-rose-600 .text-white,
+.app-shell main .bg-rose-700 .text-white {
+  color: #ffffff !important;
+}
+.app-shell main .bg-red-500 .text-red-100,
+.app-shell main .bg-red-500 .text-red-200,
+.app-shell main .bg-red-500 .text-red-300,
+.app-shell main .bg-red-500 .text-red-400,
+.app-shell main .bg-red-600 .text-red-100,
+.app-shell main .bg-red-600 .text-red-200,
+.app-shell main .bg-red-600 .text-red-300,
+.app-shell main .bg-red-600 .text-red-400,
+.app-shell main .bg-red-700 .text-red-100,
+.app-shell main .bg-red-700 .text-red-200,
+.app-shell main .bg-red-700 .text-red-300,
+.app-shell main .bg-red-700 .text-red-400,
+.app-shell main .bg-rose-600 .text-rose-100,
+.app-shell main .bg-rose-600 .text-rose-200,
+.app-shell main .bg-rose-600 .text-rose-300,
+.app-shell main .bg-rose-600 .text-rose-400 {
+  color: #ffffff !important;
+}
