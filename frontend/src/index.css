@@ -547,3 +547,27 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
 .app-shell main .bg-rose-600 .text-rose-400 {
   color: #ffffff !important;
 }
+
+/* Work pages: eliminate thin text everywhere in the main content */
+.app-shell main,
+.app-shell main * {
+  font-weight: 700;
+}
+.app-shell main h1,
+.app-shell main h2,
+.app-shell main h3,
+.app-shell main h4,
+.app-shell main .font-black,
+.app-shell main .font-extrabold,
+.app-shell main .font-bold { font-weight: 800 !important; }
+.app-shell main .font-normal,
+.app-shell main .font-medium,
+.app-shell main .font-light,
+.app-shell main .font-extralight,
+.app-shell main .font-thin { font-weight: 700 !important; }
+.app-shell main input,
+.app-shell main select,
+.app-shell main textarea,
+.app-shell main button { font-weight: 800 !important; }
+.app-shell main .text-xs,
+.app-shell main .text-sm { font-weight: 700 !important; }
