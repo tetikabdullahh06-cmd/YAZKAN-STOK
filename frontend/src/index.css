@@ -571,3 +571,83 @@ main ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#0284c7, #047
 .app-shell main button { font-weight: 800 !important; }
 .app-shell main .text-xs,
 .app-shell main .text-sm { font-weight: 700 !important; }
+
+
+/* Eldiven Takip: page-specific contrast override after all legacy theme layers */
+.gloves-page .bg-slate-900\/80,
+.gloves-page .bg-slate-900\/70,
+.gloves-page .bg-slate-900\/60,
+.gloves-page .bg-cyan-950\/30,
+.gloves-page .bg-rose-950\/30,
+.gloves-page [class*="from-cyan-950"],
+.gloves-page [class*="from-emerald-950"],
+.gloves-page [class*="from-rose-950"] {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+.gloves-page .text-white { color: #0f172a !important; }
+.gloves-page .text-slate-200,
+.gloves-page .text-slate-300,
+.gloves-page .text-slate-400,
+.gloves-page .text-slate-500 { color: #1e293b !important; }
+.gloves-page .text-cyan-100,
+.gloves-page .text-cyan-200,
+.gloves-page .text-cyan-300,
+.gloves-page .text-cyan-400 { color: #0e7490 !important; }
+.gloves-page .text-emerald-200,
+.gloves-page .text-emerald-300,
+.gloves-page .text-emerald-400 { color: #047857 !important; }
+.gloves-page .text-rose-200,
+.gloves-page .text-rose-300,
+.gloves-page .text-rose-400 { color: #be123c !important; }
+.gloves-page .text-white.font-bold,
+.gloves-page .text-white.font-black,
+.gloves-page button.text-white,
+.gloves-page a.text-white,
+.gloves-page .bg-cyan-600,
+.gloves-page .bg-emerald-700,
+.gloves-page .bg-amber-600,
+.gloves-page .bg-rose-600,
+.gloves-page .bg-rose-700,
+.gloves-page .bg-slate-700,
+.gloves-page .bg-slate-800 { color: #ffffff !important; }
+.gloves-page input,
+.gloves-page select,
+.gloves-page textarea { background: #ffffff !important; color: #0f172a !important; border-color: #94a3b8 !important; }
+.gloves-page input::placeholder,
+.gloves-page textarea::placeholder { color: #334155 !important; opacity: 1 !important; }
+.gloves-page table thead { background: #e2e8f0 !important; color: #0f172a !important; }
+.gloves-page table thead th { color: #0f172a !important; }
+.gloves-page table tbody tr { background: #ffffff !important; border-color: #cbd5e1 !important; }
+.gloves-page table tbody tr:hover { background: #eff6ff !important; }
+.gloves-page .bg-slate-950\/80 { background: rgba(15,23,42,.92) !important; color: #f8fafc !important; }
+.gloves-page .bg-slate-950\/80 .text-white { color: #f8fafc !important; }
+.gloves-page .bg-slate-950\/80 .text-slate-400,
+.gloves-page .bg-slate-950\/80 .text-slate-500 { color: #cbd5e1 !important; }
+.gloves-page .bg-slate-950\/80 input,
+.gloves-page .bg-slate-950\/80 select,
+.gloves-page .bg-slate-950\/80 textarea { background: #ffffff !important; color: #0f172a !important; }
+.gloves-page .bg-slate-950\/80 button.text-white { color: #ffffff !important; }
+.gloves-page .bg-cyan-600,
+.gloves-page .bg-emerald-700,
+.gloves-page .bg-amber-600,
+.gloves-page .bg-rose-600,
+.gloves-page .bg-rose-700 { color: #ffffff !important; }
+.gloves-page .bg-cyan-600 svg,
+.gloves-page .bg-emerald-700 svg,
+.gloves-page .bg-amber-600 svg,
+.gloves-page .bg-rose-600 svg,
+.gloves-page .bg-rose-700 svg { color: #ffffff !important; }
+.gloves-page .border-slate-700,
+.gloves-page .border-slate-800,
+.gloves-page .border-cyan-700\/70,
+.gloves-page .border-rose-600\/70 { border-color: #cbd5e1 !important; }
+.gloves-page .divide-slate-700 > :not([hidden]) ~ :not([hidden]),
+.gloves-page .divide-slate-800 > :not([hidden]) ~ :not([hidden]) { border-color: #e2e8f0 !important; }
+.gloves-page .font-normal,
+.gloves-page .font-medium,
+.gloves-page .font-light { font-weight: 700 !important; }
+.gloves-page .text-xs,
+.gloves-page .text-sm { font-weight: 700 !important; }

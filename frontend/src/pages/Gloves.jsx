@@ -94,7 +94,7 @@ export default function Gloves() {
     toast.success("Eldiven Excel raporu indirildi");
   };
 
-  return <div className="space-y-6">
+  return <div className="space-y-6 gloves-page">
     <div className="flex items-end justify-between flex-wrap gap-4">
       <div><div className="text-xs text-cyan-400 uppercase tracking-[0.2em] font-semibold mb-2">Bağımsız Sarfiyat</div><h1 className="font-display text-4xl font-black">Eldiven Takip</h1><p className="text-slate-400 text-sm mt-1">Ürünler stokundan bağımsız eldiven stok ve kullanım yönetimi</p></div>
       <div className="flex gap-2 flex-wrap">{isAdmin && <button onClick={() => { setForm(emptyGlove); setEditId(null); setShowForm(true); }} className="h-12 px-4 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-2"><Plus className="w-4 h-4" /> Yeni Eldiven</button>}<button type="button" aria-label={showHistory ? "Stok kartlarına dön" : "Kullanım geçmişini aç"} onClick={() => { setShowHistory((v) => !v); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="h-12 px-4 rounded-lg bg-slate-800 border border-slate-600 text-white font-bold">{showHistory ? "Stok Kartlarına Dön" : "Kullanım Geçmişi"}</button><button onClick={exportExcel} className="h-12 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-bold flex items-center gap-2"><FileSpreadsheet className="w-4 h-4" /> Excel’e Aktar</button></div>
