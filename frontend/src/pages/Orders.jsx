@@ -6,7 +6,7 @@ import OrderReceive from "@/components/OrderReceive";
 import { useAuth } from "@/context/AuthContext";
 
 // Item mode: 'select' = pick from products list; 'manual' = type product info by hand
-const emptyItem = { mode: "select", kind: "product", product_id: "", toolholder_id: "", product_code: "", product_name: "", category: "Diğer", unit: "adet", quantity: "" };
+const emptyItem = { mode: "select", kind: "product", product_id: "", toolholder_id: "", product_search: "", toolholder_search: "", product_code: "", product_name: "", category: "Diğer", unit: "adet", quantity: "" };
 
 export default function Orders() {
   const { isAdmin } = useAuth();
@@ -47,9 +47,13 @@ export default function Orders() {
   const removeItem = (i) => setItems(items.filter((_, idx) => idx !== i));
   const updateItem = (i, patch) => setItems(items.map((it, idx) => idx === i ? { ...it, ...patch } : it));
 
-  const onProductChange = (i, pid) => updateItem(i, { product_id: pid, toolholder_id: "" });
-  const onToolholderChange = (i, tid) => updateItem(i, { toolholder_id: tid, product_id: "" });
-  const toggleKind = (i, kind) => updateItem(i, { kind, product_id: "", toolholder_id: "", product_code: "", product_name: "" });
+  const productLabel = (p) => `${p.code || "Kodsuz"} — ${p.name}${p.brand ? ` • ${p.brand}` : ""}`;
+  const toolholderLabel = (h) => `${h.code || "Kodsuz"} — ${h.name}${h.brand ? ` • ${h.brand}` : ""}`;
+  const onProductChange = (i, pid) => { const p = products.find((item) => item.id === pid); updateItem(i, { product_id: pid, toolholder_id: "", product_search: p ? productLabel(p) : "" }); };
+  const onToolholderChange = (i, tid) => { const h = toolholders.find((item) => item.id === tid); updateItem(i, { toolholder_id: tid, product_id: "", toolholder_search: h ? toolholderLabel(h) : "" }); };
+  const onProductSearch = (i, value) => { const p = products.find((item) => productLabel(item).toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR") || item.code?.toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR")); updateItem(i, { product_search: value, product_id: p?.id || "", toolholder_id: "" }); };
+  const onToolholderSearch = (i, value) => { const h = toolholders.find((item) => toolholderLabel(item).toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR") || item.code?.toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR")); updateItem(i, { toolholder_search: value, toolholder_id: h?.id || "", product_id: "" }); };
+  const toggleKind = (i, kind) => updateItem(i, { kind, product_id: "", toolholder_id: "", product_search: "", toolholder_search: "", product_code: "", product_name: "" });
 
   const openEdit = (order) => {
     if (order.status === "closed") return toast.error("Kapalı sipariş düzenlenemez");
@@ -63,6 +67,8 @@ export default function Orders() {
       kind: it.kind === "toolholder" ? "toolholder" : "product",
       product_id: it.product_id || "",
       toolholder_id: it.toolholder_id || "",
+      product_search: it.kind === "product" ? (products.find((p) => p.id === it.product_id) ? productLabel(products.find((p) => p.id === it.product_id)) : "") : "",
+      toolholder_search: it.kind === "toolholder" ? (toolholders.find((h) => h.id === it.toolholder_id) ? toolholderLabel(toolholders.find((h) => h.id === it.toolholder_id)) : "") : "",
       product_code: it.product_code || "",
       product_name: it.product_name || "",
       category: it.category || "Diğer",
@@ -74,8 +80,8 @@ export default function Orders() {
 
   const toggleMode = (i) => {
     const it = items[i];
-    if (it.mode === "select") updateItem(i, { mode: "manual", product_id: "", toolholder_id: "", kind: "product" });
-    else updateItem(i, { mode: "select", product_code: "", product_name: "" });
+    if (it.mode === "select") updateItem(i, { mode: "manual", product_id: "", toolholder_id: "", product_search: "", toolholder_search: "", kind: "product" });
+    else updateItem(i, { mode: "select", product_code: "", product_name: "", product_search: "", toolholder_search: "" });
   };
 
   const submit = async (e) => {
@@ -210,15 +216,15 @@ export default function Orders() {
                       <div className="grid grid-cols-12 gap-2">
                         <div className="col-span-9">
                           {it.kind === "toolholder" ? (
-                            <select value={it.toolholder_id} onChange={(e) => onToolholderChange(i, e.target.value)} className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm">
-                              <option value="">-- Takım Tutucu --</option>
-                              {toolholders.map((h) => <option key={h.id} value={h.id}>{h.code || "Kodsuz"} — {h.name}{h.brand ? ` • ${h.brand}` : ""}</option>)}
-                            </select>
+                            <>
+                              <input list={`order-toolholders-${i}`} value={it.toolholder_search || ""} onChange={(e) => onToolholderSearch(i, e.target.value)} placeholder="Takım tutucu ara: kod, ad veya marka" className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm" />
+                              <datalist id={`order-toolholders-${i}`}>{toolholders.map((h) => <option key={h.id} value={toolholderLabel(h)} />)}</datalist>
+                            </>
                           ) : (
-                            <select value={it.product_id} onChange={(e) => onProductChange(i, e.target.value)} className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm">
-                              <option value="">-- Ürün --</option>
-                              {products.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}{p.brand ? ` • ${p.brand}` : ""}</option>)}
-                            </select>
+                            <>
+                              <input list={`order-products-${i}`} value={it.product_search || ""} onChange={(e) => onProductSearch(i, e.target.value)} placeholder="Ürün ara: kod, ad veya marka" className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm" />
+                              <datalist id={`order-products-${i}`}>{products.map((p) => <option key={p.id} value={productLabel(p)} />)}</datalist>
+                            </>
                           )}
                         </div>
                         <div className="col-span-3">
