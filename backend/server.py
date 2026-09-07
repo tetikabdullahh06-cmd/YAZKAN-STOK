@@ -1114,6 +1114,17 @@ async def list_movements(
     # mükerrer satır ilk limit içinde kalıp bileme filtresine ulaşamayabilir.
     movements = await db.movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
 
+    # Sipariş sonradan tamamen kapatılmışsa önceki kısmi teslim hareketleri de
+    # kullanıcıya kısmi görünmemeli; kapalı siparişin tüm girişleri tam teslimdir.
+    order_ids = list({m.get("order_id") for m in movements if m.get("order_id")})
+    if order_ids:
+        closed_orders = await db.orders.find({"id": {"$in": order_ids}, "status": "closed"}, {"_id": 0, "id": 1}).to_list(len(order_ids))
+        closed_ids = {o["id"] for o in closed_orders}
+        for movement in movements:
+            if movement.get("order_id") in closed_ids:
+                movement["delivery_status"] = "full"
+                movement["note"] = f"Sipariş #{movement['order_id'][:8]} tam teslim alındı"
+
     # Bileme giden/gelen kayıtları yalnızca Bileme sayfasında ve genel raporlarda
     # gösterilir. Hareketler sayfası yalnızca gerçek movements kayıtlarını listeler;
     # böylece bileme kaydı ile normal stok çıkışı ikinci kez görünmez.
@@ -2535,7 +2546,7 @@ async def close_order(oid: str, user=Depends(require_admin)):
                 "id": new_id(), "type": "in", "tool_holder_id": holder["id"], "name": holder["name"],
                 "brand": holder.get("brand", ""), "holder_type": holder.get("type", ""),
                 "quantity": remaining, "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
-                "note": f"Sipariş #{order['id'][:8]} kapatma", "order_id": order["id"],
+                "note": f"Sipariş #{order['id'][:8]} tam teslim alındı", "delivery_status": "full", "order_id": order["id"],
                 "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
             })
         else:
@@ -2551,7 +2562,7 @@ async def close_order(oid: str, user=Depends(require_admin)):
                 "product_code": prod["code"], "product_name": prod["name"],
                 "quantity": remaining, "unit_price": 0, "total": 0,
                 "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
-                "note": f"Sipariş #{order['id'][:8]} kapatma", "order_id": order["id"],
+                "note": f"Sipariş #{order['id'][:8]} tam teslim alındı", "delivery_status": "full", "order_id": order["id"],
                 "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
             })
         it["received_qty"] = it["quantity"]
@@ -2644,10 +2655,9 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
     new_status = "closed" if all_received else "partial"
     if all_received:
         delivery_note = f"Sipariş #{order['id'][:8]} tam teslim alındı"
-        if product_movement_ids:
-            await db.movements.update_many({"id": {"$in": product_movement_ids}}, {"$set": {"note": delivery_note, "delivery_status": "full"}})
-        if toolholder_movement_ids:
-            await db.toolholder_movements.update_many({"id": {"$in": toolholder_movement_ids}}, {"$set": {"note": delivery_note, "delivery_status": "full"}})
+        # Aynı siparişin önceki kısmi teslim hareketleri de artık tam teslimin parçasıdır.
+        await db.movements.update_many({"order_id": order["id"]}, {"$set": {"note": delivery_note, "delivery_status": "full"}})
+        await db.toolholder_movements.update_many({"order_id": order["id"]}, {"$set": {"note": delivery_note, "delivery_status": "full"}})
     else:
         delivery_note = f"Sipariş #{order['id'][:8]} kısmi teslimat"
         if product_movement_ids:
