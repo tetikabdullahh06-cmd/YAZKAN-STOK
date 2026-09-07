@@ -2582,6 +2582,8 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
 
     new_items = [dict(it) for it in order["items"]]
     any_received_now = False
+    product_movement_ids = []
+    toolholder_movement_ids = []
 
     for rcv in body.items:
         if rcv.quantity <= 0:
@@ -2607,13 +2609,15 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
             holder = await _get_toolholder_for_order_item(it)
             new_stock = holder.get("current_stock", 0) + rcv.quantity
             await db.toolholders.update_one({"id": holder["id"]}, {"$set": {"current_stock": new_stock}})
+            movement_id = new_id()
             await db.toolholder_movements.insert_one({
-                "id": new_id(), "type": "in", "tool_holder_id": holder["id"], "name": holder["name"],
+                "id": movement_id, "type": "in", "tool_holder_id": holder["id"], "name": holder["name"],
                 "brand": holder.get("brand", ""), "holder_type": holder.get("type", ""),
                 "quantity": rcv.quantity, "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
                 "note": f"Sipariş #{order['id'][:8]} kısmi teslimat", "order_id": order["id"],
                 "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
             })
+            toolholder_movement_ids.append(movement_id)
         else:
             prod = await _ensure_product_for_item(it)
             it["product_id"] = prod["id"]
@@ -2622,20 +2626,34 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
             it["manual"] = False
             new_stock = prod.get("current_stock", 0) + rcv.quantity
             await db.products.update_one({"id": prod["id"]}, {"$set": {"current_stock": new_stock}})
+            movement_id = new_id()
             await db.movements.insert_one({
-                "id": new_id(), "type": "in", "product_id": prod["id"],
+                "id": movement_id, "type": "in", "product_id": prod["id"],
                 "product_code": prod["code"], "product_name": prod["name"],
                 "quantity": rcv.quantity, "unit_price": 0, "total": 0,
                 "supplier": order["supplier_name"], "supplier_id": order["supplier_id"],
                 "note": f"Sipariş #{order['id'][:8]} kısmi teslimat", "order_id": order["id"],
                 "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
             })
+            product_movement_ids.append(movement_id)
 
     if not any_received_now:
         raise HTTPException(status_code=400, detail="Geçerli teslim miktarı yok")
 
     all_received = all(it.get("received_qty", 0) >= it["quantity"] - 1e-9 for it in new_items)
     new_status = "closed" if all_received else "partial"
+    if all_received:
+        delivery_note = f"Sipariş #{order['id'][:8]} tam teslim alındı"
+        if product_movement_ids:
+            await db.movements.update_many({"id": {"$in": product_movement_ids}}, {"$set": {"note": delivery_note, "delivery_status": "full"}})
+        if toolholder_movement_ids:
+            await db.toolholder_movements.update_many({"id": {"$in": toolholder_movement_ids}}, {"$set": {"note": delivery_note, "delivery_status": "full"}})
+    else:
+        delivery_note = f"Sipariş #{order['id'][:8]} kısmi teslimat"
+        if product_movement_ids:
+            await db.movements.update_many({"id": {"$in": product_movement_ids}}, {"$set": {"note": delivery_note, "delivery_status": "partial"}})
+        if toolholder_movement_ids:
+            await db.toolholder_movements.update_many({"id": {"$in": toolholder_movement_ids}}, {"$set": {"note": delivery_note, "delivery_status": "partial"}})
     update_doc = {"items": new_items, "status": new_status}
     if new_status == "closed":
         update_doc["closed_at"] = now_utc().isoformat()
