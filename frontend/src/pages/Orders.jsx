@@ -24,6 +24,7 @@ export default function Orders() {
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(null);
   const [receiveOrder, setReceiveOrder] = useState(null);
+  const [activeSearch, setActiveSearch] = useState(null);
 
   const load = async () => {
     const p = {};
@@ -53,6 +54,9 @@ export default function Orders() {
   const onToolholderChange = (i, tid) => { const h = toolholders.find((item) => item.id === tid); updateItem(i, { toolholder_id: tid, product_id: "", toolholder_search: h ? toolholderLabel(h) : "" }); };
   const onProductSearch = (i, value) => { const p = products.find((item) => productLabel(item).toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR") || item.code?.toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR")); updateItem(i, { product_search: value, product_id: p?.id || "", toolholder_id: "" }); };
   const onToolholderSearch = (i, value) => { const h = toolholders.find((item) => toolholderLabel(item).toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR") || item.code?.toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR")); updateItem(i, { toolholder_search: value, toolholder_id: h?.id || "", product_id: "" }); };
+  const searchText = (value) => (value || "").toLocaleLowerCase("tr-TR").trim();
+  const matchingProducts = (value) => products.filter((p) => searchText(productLabel(p)).includes(searchText(value))).slice(0, 50);
+  const matchingToolholders = (value) => toolholders.filter((h) => searchText(toolholderLabel(h)).includes(searchText(value))).slice(0, 50);
   const toggleKind = (i, kind) => updateItem(i, { kind, product_id: "", toolholder_id: "", product_search: "", toolholder_search: "", product_code: "", product_name: "" });
 
   const openEdit = (order) => {
@@ -216,15 +220,15 @@ export default function Orders() {
                       <div className="grid grid-cols-12 gap-2">
                         <div className="col-span-9">
                           {it.kind === "toolholder" ? (
-                            <>
-                              <input list={`order-toolholders-${i}`} value={it.toolholder_search || ""} onChange={(e) => onToolholderSearch(i, e.target.value)} placeholder="Takım tutucu ara: kod, ad veya marka" className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm" />
-                              <datalist id={`order-toolholders-${i}`}>{toolholders.map((h) => <option key={h.id} value={toolholderLabel(h)} />)}</datalist>
-                            </>
+                            <div className="relative">
+                              <input value={it.toolholder_search || ""} onFocus={() => setActiveSearch({ i, kind: "toolholder" })} onChange={(e) => { onToolholderSearch(i, e.target.value); setActiveSearch({ i, kind: "toolholder" }); }} placeholder="Takım tutucu ara: kod, ad veya marka" className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm" />
+                              {activeSearch?.i === i && activeSearch.kind === "toolholder" && <div className="absolute z-50 left-0 right-0 top-12 max-h-64 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-xl">{matchingToolholders(it.toolholder_search).length ? matchingToolholders(it.toolholder_search).map((h) => <button type="button" key={h.id} onMouseDown={(e) => { e.preventDefault(); onToolholderChange(i, h.id); setActiveSearch(null); }} className="block w-full px-3 py-2 text-left text-sm font-semibold text-slate-900 hover:bg-cyan-50">{toolholderLabel(h)}</button>) : <div className="px-3 py-3 text-sm font-semibold text-slate-600">Takım tutucu bulunamadı</div>}</div>}
+                            </div>
                           ) : (
-                            <>
-                              <input list={`order-products-${i}`} value={it.product_search || ""} onChange={(e) => onProductSearch(i, e.target.value)} placeholder="Ürün ara: kod, ad veya marka" className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm" />
-                              <datalist id={`order-products-${i}`}>{products.map((p) => <option key={p.id} value={productLabel(p)} />)}</datalist>
-                            </>
+                            <div className="relative">
+                              <input value={it.product_search || ""} onFocus={() => setActiveSearch({ i, kind: "product" })} onChange={(e) => { onProductSearch(i, e.target.value); setActiveSearch({ i, kind: "product" }); }} placeholder="Ürün ara: kod, ad veya marka" className="w-full h-11 bg-slate-950 border border-slate-700 rounded-lg px-2 text-sm" />
+                              {activeSearch?.i === i && activeSearch.kind === "product" && <div className="absolute z-50 left-0 right-0 top-12 max-h-64 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-xl">{matchingProducts(it.product_search).length ? matchingProducts(it.product_search).map((p) => <button type="button" key={p.id} onMouseDown={(e) => { e.preventDefault(); onProductChange(i, p.id); setActiveSearch(null); }} className="block w-full px-3 py-2 text-left text-sm font-semibold text-slate-900 hover:bg-cyan-50">{productLabel(p)}</button>) : <div className="px-3 py-3 text-sm font-semibold text-slate-600">Ürün bulunamadı</div>}</div>}
+                            </div>
                           )}
                         </div>
                         <div className="col-span-3">
