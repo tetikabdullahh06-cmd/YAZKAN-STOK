@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { downloadImageWorkbook, imageExportNotice } from "@/lib/excelExport";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Minus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2 } from "lucide-react";
+import { Plus, Minus, Pencil, Trash2, Search, AlertTriangle, FileSpreadsheet, Wand2, History } from "lucide-react";
 import ProductImport from "@/components/ProductImport";
 import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 import QrScannerButton from "@/components/QrScanner";
@@ -46,6 +46,10 @@ export default function Products() {
   const [showImport, setShowImport] = useState(false);
   const [stockAdd, setStockAdd] = useState({ query: "", productId: "", quantity: "" });
   const [quickStock, setQuickStock] = useState({ productId: "", direction: "in", quantity: "", note: "" });
+  const [movementProduct, setMovementProduct] = useState(null);
+  const [movementRows, setMovementRows] = useState([]);
+  const [movementLoading, setMovementLoading] = useState(false);
+  const [movementFilters, setMovementFilters] = useState(() => { const to = new Date(); const from = new Date(); from.setFullYear(from.getFullYear() - 1); return { date_from: from.toISOString().slice(0, 10), date_to: to.toISOString().slice(0, 10) }; });
 
   const load = async () => {
     const [productsResponse, suppliersResponse] = await Promise.all([
@@ -150,6 +154,21 @@ export default function Products() {
     } catch (e) { toast.error(e.response?.data?.detail || "Stok artırılamadı"); }
   };
 
+  const loadProductMovements = async (product, filters = movementFilters) => {
+    if (!filters.date_from || !filters.date_to) return toast.error("Başlangıç ve bitiş tarihi seçin");
+    const from = new Date(`${filters.date_from}T00:00:00`);
+    const to = new Date(`${filters.date_to}T23:59:59`);
+    const days = (to - from) / 86400000;
+    if (from > to) return toast.error("Başlangıç tarihi bitiş tarihinden sonra olamaz");
+    if (days > 366) return toast.error("Hareket tarihi aralığı en fazla 1 yıl olabilir");
+    setMovementLoading(true);
+    try {
+      const response = await api.get("/movements", { params: { product_id: product.id, date_from: filters.date_from, date_to: filters.date_to, limit: 500 } });
+      setMovementProduct(product); setMovementRows(response.data || []);
+    } catch (e) { toast.error(e.response?.data?.detail || "Ürün hareketleri yüklenemedi"); }
+    finally { setMovementLoading(false); }
+  };
+  const openProductMovements = (product) => { setMovementProduct(product); loadProductMovements(product); };
   const quickAdjust = async (e, productId) => {
     e.preventDefault();
     const qty = Number(quickStock.quantity);
@@ -370,6 +389,7 @@ export default function Products() {
                   <>
                     {showForm && editId === p.id && (
                       <tr key={`product-edit-${p.id}`} data-testid={`product-edit-form-row-${p.code}`}>
+
                         <td colSpan={9} className="p-3 md:p-5 bg-gradient-to-r from-blue-50 via-cyan-50 to-teal-50 border-y-2 border-cyan-300">
                           <form onSubmit={submit} data-testid={`product-inline-form-${p.code}`} className="rounded-2xl border border-cyan-300 bg-white p-4 md:p-5 shadow-lg grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div className="md:col-span-4 flex items-center justify-between gap-3 border-b border-cyan-100 pb-3">
@@ -393,6 +413,7 @@ export default function Products() {
                         </td>
                       </tr>
                     )}
+                    {movementProduct?.id === p.id && <tr key={`product-movements-${p.id}`} data-testid={`product-movements-row-${p.code}`}><td colSpan={9} className="p-3 md:p-5 bg-indigo-50 border-y-2 border-indigo-200"><div className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-widest text-indigo-700">Ürün Hareketleri</div><div className="font-black text-slate-900">{p.code} — {p.name}</div><div className="text-xs font-semibold text-slate-600">Marka: {p.brand || "-"} · Mevcut stok: {p.current_stock ?? 0} {p.unit || "adet"}</div></div><button type="button" onClick={() => { setMovementProduct(null); setMovementRows([]); }} className="h-9 px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs">Kapat</button></div><div className="mt-4 flex flex-wrap items-end gap-2"><label className="text-xs font-bold text-slate-700">Başlangıç<input type="date" value={movementFilters.date_from} max={movementFilters.date_to} onChange={(e) => setMovementFilters({ ...movementFilters, date_from: e.target.value })} className="mt-1 block h-10 rounded-lg border border-slate-300 px-3 text-slate-900" /></label><label className="text-xs font-bold text-slate-700">Bitiş<input type="date" value={movementFilters.date_to} min={movementFilters.date_from} onChange={(e) => setMovementFilters({ ...movementFilters, date_to: e.target.value })} className="mt-1 block h-10 rounded-lg border border-slate-300 px-3 text-slate-900" /></label><button type="button" onClick={() => loadProductMovements(p)} className="h-10 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold">Filtrele</button><span className="text-xs font-bold text-slate-500">En fazla 1 yıllık aralık</span></div>{movementLoading ? <div className="py-6 text-center font-bold text-slate-600">Hareketler yükleniyor...</div> : <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="bg-indigo-50"><tr><th className="p-2 text-left">Tarih</th><th className="p-2 text-left">İşlem</th><th className="p-2 text-right">Miktar</th><th className="p-2 text-left">Personel</th><th className="p-2 text-left">Tezgâh</th><th className="p-2 text-left">Açıklama</th></tr></thead><tbody>{movementRows.length ? movementRows.map((m) => <tr key={m.id || `${m.created_at}-${m.quantity}`} className="border-t border-slate-200"><td className="p-2 font-semibold text-slate-800">{m.transaction_date || (m.created_at || "").slice(0, 10) || "-"}</td><td className="p-2 font-bold text-slate-900">{m.type === "in" ? "Stok Girişi" : m.type === "out" ? "Stok Çıkışı" : m.type || "-"}</td><td className="p-2 text-right font-black text-slate-900">{m.quantity ?? 0} {p.unit || "adet"}</td><td className="p-2 text-slate-800">{m.personnel_name || "-"}</td><td className="p-2 text-slate-800">{m.machine_name || m.machine_code || "-"}</td><td className="p-2 text-slate-700">{m.note || m.production_product || m.purpose || m.reason || "-"}</td></tr>) : <tr><td colSpan={6} className="p-6 text-center font-bold text-slate-600">Seçilen tarih aralığında hareket bulunamadı.</td></tr>}</tbody></table></div>}</div></td></tr>}
                     <tr key={p.id} id={`product-row-${p.id}`} data-testid={`product-row-${p.code}`} className="h-16 hover:bg-slate-700/40">
                     <td className="px-4 font-mono-tab font-semibold text-slate-300">{p.code}</td>
                     <td className="px-2 font-medium break-words">
@@ -417,6 +438,7 @@ export default function Products() {
                     <td className="px-4 text-right font-mono-tab font-bold"><div>{p.current_stock} {p.unit}</div><div className={Number(p.in_sharpening || 0) > 0 ? "mt-1 inline-block text-amber-800 bg-amber-100 border border-amber-300 px-2 py-1 rounded-md text-xs font-black" : "mt-1 text-slate-400 text-xs font-semibold"}>Bilemede: {p.in_sharpening || 0} {p.unit}</div></td>
                     <td className="px-4 text-right font-mono-tab text-slate-400">{p.min_stock}</td>
                     <td className="products-action-cell px-2">
+                      <div className="products-row-actions flex items-center justify-end gap-1 flex-wrap"><button type="button" onClick={() => openProductMovements(p)} data-testid={`product-movements-${p.code}`} className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold text-xs" title="Ürün hareketlerini görüntüle"><History className="w-4 h-4" /> Hareketler</button></div>
                       {isAdmin && <>
                         <div className="products-row-actions flex items-center justify-end gap-1 flex-wrap">
                           <button type="button" onClick={() => setQuickStock({ productId: p.id, direction: "in", quantity: "", note: "" })} data-testid={`product-quick-in-${p.code}`} className="inline-flex items-center justify-center gap-1 px-2 py-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs" aria-label="Hızlı stok artır" title="Hızlı stok artır"><Plus className="w-4 h-4" />+</button>
