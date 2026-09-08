@@ -2131,16 +2131,44 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         ("KÖK NEDEN", scrap.get("root_cause", "")), ("UYGUNSUZLUK KARARI", scrap.get("disposition", "")),
         ("DÜZELTİCİ FAALİYET", scrap.get("corrective_action", "")), ("ÖNLEYİCİ FAALİYET", scrap.get("preventive_action", "")),
     ]
-    cell_x, cell_w, row_h = 55, (width - 110) / 2, 25
+    cell_x, cell_w, base_row_h = 55, (width - 110) / 2, 25
+    def wrap_pdf_text(value, font_name, font_size, max_width):
+        text = str(value or "-").replace("\r\n", "\n").replace("\r", "\n")
+        lines = []
+        for paragraph in text.split("\n"):
+            words = paragraph.split()
+            if not words:
+                lines.append("")
+                continue
+            current = ""
+            for word in words:
+                candidate = word if not current else f"{current} {word}"
+                if pdfmetrics.stringWidth(candidate, font_name, font_size) <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = word
+            if current:
+                lines.append(current)
+        return lines or ["-"]
+
     for row_index in range(0, len(rows), 2):
+        pair = rows[row_index:row_index + 2]
+        wrapped_values = [wrap_pdf_text(value, regular_font, 8.5, cell_w - 14) for _, value in pair]
+        line_count = max(len(lines) for lines in wrapped_values)
+        row_h = max(base_row_h, 18 + line_count * 11)
         top = y + 8
+        bottom = y - row_h + 9
         pdf.setStrokeColorRGB(0.25, 0.3, 0.36); pdf.setLineWidth(0.6)
-        pdf.rect(cell_x, y - 16, cell_w * 2, row_h, stroke=1, fill=0)
-        pdf.line(cell_x + cell_w, y - 16, cell_x + cell_w, y + 9)
-        for col, (label, value) in enumerate(rows[row_index:row_index + 2]):
+        pdf.rect(cell_x, bottom, cell_w * 2, row_h, stroke=1, fill=0)
+        pdf.line(cell_x + cell_w, bottom, cell_x + cell_w, top)
+        for col, (label, _value) in enumerate(pair):
             x = cell_x + col * cell_w
             pdf.setFont(bold_font, 7.5); pdf.setFillColorRGB(0.2, 0.25, 0.32); pdf.drawString(x + 6, y, label)
-            pdf.setFont(regular_font, 8.5); pdf.setFillColorRGB(0.05, 0.08, 0.12); pdf.drawString(x + 6, y - 11, str(value or "-")[:52])
+            pdf.setFont(regular_font, 8.5); pdf.setFillColorRGB(0.05, 0.08, 0.12)
+            for line_no, line in enumerate(wrapped_values[col]):
+                pdf.drawString(x + 6, y - 11 - line_no * 11, line)
         y -= row_h
     y -= 7
     pdf.setFillColorRGB(0.9, 0.94, 0.98); pdf.rect(55, y - 18, width - 110, 22, stroke=1, fill=1)
