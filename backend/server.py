@@ -2145,10 +2145,20 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
                 candidate = word if not current else f"{current} {word}"
                 if pdfmetrics.stringWidth(candidate, font_name, font_size) <= max_width:
                     current = candidate
-                else:
-                    if current:
-                        lines.append(current)
-                    current = word
+                    continue
+                if current:
+                    lines.append(current)
+                    current = ""
+                # Boşluksuz uzun kod/ad/metinler de hücre sınırında kırılır.
+                fragment = ""
+                for char in word:
+                    char_candidate = fragment + char
+                    if fragment and pdfmetrics.stringWidth(char_candidate, font_name, font_size) > max_width:
+                        lines.append(fragment)
+                        fragment = char
+                    else:
+                        fragment = char
+                current = fragment
             if current:
                 lines.append(current)
         return lines or ["-"]
