@@ -168,6 +168,7 @@ class ProductIn(BaseModel):
     brand: Optional[str] = ""
     is_special: bool = False
     image_url: Optional[str] = ""
+    image_url_2: Optional[str] = ""
     supplier_id: Optional[str] = ""
     supplier_name: Optional[str] = ""
 
