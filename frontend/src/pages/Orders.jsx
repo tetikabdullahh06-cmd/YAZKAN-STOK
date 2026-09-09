@@ -94,7 +94,6 @@ export default function Orders() {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!supplierId) return toast.error("Tedarikçi seçin");
     const cleaned = [];
     for (const it of items) {
       const qty = parseFloat(it.quantity);
@@ -181,8 +180,8 @@ export default function Orders() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Tedarikçi</label>
-              <select required value={supplierId} onChange={(e) => setSupplierId(e.target.value)} data-testid="ord-supplier" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3">
-                <option value="">-- Seçin --</option>
+              <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} data-testid="ord-supplier" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3">
+                <option value="">-- İsteğe bağlı: tedarikçi seçin --</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -321,7 +320,7 @@ export default function Orders() {
                         className="h-10 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center gap-1">
                         <PackageCheck className="w-4 h-4" /> Teslimat Al
                       </button>
-                      <button onClick={() => closeOrder(o)} disabled={closing === o.id} data-testid={`ord-close-${o.id.slice(0,8)}`}
+                        <button onClick={() => closeOrder(o)} disabled={closing === o.id || !o.supplier_id} title={!o.supplier_id ? "Tedarikçisiz sipariş için önce Teslimat Al ekranından tedarikçi seçin" : "Siparişi kapat"} data-testid={`ord-close-${o.id.slice(0,8)}`}
                         className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-1 disabled:opacity-50">
                         {closing === o.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Tamamını Kapat
                       </button>
@@ -364,7 +363,7 @@ export default function Orders() {
         </div>
       )}
       {receiveOrder && (
-        <OrderReceive order={receiveOrder} onClose={() => setReceiveOrder(null)} onReceived={load} />
+        <OrderReceive order={receiveOrder} suppliers={suppliers} onClose={() => setReceiveOrder(null)} onReceived={load} />
       )}
     </div>
   );

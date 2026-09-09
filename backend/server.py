@@ -407,7 +407,7 @@ class OrderItemIn(BaseModel):
 
 
 class OrderIn(BaseModel):
-    supplier_id: str
+    supplier_id: Optional[str] = ""
     delivery_date: Optional[str] = None  # ISO date "YYYY-MM-DD"
     note: Optional[str] = ""
     items: List[OrderItemIn]
@@ -422,6 +422,7 @@ class ReceiveItemIn(BaseModel):
 
 class ReceiveIn(BaseModel):
     items: List[ReceiveItemIn]
+    supplier_id: Optional[str] = None
 
 
 # ---------- Sample Data ----------
@@ -1717,6 +1718,45 @@ async def list_suppliers(user=Depends(get_current_user)):
     return await db.suppliers.find({}, {"_id": 0}).sort("name", 1).to_list(2000)
 
 
+@api.get("/suppliers/{sid}/materials")
+async def supplier_materials(sid: str, date_from: Optional[str] = None, date_to: Optional[str] = None, user=Depends(get_current_user)):
+    supplier = await db.suppliers.find_one({"id": sid}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    if date_from and date_to:
+        try:
+            from_dt = datetime.fromisoformat(date_from)
+            to_dt = datetime.fromisoformat(date_to)
+            if from_dt > to_dt:
+                raise HTTPException(status_code=400, detail="Başlangıç tarihi bitiş tarihinden sonra olamaz")
+            if (to_dt - from_dt).days > 366:
+                raise HTTPException(status_code=400, detail="Tarih aralığı en fazla 1 yıl olabilir")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Geçersiz tarih aralığı")
+    supplier_match = {"$or": [{"supplier_id": sid}, {"supplier": supplier.get("name", "")}]}
+    supplier_orders = await db.orders.find(supplier_match, {"_id": 0, "id": 1}).to_list(5000)
+    order_ids = [o["id"] for o in supplier_orders if o.get("id")]
+    purchase_match = {"$or": [supplier_match] + ([{"order_id": {"$in": order_ids}}] if order_ids else [])}
+    date_match = None
+    if date_from or date_to:
+        date_query = {}
+        if date_from: date_query["$gte"] = date_from
+        if date_to: date_query["$lte"] = date_to
+        created_query = {"$gte": date_from or "", "$lte": (date_to + "T23:59:59") if date_to else "9999-12-31T23:59:59"}
+        date_match = {"$or": [{"transaction_date": date_query}, {"transaction_date": {"$exists": False}, "created_at": created_query}]}
+    product_q = {"$and": [{"type": "in"}, purchase_match] + ([date_match] if date_match else [])}
+    holder_q = {"$and": [{"type": "in"}, purchase_match] + ([date_match] if date_match else [])}
+    movements = await db.movements.find(product_q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    holder_movements = await db.toolholder_movements.find(holder_q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    rows = []
+    for m in movements:
+        rows.append({**m, "stock_kind": "product", "material_name": m.get("product_name") or m.get("name") or m.get("product_code") or "Ürün", "supplier_name": m.get("supplier") or supplier.get("name", "")})
+    for m in holder_movements:
+        rows.append({**m, "stock_kind": "toolholder", "material_name": m.get("name") or m.get("toolholder_name") or m.get("toolholder_id") or "Takım Tutucu", "product_code": m.get("product_code") or m.get("code") or "", "supplier_name": m.get("supplier") or supplier.get("name", "")})
+    rows.sort(key=lambda row: row.get("transaction_date") or row.get("created_at", ""), reverse=True)
+    return {"supplier": supplier, "materials": rows}
+
+
 @api.post("/suppliers")
 async def create_supplier(body: SupplierIn, user=Depends(require_admin)):
     if await db.suppliers.find_one({"name": body.name}):
@@ -2434,9 +2474,7 @@ async def list_orders(user=Depends(get_current_user), status: Optional[str] = No
 
 @api.post("/orders")
 async def create_order(body: OrderIn, user=Depends(require_admin)):
-    supplier = await db.suppliers.find_one({"id": body.supplier_id})
-    if not supplier:
-        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    supplier = await db.suppliers.find_one({"id": body.supplier_id}) if body.supplier_id else None
     if not body.items:
         raise HTTPException(status_code=400, detail="En az bir kalem eklemelisiniz")
     items = []
@@ -2476,7 +2514,7 @@ async def create_order(body: OrderIn, user=Depends(require_admin)):
             })
     order = {
         "id": new_id(),
-        "supplier_id": supplier["id"], "supplier_name": supplier["name"],
+        "supplier_id": supplier["id"] if supplier else "", "supplier_name": supplier["name"] if supplier else "Tedarikçi belirtilmedi",
         "delivery_date": body.delivery_date or "",
         "note": body.note or "",
         "status": "open",
@@ -2498,9 +2536,7 @@ async def update_order(oid: str, body: OrderIn, user=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
     if order.get("status") == "closed":
         raise HTTPException(status_code=400, detail="Kapalı sipariş düzenlenemez")
-    supplier = await db.suppliers.find_one({"id": body.supplier_id})
-    if not supplier:
-        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    supplier = await db.suppliers.find_one({"id": body.supplier_id}) if body.supplier_id else None
     if not body.items:
         raise HTTPException(status_code=400, detail="En az bir kalem eklemelisiniz")
     items = []
@@ -2522,7 +2558,7 @@ async def update_order(oid: str, body: OrderIn, user=Depends(require_admin)):
             if not name:
                 raise HTTPException(status_code=400, detail="Manuel kalem için ürün adı gerekli")
             items.append({"kind": "product", "product_id": None, "product_code": (it.product_code or "").strip(), "product_name": name, "category": (it.category or "Diğer").strip() or "Diğer", "unit": (it.unit or "adet").strip() or "adet", "quantity": it.quantity, "received_qty": 0, "manual": True})
-    await db.orders.update_one({"id": oid}, {"$set": {"supplier_id": supplier["id"], "supplier_name": supplier["name"], "delivery_date": body.delivery_date or "", "note": body.note or "", "items": items}})
+    await db.orders.update_one({"id": oid}, {"$set": {"supplier_id": supplier["id"] if supplier else "", "supplier_name": supplier["name"] if supplier else "Tedarikçi belirtilmedi", "delivery_date": body.delivery_date or "", "note": body.note or "", "items": items}})
     return await db.orders.find_one({"id": oid}, {"_id": 0})
 
 
@@ -2571,6 +2607,8 @@ async def close_order(oid: str, user=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
     if order.get("status") == "closed":
         raise HTTPException(status_code=400, detail="Sipariş zaten kapalı")
+    if not order.get("supplier_id"):
+        raise HTTPException(status_code=400, detail="Tedarikçisi belirtilmemiş siparişi önce Teslimat Al ekranından tedarikçi seçerek kaydedin")
     # Convert each item to the correct stock-in movement and update the order.
     new_items = [dict(it) for it in order.get("items", [])]
     for it in new_items:
@@ -2629,6 +2667,20 @@ async def receive_order(oid: str, body: ReceiveIn, user=Depends(require_admin)):
         raise HTTPException(status_code=400, detail="Sipariş zaten kapalı")
     if not body.items:
         raise HTTPException(status_code=400, detail="Teslim alınacak kalem yok")
+
+    supplier = None
+    if body.supplier_id:
+        supplier = await db.suppliers.find_one({"id": body.supplier_id}, {"_id": 0})
+        if not supplier:
+            raise HTTPException(status_code=404, detail="Seçilen tedarikçi bulunamadı")
+    elif not order.get("supplier_id"):
+        raise HTTPException(status_code=400, detail="Bu sipariş için teslimat tedarikçisi seçilmelidir")
+    effective_supplier_id = supplier["id"] if supplier else order.get("supplier_id", "")
+    effective_supplier_name = supplier["name"] if supplier else order.get("supplier_name", "Tedarikçi belirtilmedi")
+    if supplier:
+        await db.orders.update_one({"id": oid}, {"$set": {"supplier_id": effective_supplier_id, "supplier_name": effective_supplier_name}})
+        order["supplier_id"] = effective_supplier_id
+        order["supplier_name"] = effective_supplier_name
 
     new_items = [dict(it) for it in order["items"]]
     any_received_now = False

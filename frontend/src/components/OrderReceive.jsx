@@ -3,12 +3,13 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { X, Loader2, PackageCheck } from "lucide-react";
 
-export default function OrderReceive({ order, onClose, onReceived }) {
+export default function OrderReceive({ order, suppliers = [], onClose, onReceived }) {
   const initial = order.items.map((it) => ({
     key: it.toolholder_id || it.product_id || it.product_code || it.product_name,
     qty: String(Math.max(0, (it.quantity || 0) - (it.received_qty || 0))),
   }));
   const [rows, setRows] = useState(initial);
+  const [selectedSupplierId, setSelectedSupplierId] = useState(order.supplier_id || "");
   const [saving, setSaving] = useState(false);
 
   const update = (i, qty) => setRows(rows.map((r, idx) => idx === i ? { ...r, qty } : r));
@@ -21,9 +22,10 @@ export default function OrderReceive({ order, onClose, onReceived }) {
       })
       .filter((r) => r.quantity > 0);
     if (items.length === 0) return toast.error("En az bir kalem için teslim miktarı girin");
+    if (!selectedSupplierId) return toast.error("Teslim alınan malzemenin tedarikçisini seçin");
     setSaving(true);
     try {
-      await api.post(`/orders/${order.id}/receive`, { items });
+      await api.post(`/orders/${order.id}/receive`, { supplier_id: selectedSupplierId, items });
       toast.success("Teslimat kaydedildi");
       onReceived?.();
       onClose?.();
@@ -37,13 +39,22 @@ export default function OrderReceive({ order, onClose, onReceived }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
           <div>
             <div className="text-xs text-emerald-400 uppercase tracking-[0.2em] font-semibold">Kısmi Teslimat</div>
-            <div className="font-display text-xl font-bold">{order.supplier_name}</div>
+            <div className="font-display text-xl font-bold">{order.supplier_id ? order.supplier_name : "Tedarikçi teslimatta seçilecek"}</div>
             <div className="text-xs text-slate-500 font-mono-tab">Sipariş #{order.id.slice(0, 8)}</div>
           </div>
           <button onClick={onClose} data-testid="receive-close" className="p-2 rounded-lg hover:bg-slate-800 text-slate-400"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 flex-1 overflow-auto">
+          <div className="mb-4 rounded-xl border border-blue-500/40 bg-blue-950/30 p-4">
+            <label className="block text-xs font-black text-blue-200 uppercase tracking-wider mb-2">Teslim alınan malzemenin tedarikçisi</label>
+            <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} className="w-full h-11 bg-slate-950 border border-blue-500/50 rounded-lg px-3 text-white font-bold">
+              <option value="">-- Tedarikçi seçin --</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <p className="text-xs text-slate-300 font-bold mt-2">Sipariş oluştururken tedarikçi seçilmediyse burada zorunlu olarak seçilir ve malzeme geçmişine bu tedarikçiyle kaydedilir.</p>
+          </div>
+
           <div className="text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg p-3 mb-4">
             Her kalem için bugün <strong>teslim aldığınız</strong> miktarı girin. Varsayılan olarak kalan miktar önerilir. Almayacaklarınıza 0 yazın. Tüm kalemler tamamlanınca sipariş otomatik kapanır. Manuel eklenen ürünler stokta yoksa otomatik oluşturulur.
           </div>
