@@ -288,6 +288,7 @@ class StockOutIn(BaseModel):
     personnel_id: str
     machine_id: str
     toolholder_id: Optional[str] = ""
+    exit_reason: str = "İşleme için verilen"
     note: Optional[str] = ""
     transaction_date: Optional[str] = ""
     production_product: Optional[str] = ""
@@ -1070,6 +1071,8 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         "toolholder_code": toolholder.get("code", "") if toolholder else "",
         "toolholder_name": toolholder.get("name", "") if toolholder else "",
         "toolholder_brand": toolholder.get("brand", "") if toolholder else "",
+        "exit_reason": body.exit_reason.strip() or "İşleme için verilen",
+        "movement_purpose": body.exit_reason.strip() or "İşleme için verilen",
         "note": body.note or "",
         "production_product": body.production_product or "",
         "user_id": user["id"], "user_name": user["name"],
@@ -1627,13 +1630,14 @@ async def report_excel(user=Depends(get_current_user),
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Hareketler"
-    ws1.append(["Tarih", "Tip", "İşlem / Amaç", "Çıkış / Hedef", "Bileme İşlemi", "Ürün Kodu", "Ürün Adı", "Miktar",
+    ws1.append(["Tarih", "Tip", "İşlem / Amaç", "Çıkış Nedeni", "Çıkış / Hedef", "Bileme İşlemi", "Ürün Kodu", "Ürün Adı", "Miktar",
                 "Personel", "Tezgah", "Üretim / İşlenen Ürün", "Helis", "Çap", "Tam Boy", "Tedarikçi", "Not", "Kullanıcı"])
     for m in movements:
         ws1.append([
             m.get("transaction_date") or m.get("created_at", "")[:19].replace("T", " "),
             "GİRİŞ" if m.get("type") == "in" else "ÇIKIŞ",
-            m.get("movement_category") or ("Bilemeden Gelen" if m.get("sharpening_movement_kind") == "in" else ("Bilemeye Giden" if m.get("sharpening_record_id") else (m.get("movement_purpose") or ("Stok girişi" if m.get("type") == "in" else ("İşleme için verildi" if m.get("machine_name") else "Üretimde kullanım"))))),
+            m.get("movement_category") or m.get("exit_reason") or ("Bilemeden Gelen" if m.get("sharpening_movement_kind") == "in" else ("Bilemeye Giden" if m.get("sharpening_record_id") else (m.get("movement_purpose") or ("Stok girişi" if m.get("type") == "in" else ("İşleme için verildi" if m.get("machine_name") else "Üretimde kullanım"))))),
+            m.get("exit_reason", "") if m.get("type") == "out" else "-",
             m.get("destination") or (m.get("machine_name", "") if m.get("type") == "out" else m.get("supplier", "")),
             m.get("process_type", ""), m.get("product_code", ""), m.get("product_name", ""),
             m.get("quantity", 0), m.get("personnel_name", ""), m.get("machine_name", ""),
@@ -1659,7 +1663,7 @@ async def report_excel(user=Depends(get_current_user),
 
     _summary("Ürün Bazlı", "product_name", ["Ürün", "Toplam Miktar"])
 
-    detail_headers = ["İşlem Tarihi", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç"]
+    detail_headers = ["İşlem Tarihi", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç", "Çıkış Nedeni"]
     def _detail_sheet(sheet, sort_key):
         ws = wb.create_sheet(sheet)
         ws.append(detail_headers)
@@ -1670,7 +1674,8 @@ async def report_excel(user=Depends(get_current_user),
                 m.get("transaction_date") or m.get("created_at", "")[:10],
                 m.get("personnel_name", ""), m.get("machine_name", ""), m.get("product_name", ""),
                 m.get("product_code", ""), m.get("production_product", ""), m.get("quantity", 0),
-                m.get("movement_category") or ("Bilemeye Giden" if m.get("sharpening_record_id") else "Üretimde kullanım"),
+                m.get("movement_category") or m.get("exit_reason") or ("Bilemeye Giden" if m.get("sharpening_record_id") else "Üretimde kullanım"),
+                m.get("exit_reason", "") if m.get("type") == "out" else "-",
             ])
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
@@ -1679,7 +1684,7 @@ async def report_excel(user=Depends(get_current_user),
     _detail_sheet("Tezgah Bazlı", "machine_name")
 
     detail_ws = wb.create_sheet("Kullanım Detayı")
-    detail_ws.append(["Tarih", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç"])
+    detail_ws.append(["Tarih", "Personel", "Tezgah", "Kullanılan Uç / Ürün", "Kod", "Üretim / İşlenen Ürün", "Miktar", "Amaç", "Çıkış Nedeni"])
     for m in movements:
         if m.get("type") != "out":
             continue
@@ -1687,7 +1692,8 @@ async def report_excel(user=Depends(get_current_user),
             m.get("transaction_date") or m.get("created_at", "")[:10],
             m.get("personnel_name", ""), m.get("machine_name", ""), m.get("product_name", ""),
             m.get("product_code", ""), m.get("production_product", ""), m.get("quantity", 0),
-            "Bilemeye gönderildi" if m.get("sharpening_record_id") else "Üretimde kullanım",
+            m.get("movement_category") or m.get("exit_reason") or ("Bilemeye gönderildi" if m.get("sharpening_record_id") else "Üretimde kullanım"),
+            m.get("exit_reason", "") if m.get("type") == "out" else "-",
         ])
     detail_ws.freeze_panes = "A2"
     detail_ws.auto_filter.ref = detail_ws.dimensions

@@ -25,6 +25,8 @@ export default function StockOut() {
   const [personnelId, setPersonnelId] = useState("");
   const [machineId, setMachineId] = useState("");
   const [toolholderId, setToolholderId] = useState("");
+  const [exitReason, setExitReason] = useState("İşleme için verilen");
+  const [customExitReason, setCustomExitReason] = useState("");
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
   const [productionProduct, setProductionProduct] = useState("");
@@ -47,6 +49,8 @@ export default function StockOut() {
     setPersonnelId("");
     setMachineId("");
     setToolholderId("");
+    setExitReason("İşleme için verilen");
+    setCustomExitReason("");
     setQuantity("");
     setNote("");
     setProductionProduct("");
@@ -64,11 +68,13 @@ export default function StockOut() {
   const submit = async (e) => {
     e.preventDefault();
     if (!productId || !personnelId || !machineId) return toast.error("Tüm alanları doldurun");
+    const finalExitReason = exitReason === "Manuel" ? customExitReason.trim() : exitReason;
+    if (!finalExitReason) return toast.error("Çıkış nedenini girin");
     setLoading(true);
     try {
       const r = await api.post("/stock/out", {
         product_id: productId, quantity: parseFloat(quantity),
-        personnel_id: personnelId, machine_id: machineId, toolholder_id: toolholderId, note, production_product: productionProduct, transaction_date: transactionDate,
+        personnel_id: personnelId, machine_id: machineId, toolholder_id: toolholderId, exit_reason: finalExitReason, note, production_product: productionProduct, transaction_date: transactionDate,
       });
       if (r.data.critical) toast.warning(`Stok çıkışı kaydedildi. UYARI: Kritik seviyede! Yeni stok: ${r.data.new_stock}`);
       else toast.success(`Stok çıkışı kaydedildi. Yeni stok: ${r.data.new_stock}`);
@@ -158,6 +164,16 @@ export default function StockOut() {
             <option value="">-- Ürün tutucuya bağlanmıyorsa boş bırakın --</option>
             {toolholders.map((h) => <option key={h.id} value={h.id}>{h.code ? `${h.code} — ` : ""}{h.name}{h.brand ? ` | ${h.brand}` : ""} | Mevcut: {h.current_stock ?? 0}</option>)}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Çıkış Nedeni</label>
+          <select required value={exitReason} onChange={(e) => { setExitReason(e.target.value); if (e.target.value !== "Manuel") setCustomExitReason(""); }} data-testid="so-exit-reason" className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-red-500 outline-none">
+            <option value="İşleme için verilen">İşleme için verilen</option>
+            <option value="Kırılan yerine verilen">Kırılan yerine verilen</option>
+            <option value="Manuel">Manuel neden yaz</option>
+          </select>
+          {exitReason === "Manuel" && <input required value={customExitReason} onChange={(e) => setCustomExitReason(e.target.value)} placeholder="Çıkış nedenini kendiniz yazın" data-testid="so-custom-exit-reason" className="w-full h-12 mt-2 bg-slate-950 border border-slate-700 rounded-lg px-4 focus:ring-2 focus:ring-red-500 outline-none" />}
         </div>
 
         <div>

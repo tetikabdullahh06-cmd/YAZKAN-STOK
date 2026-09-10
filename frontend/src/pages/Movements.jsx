@@ -61,7 +61,8 @@ export default function Movements() {
     const rows = items.map((m) => ({
       "İşlem Tarihi": m.transaction_date || (m.created_at ? new Date(m.created_at).toLocaleString("tr-TR") : ""),
       "Tip": m.type === "in" ? "Giriş" : "Çıkış",
-      "İşlem / Amaç": m.movement_category || (m.sharpening_record_id ? (m.type === "in" ? "Bilemeden Gelen" : "Bilemeye Giden") : (m.type === "in" ? "Stok Girişi" : "İşleme İçin Verildi")),
+      "Çıkış Nedeni": m.type === "out" ? (m.exit_reason || m.movement_purpose || (m.sharpening_record_id ? "Bilemeye Giden" : "İşleme İçin Verildi")) : "-",
+      "İşlem / Amaç": m.movement_category || m.exit_reason || (m.sharpening_record_id ? (m.type === "in" ? "Bilemeden Gelen" : "Bilemeye Giden") : (m.type === "in" ? "Stok Girişi" : "İşleme İçin Verildi")),
       "Hedef": m.destination || m.machine_name || m.supplier || "",
       "Ürün Kodu": m.product_code || "",
       "Ürün Adı": m.product_name || "",
@@ -123,6 +124,7 @@ export default function Movements() {
                 <th className="px-4 py-3">Tarih</th>
                 <th className="px-4 py-3">Tip</th>
                 <th className="px-4 py-3">İşlem / Amaç</th>
+                <th className="px-4 py-3">Çıkış Nedeni</th>
                 <th className="px-4 py-3">Ürün</th>
                 <th className="px-4 py-3 text-right">Miktar</th>
                 <th className="px-4 py-3">Personel</th>
@@ -132,16 +134,17 @@ export default function Movements() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {items.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-slate-500">Hareket yok</td></tr>}
+              {items.length === 0 && <tr><td colSpan={10} className="p-8 text-center text-slate-500">Hareket yok</td></tr>}
               {items.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-700/40">
                   <td className="px-4 py-3 font-mono-tab text-slate-400 whitespace-nowrap">{m.transaction_date ? new Date(`${m.transaction_date}T12:00:00`).toLocaleDateString("tr-TR") : new Date(m.created_at).toLocaleString("tr-TR")}</td>
                                     <td className="px-4 py-3">
                     <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${m.movement_category === "Bilemeye Giden" ? "text-rose-700 bg-rose-100 border-rose-300" : m.movement_category === "Bilemeden Gelen" ? "text-emerald-700 bg-emerald-100 border-emerald-300" : m.type === "in" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" : "text-amber-400 bg-amber-500/10 border-amber-500/30"}`}>
-                      {m.movement_category || (m.type === "in" ? "Giriş" : "Çıkış")}
+                      {m.movement_category || m.exit_reason || (m.type === "in" ? "Giriş" : "Çıkış")}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-semibold">{m.movement_category || (m.sharpening_record_id ? (m.type === "in" ? "Bilemeden Gelen" : "Bilemeye Giden") : (m.movement_purpose || (m.type === "in" ? "Stok Girişi" : "İşleme İçin Verildi")))}</td>
+                  <td className="px-4 py-3 font-semibold">{m.movement_category || m.exit_reason || (m.sharpening_record_id ? (m.type === "in" ? "Bilemeden Gelen" : "Bilemeye Giden") : (m.movement_purpose || (m.type === "in" ? "Stok Girişi" : "İşleme İçin Verildi")))}</td>
+                  <td className="px-4 py-3 font-semibold">{m.type === "out" ? (m.exit_reason || m.movement_purpose || "-") : "-"}</td>
                   <td className="px-4 py-3"><div className="font-medium">{m.product_name}</div>
 <div className="text-xs text-slate-500 font-mono-tab">{m.product_code}</div></td>
                   <td className="px-4 py-3 text-right font-mono-tab font-bold">{m.quantity}</td>
