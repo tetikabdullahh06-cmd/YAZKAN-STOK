@@ -122,8 +122,9 @@ export default function Products() {
   };
 
   const existingMatches = items.filter((p) => { const s = stockAdd.query.toLowerCase().trim(); return !s || `${p.code || ""} ${p.name || ""} ${p.brand || ""} ${p.quality || ""}`.toLowerCase().includes(s); });
+  const productIdentity = (value) => String(value || "").trim().toLocaleLowerCase("tr-TR");
   const nameMatches = form.name.trim().length >= 2
-    ? items.filter((p) => (p.name || "").trim().toLocaleLowerCase("tr-TR") === form.name.trim().toLocaleLowerCase("tr-TR"))
+    ? items.filter((p) => productIdentity(p.name) === productIdentity(form.name) && productIdentity(p.brand) === productIdentity(form.brand))
     : [];
 
   const selectExistingForStock = (p) => {
@@ -198,8 +199,11 @@ export default function Products() {
   const submit = async (e) => {
     e.preventDefault();
     if (!editId) {
-      const duplicate = items.find((p) => (p.name || "").trim().toLowerCase() === form.name.trim().toLowerCase());
-      if (duplicate) { toast.error("Bu isimde ürün zaten var. Mevcut ürüne adet ekleme panelini kullanın."); return; }
+      const duplicate = items.find((p) => productIdentity(p.name) === productIdentity(form.name) && productIdentity(p.brand) === productIdentity(form.brand));
+      if (duplicate) {
+        toast.error(`Bu ürün adı ve marka zaten kayıtlı: ${duplicate.name}${duplicate.brand ? ` — ${duplicate.brand}` : ""}. Farklı marka için kayda devam edebilirsiniz.`);
+        return;
+      }
     }
     const payload = {
       ...form,
@@ -292,7 +296,7 @@ export default function Products() {
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ad</label>
             <div className="flex gap-2"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="pf-name" placeholder="Yeni ürün adı yazın veya mevcut adı kontrol edin" className="flex-1 h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /><QrScannerButton onScan={handleProductScan} label="Kod Tara" testid="product-form-qr" /></div>
-            {nameMatches.length > 0 && !editId && <div className="mt-2 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3"><div className="text-xs font-bold text-amber-200 mb-2">Bu isimde mevcut stok kartı bulundu. Yeni kart açmak yerine buradan seçip stok artırın:</div>{nameMatches.map((p) => <button type="button" key={p.id} onClick={() => selectExistingForStock(p)} className="w-full text-left rounded-md border border-amber-400/40 bg-slate-900/70 hover:bg-amber-500/20 px-3 py-2 text-sm text-white"><span className="font-bold">{p.code} — {p.name}</span><span className="ml-2 text-cyan-300 font-bold">Marka: {p.brand || "Marka yok"}</span><span className="ml-2 text-emerald-300">Mevcut: {p.current_stock} {p.unit}</span></button>)}</div>}
+            {nameMatches.length > 0 && !editId && <div className="mt-2 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3"><div className="text-xs font-bold text-amber-200 mb-2">Bu ürün adı ve marka ile mevcut stok kartı bulundu. Yeni kart açmak yerine buradan seçip stok artırın:</div>{nameMatches.map((p) => <button type="button" key={p.id} onClick={() => selectExistingForStock(p)} className="w-full text-left rounded-md border border-amber-400/40 bg-slate-900/70 hover:bg-amber-500/20 px-3 py-2 text-sm text-white"><span className="font-bold">{p.code} — {p.name}</span><span className="ml-2 text-cyan-300 font-bold">Marka: {p.brand || "Marka yok"}</span><span className="ml-2 text-emerald-300">Mevcut: {p.current_stock} {p.unit}</span></button>)}</div>}
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Kategori</label>
