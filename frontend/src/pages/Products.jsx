@@ -35,6 +35,7 @@ export default function Products() {
   const [items, setItems] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [q, setQ] = useState("");
+  const [columnFilters, setColumnFilters] = useState({ code: "", name: "", category: "", brand: "", supplier: "", location: "", stock: "all" });
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
@@ -182,18 +183,31 @@ export default function Products() {
     } catch (e) { toast.error(e.response?.data?.detail || "Hızlı stok işlemi yapılamadı"); }
   };
 
+  const updateColumnFilter = (key, value) => setColumnFilters((current) => ({ ...current, [key]: value }));
+  const clearColumnFilters = () => setColumnFilters({ code: "", name: "", category: "", brand: "", supplier: "", location: "", stock: "all" });
+
   const filtered = items.filter((p) => {
     const s = q.toLowerCase().trim();
-    if (!s) return true;
     // "özel takım" araması ~ tüm özel takımları getir
     const normalized = s.replace(/ı/g, "i").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ç/g, "c").replace(/ş/g, "s").replace(/ğ/g, "g");
-    if (["ozel", "ozel takim", "özel", "özel takım", "special"].some((k) => normalized.includes(k))) {
-      if (p.is_special) return true;
-    }
-    return (p.code || "").toLowerCase().includes(s) || p.name.toLowerCase().includes(s)
+    const matchesGeneralSearch = !s || (["ozel", "ozel takim", "özel", "özel takım", "special"].some((k) => normalized.includes(k)) && p.is_special)
+      || (p.code || "").toLowerCase().includes(s) || p.name.toLowerCase().includes(s)
       || (p.category || "").toLowerCase().includes(s) || (p.location || "").toLowerCase().includes(s)
       || (p.brand || "").toLowerCase().includes(s) || (p.quality || "").toLowerCase().includes(s)
       || (p.supplier_name || "").toLowerCase().includes(s);
+    const includes = (value, filter) => !filter || String(value || "").toLocaleLowerCase("tr-TR").includes(filter.toLocaleLowerCase("tr-TR"));
+    const stockMatches = columnFilters.stock === "all"
+      || (columnFilters.stock === "critical" && Number(p.current_stock || 0) <= Number(p.min_stock || 0))
+      || (columnFilters.stock === "out" && Number(p.current_stock || 0) <= 0)
+      || (columnFilters.stock === "available" && Number(p.current_stock || 0) > 0);
+    return matchesGeneralSearch
+      && includes(p.code, columnFilters.code)
+      && includes(p.name, columnFilters.name)
+      && includes(p.category, columnFilters.category)
+      && includes(`${p.brand || ""} ${p.quality || ""}`, columnFilters.brand)
+      && includes(p.supplier_name, columnFilters.supplier)
+      && includes(p.location, columnFilters.location)
+      && stockMatches;
   });
 
   const submit = async (e) => {
@@ -384,6 +398,17 @@ export default function Products() {
                 <th className="px-4 py-3 text-right">Stok / Bilemede</th>
                 <th className="px-4 py-3 text-right">Min</th>
                 <th className="px-4 py-3"></th>
+              </tr>
+              <tr className="bg-slate-950/80 border-t border-slate-700">
+                <th className="px-2 py-2"><input value={columnFilters.code} onChange={(e) => updateColumnFilter("code", e.target.value)} placeholder="Kod filtrele" aria-label="Kod filtresi" className="w-full min-w-0 h-9 rounded-md border border-slate-600 bg-slate-900 px-2 text-xs normal-case tracking-normal text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-400" /></th>
+                <th className="px-2 py-2"><input value={columnFilters.name} onChange={(e) => updateColumnFilter("name", e.target.value)} placeholder="Ad filtrele" aria-label="Ad filtresi" className="w-full min-w-0 h-9 rounded-md border border-slate-600 bg-slate-900 px-2 text-xs normal-case tracking-normal text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-400" /></th>
+                <th className="px-2 py-2"><select value={columnFilters.category} onChange={(e) => updateColumnFilter("category", e.target.value)} aria-label="Kategori filtresi" className="w-full min-w-0 h-9 rounded-md border border-slate-600 bg-slate-900 px-1 text-xs normal-case tracking-normal text-slate-100 outline-none focus:border-blue-400"><option value="">Tüm kategoriler</option>{allCats.map((category) => <option key={category} value={category}>{category}</option>)}</select></th>
+                <th className="px-2 py-2"><input value={columnFilters.brand} onChange={(e) => updateColumnFilter("brand", e.target.value)} placeholder="Marka / kalite" aria-label="Marka ve kalite filtresi" className="w-full min-w-0 h-9 rounded-md border border-slate-600 bg-slate-900 px-2 text-xs normal-case tracking-normal text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-400" /></th>
+                <th className="px-2 py-2"><select value={columnFilters.supplier} onChange={(e) => updateColumnFilter("supplier", e.target.value)} aria-label="Tedarikçi filtresi" className="w-full min-w-0 h-9 rounded-md border border-slate-600 bg-slate-900 px-1 text-xs normal-case tracking-normal text-slate-100 outline-none focus:border-blue-400"><option value="">Tüm tedarikçiler</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.name}>{supplier.name}</option>)}</select></th>
+                <th className="px-2 py-2"><input value={columnFilters.location} onChange={(e) => updateColumnFilter("location", e.target.value)} placeholder="Konum filtrele" aria-label="Konum filtresi" className="w-full min-w-0 h-9 rounded-md border border-slate-600 bg-slate-900 px-2 text-xs normal-case tracking-normal text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-400" /></th>
+                <th className="px-2 py-2"><select value={columnFilters.stock} onChange={(e) => updateColumnFilter("stock", e.target.value)} aria-label="Stok filtresi" className="w-full min-w-0 h-9 rounded-md border border-slate-600 bg-slate-900 px-1 text-xs normal-case tracking-normal text-slate-100 outline-none focus:border-blue-400"><option value="all">Tüm stoklar</option><option value="critical">Kritik stok</option><option value="out">Stokta yok</option><option value="available">Stokta var</option></select></th>
+                <th className="px-2 py-2"><button type="button" onClick={clearColumnFilters} className="w-full h-9 rounded-md border border-slate-600 bg-slate-800 px-1 text-[10px] font-black text-slate-200 hover:bg-slate-700" title="Sütun filtrelerini temizle">Temizle</button></th>
+                <th className="px-2 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
