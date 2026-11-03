@@ -169,6 +169,8 @@ class ProductIn(BaseModel):
     is_special: bool = False
     image_url: Optional[str] = ""
     image_url_2: Optional[str] = ""
+    used_diamond_code: Optional[str] = ""
+    diamond_image_url: Optional[str] = ""
     supplier_id: Optional[str] = ""
     supplier_name: Optional[str] = ""
 
@@ -479,6 +481,11 @@ async def startup():
     admin_name = os.environ.get("ADMIN_NAME", "Admin")
     # Migration: any existing user without a role becomes 'viewer' (fail-safe: least privilege)
     await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "viewer"}})
+    # Migration: add the new diamond-code fields to legacy product cards without overwriting existing values.
+    await db.products.update_many(
+        {"used_diamond_code": {"$exists": False}},
+        {"$set": {"used_diamond_code": "", "diamond_image_url": ""}},
+    )
     if admin_email and admin_pw:
         existing = await db.users.find_one({"email": admin_email})
         if not existing:
@@ -2848,9 +2855,9 @@ async def product_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ürünler"
-    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand", "image_url"])
-    ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik"])
-    ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch"])
+    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand", "used_diamond_code", "image_url", "diamond_image_url"])
+    ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik", "", "", ""])
+    ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch", "", "", ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -2931,14 +2938,17 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
         location = _safe_str(_get(row, "location"))
         quality = _safe_str(_get(row, "quality"))
         brand = _safe_str(_get(row, "brand"))
+        used_diamond_code = _safe_str(_get(row, "used_diamond_code"))
         image_url = _safe_str(_get(row, "image_url"))
+        diamond_image_url = _safe_str(_get(row, "diamond_image_url"))
         existing = await db.products.find_one({"code": code}) if code else None
         action = "update" if existing else "create"
         preview.append({
             "row": row_num, "action": action, "error": None,
             "data": {"code": code, "name": name, "category": category, "unit": unit,
                      "min_stock": min_stock, "current_stock": current_stock,
-                     "location": location, "quality": quality, "brand": brand, "image_url": image_url},
+                     "location": location, "quality": quality, "brand": brand, "used_diamond_code": used_diamond_code,
+                     "image_url": image_url, "diamond_image_url": diamond_image_url},
         })
 
     stats = {

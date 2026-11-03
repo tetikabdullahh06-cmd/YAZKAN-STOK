@@ -9,7 +9,7 @@ import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 import QrScannerButton from "@/components/QrScanner";
 import { useAuth } from "@/context/AuthContext";
 
-const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", supplier_id: "", supplier_name: "", is_special: false, image_url: "", image_url_2: "" };
+const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", supplier_id: "", supplier_name: "", is_special: false, image_url: "", image_url_2: "", used_diamond_code: "", diamond_image_url: "", diamond_product_id: "" };
 const DEFAULT_CATS = ["Kesici Uç", "Matkap", "Kater", "Apparat", "Ölçüm Aleti", "Diğer"];
 const CATS_STORAGE_KEY = "cnc_extra_categories";
 
@@ -81,6 +81,7 @@ export default function Products() {
       "Mevcut Stok": p.current_stock ?? 0,
       "Bilemede": p.in_sharpening ?? 0,
       "Özel Takım": p.is_special ? "Evet" : "Hayır",
+      "Kullanılan Kesici Elmas Kodu": p.used_diamond_code || "",
       "Görsel": "",
       __imageUrl: p.image_url || "",
     }));
@@ -98,7 +99,7 @@ export default function Products() {
 
   const downloadImportTemplate = () => {
     const rows = [
-      { code: "", name: "Örnek Kesici Uç", category: "Kesici Uç", unit: "adet", brand: "Örnek Marka", quality: "P25", location: "A-01", min_stock: 2, current_stock: 10, is_special: "Hayır", image_url: "Görsel 1 URL veya data:image/...", image_url_2: "Görsel 2 URL veya data:image/..." },
+      { code: "", name: "Örnek Kesici Uç", category: "Kesici Uç", unit: "adet", brand: "Örnek Marka", quality: "P25", location: "A-01", min_stock: 2, current_stock: 10, is_special: "Hayır", used_diamond_code: "", image_url: "Görsel 1 URL veya data:image/...", image_url_2: "Görsel 2 URL veya data:image/...", diamond_image_url: "Kesici elmas görseli URL veya data:image/..." },
       { code: "MEVCUT_ÜRÜN_KODU", name: "Mevcut ürüne stok ekleme", category: "Kesici Uç", unit: "adet", brand: "Aynı marka", quality: "Aynı kalite", location: "", min_stock: "", current_stock: 5, is_special: "Hayır" },
     ];
     const worksheet = XLSX.utils.json_to_sheet(rows); const workbook = XLSX.utils.book_new();
@@ -219,8 +220,9 @@ export default function Products() {
         return;
       }
     }
+    const { diamond_product_id, ...formPayload } = form;
     const payload = {
-      ...form,
+      ...formPayload,
       min_stock: parseFloat(form.min_stock) || 0,
       current_stock: parseFloat(form.current_stock) || 0,
       is_special: !!form.is_special,
@@ -365,6 +367,7 @@ export default function Products() {
             <input type="number" step="0.01" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} data-testid="pf-current" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3 font-mono-tab" />
           </div>
           <div className="md:col-span-3"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Ürün görseli 1" /></div><div className="md:col-span-3"><ImageUpload value={form.image_url_2} onChange={(image_url_2) => setForm({ ...form, image_url_2 })} label="Ürün görseli 2" /></div>
+          <div className="md:col-span-3 rounded-xl border border-amber-700/50 bg-amber-950/20 p-4 space-y-3"><div className="text-xs font-black uppercase tracking-wider text-amber-300">Kullanılan kesici elmas</div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><select value={form.diamond_product_id || ""} onChange={(e) => { const product = items.find((item) => item.id === e.target.value); setForm({ ...form, diamond_product_id: e.target.value, used_diamond_code: product?.code || form.used_diamond_code }); }} className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3"><option value="">Stoktaki üründen seç (isteğe bağlı)</option>{items.map((item) => <option key={item.id} value={item.id}>{item.code || "Kodsuz"} — {item.name}{item.brand ? ` | ${item.brand}` : ""}</option>)}</select><input value={form.used_diamond_code || ""} onChange={(e) => setForm({ ...form, used_diamond_code: e.target.value, diamond_product_id: "" })} placeholder="Biliyorsanız elmas kodunu yazın; yoksa boş bırakın" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div><div className="text-xs text-slate-500">Stoktan seçim kodu otomatik doldurur; listede yoksa kodu elle yazabilirsiniz.</div><ImageUpload value={form.diamond_image_url} onChange={(diamond_image_url) => setForm({ ...form, diamond_image_url })} label="Kullanılan kesici elmas resmi (isteğe bağlı)" /></div>
           <div className="md:col-span-3">
             <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 bg-slate-950 hover:border-blue-500/50 cursor-pointer select-none">
               <input type="checkbox" checked={!!form.is_special}
@@ -436,6 +439,7 @@ export default function Products() {
                             <label className="text-xs font-bold text-slate-700">Minimum stok<input type="number" step="0.01" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
                             <label className="text-xs font-bold text-slate-700">Mevcut stok<input type="number" step="0.01" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
                             <div className="md:col-span-4"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Ürün görseli 1" /></div><div className="md:col-span-4"><ImageUpload value={form.image_url_2} onChange={(image_url_2) => setForm({ ...form, image_url_2 })} label="Ürün görseli 2" /></div>
+                            <div className="md:col-span-4 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2"><div className="text-xs font-black uppercase tracking-wider text-amber-800">Kullanılan kesici elmas</div><div className="grid grid-cols-1 md:grid-cols-2 gap-2"><select value={form.diamond_product_id || ""} onChange={(e) => { const product = items.find((item) => item.id === e.target.value); setForm({ ...form, diamond_product_id: e.target.value, used_diamond_code: product?.code || form.used_diamond_code }); }} className="w-full h-10 rounded-lg border border-slate-300 px-3"><option value="">Stoktaki üründen seç (isteğe bağlı)</option>{items.map((item) => <option key={item.id} value={item.id}>{item.code || "Kodsuz"} — {item.name}{item.brand ? ` | ${item.brand}` : ""}</option>)}</select><input value={form.used_diamond_code || ""} onChange={(e) => setForm({ ...form, used_diamond_code: e.target.value, diamond_product_id: "" })} placeholder="Elmas kodu (isteğe bağlı)" className="w-full h-10 rounded-lg border border-slate-300 px-3" /></div><ImageUpload value={form.diamond_image_url} onChange={(diamond_image_url) => setForm({ ...form, diamond_image_url })} label="Kullanılan kesici elmas resmi (isteğe bağlı)" /></div>
                             <label className="md:col-span-3 flex items-center gap-2 text-sm font-bold text-slate-800"><input type="checkbox" checked={!!form.is_special} onChange={(e) => setForm({ ...form, is_special: e.target.checked })} className="w-5 h-5 accent-blue-600" /> Özel takım</label>
                             <div className="flex justify-end gap-2"><button type="submit" className="h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black">Kaydet</button></div>
                           </form>
@@ -447,7 +451,7 @@ export default function Products() {
                     <td className="px-4 font-mono-tab font-semibold text-slate-300">{p.code}</td>
                     <td className="px-2 font-medium break-words">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {crit && <span className="inline-flex items-center rounded-md bg-red-600 px-2 py-1 text-[10px] font-black tracking-wide text-white">KRİTİK STOK UYARI</span>}<span>{p.name}</span><ImageHover src={p.image_url} alt={`${p.name} görsel 1`} />{p.image_url_2 && <ImageHover src={p.image_url_2} alt={`${p.name} görsel 2`} />}
+                        {crit && <span className="inline-flex items-center rounded-md bg-red-600 px-2 py-1 text-[10px] font-black tracking-wide text-white">KRİTİK STOK UYARI</span>}<span>{p.name}</span><span className="inline-flex items-center gap-1 text-[10px] text-slate-400">Ürün <ImageHover src={p.image_url} alt={`${p.name} ürün görseli`} />{p.image_url_2 && <ImageHover src={p.image_url_2} alt={`${p.name} ürün görseli 2`} />}</span>{(p.used_diamond_code || p.diamond_image_url) && <span className="inline-flex items-center gap-1 text-[10px] text-amber-300">Kesici Elmas {p.used_diamond_code && <span className="font-mono-tab">{p.used_diamond_code}</span>}{p.diamond_image_url && <ImageHover src={p.diamond_image_url} alt={`${p.name} kesici elmas görseli`} />}</span>}
                         {p.is_special && (
                           <span data-testid={`product-special-badge-${p.code}`} className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider text-blue-300 bg-blue-500/10 border border-blue-500/40 rounded px-1.5 py-0.5">
                             Özel Takım
