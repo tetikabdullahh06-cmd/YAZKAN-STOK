@@ -233,6 +233,8 @@ class GloveStockOut(BaseModel):
 
 
 class ToolHolderScrapIn(BaseModel):
+    stock_type: Optional[str] = "holder"
+    product_id: Optional[str] = ""
     quantity: float
     scrap_reason: str
     description: Optional[str] = ""
@@ -2058,6 +2060,56 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
     return {"ok": True, "new_stock": new_stock, "scrap": clean(doc)}
 
 
+@api.post("/products/{pid}/scrap")
+async def product_scrap(pid: str, body: ToolHolderScrapIn, user=Depends(require_admin)):
+    product = await db.products.find_one({"id": pid})
+    if not product:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Hurda miktarı 0'dan büyük olmalı")
+    if body.quantity > float(product.get("current_stock", 0)):
+        raise HTTPException(status_code=400, detail="Hurda miktarı mevcut stoktan fazla olamaz")
+    if not body.scrap_reason.strip():
+        raise HTTPException(status_code=400, detail="Hurda nedeni zorunludur")
+    new_stock = round(float(product.get("current_stock", 0)) - body.quantity, 6)
+
+    async def personnel_name(pid_value: str) -> str:
+        if not pid_value:
+            return ""
+        person = await db.personnel.find_one({"id": pid_value})
+        return f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else ""
+
+    operator_name = await personnel_name(body.operator_personnel_id or "") or user.get("name", "")
+    witness_name = await personnel_name(body.witness_personnel_id or "") or body.witness or ""
+    machine = await db.machines.find_one({"id": body.machine_id}) if body.machine_id else None
+    now = now_utc().isoformat()
+    counter = await db.counters.find_one_and_update({"_id": "toolholder_scrap_record"}, {"$inc": {"value": 1}}, upsert=True, return_document=ReturnDocument.AFTER)
+    record_no = f"YAZKANİŞLEME{int(counter.get('value', 1)):06d}"
+    doc = {
+        "id": new_id(), "record_no": record_no, "stock_type": "product", "product_id": product["id"], "tool_holder_id": "",
+        "name": product.get("name", ""), "code": product.get("code", ""), "brand": product.get("brand", ""),
+        "holder_type": product.get("category", ""), "cutting_tool_code_name": product.get("code", ""), "length": "", "diameter": "",
+        "quantity": body.quantity, "unit": product.get("unit", "adet"), "scrap_reason": body.scrap_reason.strip(),
+        "description": body.description or "", "scrap_date": body.scrap_date, "location": body.location or product.get("location", ""),
+        "approved_by": body.approved_by or "", "witness": witness_name, "prepared_by": body.prepared_by or "Abdullah Tetik", "foreman_name": body.foreman_name or "Celal",
+        "machine_id": body.machine_id or "", "machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else "",
+        "production_product": body.production_product or "", "root_cause": body.root_cause or "", "corrective_action": body.corrective_action or "",
+        "preventive_action": body.preventive_action or "", "disposition": body.disposition or "", "operator_personnel_id": body.operator_personnel_id or "",
+        "approver_personnel_id": body.approver_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "", "operator_name": operator_name,
+        "user_id": user["id"], "user_name": user.get("name", ""), "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
+        "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
+        "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []), "created_at": now, "new_stock": new_stock,
+    }
+    await db.products.update_one({"id": pid}, {"$set": {"current_stock": new_stock}})
+    await db.toolholder_scraps.insert_one(doc)
+    await db.movements.insert_one({
+        "id": new_id(), "type": "scrap", "product_id": product["id"], "product_code": product.get("code", ""), "product_name": product.get("name", ""),
+        "quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "note": body.description or "", "user_id": user["id"],
+        "user_name": user.get("name", ""), "created_at": now, "transaction_date": body.scrap_date,
+    })
+    return {"ok": True, "new_stock": new_stock, "scrap": clean(doc)}
+
+
 @api.put("/toolholder-scraps/{scrap_id}")
 async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=Depends(require_admin)):
     record = await db.toolholder_scraps.find_one({"id": scrap_id})
@@ -2065,6 +2117,19 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
         raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
     if body.quantity <= 0 or not body.scrap_reason.strip():
         raise HTTPException(status_code=400, detail="Miktar ve hurda nedeni zorunludur")
+    if record.get("stock_type") == "product":
+        product = await db.products.find_one({"id": record.get("product_id")})
+        if not product:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+        old_qty = float(record.get("quantity", 0)); current_stock = float(product.get("current_stock", 0)); new_stock = round(current_stock + old_qty - body.quantity, 6)
+        if new_stock < 0:
+            raise HTTPException(status_code=400, detail="Bu düzeltme stok miktarını eksiye düşürüyor")
+        update = {"quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "description": body.description or "", "scrap_date": body.scrap_date, "location": body.location or product.get("location", ""), "disposition": body.disposition or "", "operator_personnel_id": body.operator_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "", "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "", "before_image_urls": body.before_image_urls or [], "after_image_urls": body.after_image_urls or [], "new_stock": new_stock, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}
+        await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+        await db.toolholder_scraps.update_one({"id": scrap_id}, {"$set": update})
+        await db.movements.insert_one({"id": new_id(), "type": "scrap_adjustment", "product_id": product["id"], "product_code": product.get("code", ""), "product_name": product.get("name", ""), "quantity": round(body.quantity - old_qty, 6), "note": "Ürün hurda kaydı düzeltildi", "scrap_id": scrap_id, "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat()})
+        updated = await db.toolholder_scraps.find_one({"id": scrap_id}, {"_id": 0})
+        return {"ok": True, "new_stock": new_stock, "scrap": updated}
     holder = await db.toolholders.find_one({"id": record["tool_holder_id"]})
     if not holder:
         raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
@@ -2109,6 +2174,15 @@ async def delete_toolholder_scrap(scrap_id: str, user=Depends(require_admin)):
     record = await db.toolholder_scraps.find_one({"id": scrap_id})
     if not record:
         raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    if record.get("stock_type") == "product":
+        product = await db.products.find_one({"id": record.get("product_id")})
+        if not product:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+        new_stock = round(float(product.get("current_stock", 0)) + float(record.get("quantity", 0)), 6)
+        await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
+        await db.toolholder_scraps.delete_one({"id": scrap_id})
+        await db.movements.insert_one({"id": new_id(), "type": "scrap_cancel", "product_id": product["id"], "product_code": product.get("code", ""), "product_name": product.get("name", ""), "quantity": record.get("quantity", 0), "note": "Ürün hurda kaydı silindi; stok geri eklendi", "scrap_id": scrap_id, "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat()})
+        return {"ok": True, "new_stock": new_stock}
     holder = await db.toolholders.find_one({"id": record["tool_holder_id"]})
     if not holder:
         raise HTTPException(status_code=404, detail="Tutucu bulunamadı")
@@ -2164,12 +2238,12 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         # Alt şirket adresi ve iletişim metni bilinçli olarak gösterilmez; yalnızca ayırıcı çizgi korunur.
     y = height - 135
     pdf.setFont(bold_font, 16)
-    pdf.drawCentredString(width / 2, y, "TAKIM TUTUCU HURDA / KULLANIM DIŞI TUTANAĞI")
+    pdf.drawCentredString(width / 2, y, "STOK ÜRÜNÜ / TAKIM TUTUCU HURDA - KULLANIM DIŞI TUTANAĞI")
     y -= 35
     pdf.setFont(regular_font, 10)
     rows = [
         ("TUTANAK NO", scrap.get("record_no") or f"YAZKANİŞLEME{str(scrap.get('id', ''))[:6].upper()}"), ("TARİH", scrap.get("scrap_date", "")),
-        ("TAKIM ÜRETİCİ / MARKA", scrap.get("brand", "")), ("TAKIM ADI / KODU", scrap.get("name", "")),
+        ("ÜRETİCİ / MARKA", scrap.get("brand", "")), ("ÜRÜN / TAKIM ADI - KODU", f"{scrap.get('name', '')} / {scrap.get('code', '')}".strip(" /")),
         ("PARÇA ADI / ÜRETİM", scrap.get("production_product", "")), ("PARÇA NO", scrap.get("part_no", "")),
         ("İŞLEMİ YAPAN / OPERATÖR", scrap.get("operator_name") or scrap.get("user_name", "")), ("TEZGAH NO / ADI", f"{scrap.get('machine_code', '')} — {scrap.get('machine_name', '')}".strip(" —")),
         ("ÖLÇÜLER", f"Boy: {scrap.get('length', '')} | Çap: {scrap.get('diameter', '')}"), ("HURDA MİKTARI", f"{scrap.get('quantity', 0)} {scrap.get('unit', 'adet')}"),
