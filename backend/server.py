@@ -193,6 +193,8 @@ class ToolHolderIn_Model(BaseModel):
     location: Optional[str] = ""
     note: Optional[str] = ""
     image_url: Optional[str] = ""
+    used_diamond_code: Optional[str] = ""
+    diamond_image_url: Optional[str] = ""
 
 
 class ToolHolderStockIn(BaseModel):
@@ -481,6 +483,11 @@ async def startup():
     admin_name = os.environ.get("ADMIN_NAME", "Admin")
     # Migration: any existing user without a role becomes 'viewer' (fail-safe: least privilege)
     await db.users.update_many({"role": {"$exists": False}}, {"$set": {"role": "viewer"}})
+    # Migration: add optional diamond fields to legacy tool-holder cards without overwriting values.
+    await db.toolholders.update_many(
+        {"used_diamond_code": {"$exists": False}},
+        {"$set": {"used_diamond_code": "", "diamond_image_url": ""}},
+    )
     # Migration: add the new diamond-code fields to legacy product cards without overwriting existing values.
     await db.products.update_many(
         {"used_diamond_code": {"$exists": False}},
@@ -2391,9 +2398,9 @@ async def toolholder_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Tutucular"
-    ws.append(["name", "brand", "cutting_tool_code_name", "type", "length", "diameter", "min_stock", "current_stock", "location", "note", "image_url"])
-    ws.append(["BT40 Örnek Tutucu", "Regofix", "WNMG 080412-PM", "BT40", "120", "32", 1, 5, "Raf A-1", "", ""])
-    ws.append(["HSK-A63 ER32", "Big Kaiser", "ER32 pens seti", "HSK-A63", "90", "25", 1, 3, "Raf A-2", "Kısa tip", ""])
+    ws.append(["name", "brand", "cutting_tool_code_name", "type", "length", "diameter", "min_stock", "current_stock", "location", "note", "used_diamond_code", "image_url", "diamond_image_url"])
+    ws.append(["BT40 Örnek Tutucu", "Regofix", "WNMG 080412-PM", "BT40", "120", "32", 1, 5, "Raf A-1", "", "", "", ""])
+    ws.append(["HSK-A63 ER32", "Big Kaiser", "ER32 pens seti", "HSK-A63", "90", "25", 1, 3, "Raf A-2", "Kısa tip", "", "", ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -2481,7 +2488,9 @@ async def toolholder_import(file: UploadFile = File(...), commit: bool = False,
             "current_stock": current_stock,
             "location": _safe_str(_get(row, "location")),
             "note": _safe_str(_get(row, "note")),
+            "used_diamond_code": _safe_str(_get(row, "used_diamond_code")),
             "image_url": _safe_str(_get(row, "image_url")),
+            "diamond_image_url": _safe_str(_get(row, "diamond_image_url")),
         }
         # Match on name + brand + type (best-effort uniqueness key)
         query = {"name": d["name"]}

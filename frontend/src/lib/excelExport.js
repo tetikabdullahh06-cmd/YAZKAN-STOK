@@ -1,9 +1,10 @@
 import ExcelJS from "exceljs";
 
-export async function downloadImageWorkbook({ sheetName, rows, filename, imageKey = "Görsel", imageSourceKey = "__imageUrl", includeImages = true }) {
+export async function downloadImageWorkbook({ sheetName, rows, filename, imageKey = "Görsel", imageSourceKey = "__imageUrl", imageSlots = [], includeImages = true }) {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
-  const headers = rows.length ? Object.keys(rows[0]).filter((key) => !key.startsWith("__") && (includeImages || key !== imageKey)) : (includeImages ? [imageKey] : []);
+  const imageKeys = new Set([imageKey, ...imageSlots.map((slot) => slot.key)]);
+  const headers = rows.length ? Object.keys(rows[0]).filter((key) => !key.startsWith("__") && (includeImages || !imageKeys.has(key))) : (includeImages ? [...imageKeys] : []);
 
   worksheet.columns = headers.map((header) => ({
     header,
@@ -18,12 +19,14 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
     worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rows.length + 1), column: headers.length } };
     worksheet.views = [{ state: "frozen", ySplit: 1 }];
   }
-  const imageColumn = headers.indexOf(imageKey);
-  if (includeImages && imageColumn >= 0) {
+  const slots = [{ key: imageKey, sourceKey: imageSourceKey }, ...imageSlots];
+  if (includeImages) slots.forEach(({ key, sourceKey }) => {
+    const imageColumn = headers.indexOf(key);
+    if (imageColumn < 0) return;
     rows.forEach((row, index) => {
       const imageCell = worksheet.getCell(index + 2, imageColumn + 1);
       imageCell.value = null;
-      const imageUrl = String(row[imageSourceKey] || "");
+      const imageUrl = String(row[sourceKey] || "");
       if (!imageUrl.startsWith("data:image/")) return;
       const extension = imageUrl.startsWith("data:image/png") ? "png" : "jpeg";
       const imageId = workbook.addImage({ base64: imageUrl, extension });
@@ -33,7 +36,7 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
       });
       worksheet.getRow(index + 2).height = 58;
     });
-  }
+  });
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

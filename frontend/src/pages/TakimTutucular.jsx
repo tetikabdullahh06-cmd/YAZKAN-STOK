@@ -13,7 +13,7 @@ import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 
 const emptyForm = {
   name: "", brand: "", cutting_tool_code_name: "", type: "", length: "", diameter: "",
-  min_stock: 0, current_stock: 0, location: "", note: "", image_url: ""
+  min_stock: 0, current_stock: 0, location: "", note: "", image_url: "", used_diamond_code: "", diamond_image_url: "", diamond_product_id: ""
 };
 
 const DEFAULT_TYPES = ["BT30", "BT40", "BT50", "HSK-A63", "HSK-A100", "ER Pens Tutucu", "Shrink Fit", "Weldon", "Diğer"];
@@ -96,6 +96,7 @@ const MILLING_CATALOG = [
 export default function TakimTutucular() {
   const { isAdmin } = useAuth();
   const [items, setItems] = useState([]);
+  const [products, setProducts] = useState([]);
   const [machines, setMachines] = useState([]);
   const [personnel, setPersonnel] = useState([]);
   const [q, setQ] = useState("");
@@ -112,6 +113,7 @@ export default function TakimTutucular() {
 
   const load = () => Promise.all([
     api.get("/toolholders").then((r) => setItems(r.data)),
+    api.get("/products").then((r) => setProducts(r.data)).catch(() => setProducts([])),
     api.get("/machines").then((r) => setMachines(r.data)).catch(() => setMachines([])),
     api.get("/personnel").then((r) => setPersonnel(r.data)).catch(() => setPersonnel([])),
   ]);
@@ -123,6 +125,7 @@ export default function TakimTutucular() {
     return (t.name || "").toLowerCase().includes(s)
       || (t.brand || "").toLowerCase().includes(s)
       || (t.cutting_tool_code_name || "").toLowerCase().includes(s)
+      || (t.used_diamond_code || "").toLowerCase().includes(s)
       || (t.type || "").toLowerCase().includes(s)
       || (t.length || "").toLowerCase().includes(s)
       || (t.diameter || "").toLowerCase().includes(s)
@@ -142,8 +145,9 @@ export default function TakimTutucular() {
 
   const submit = async (e) => {
     e.preventDefault();
+    const { diamond_product_id, ...formPayload } = form;
     const payload = {
-      ...form,
+      ...formPayload,
       min_stock: parseFloat(form.min_stock) || 0,
       current_stock: parseFloat(form.current_stock) || 0,
     };
@@ -215,8 +219,11 @@ export default function TakimTutucular() {
       "Mevcut Stok": t.current_stock ?? 0,
       "Stok Durumu": Number(t.current_stock || 0) <= Number(t.min_stock || 0) ? "Kritik" : "Normal",
       "Not": t.note || "",
+      "Kullanılan Kesici Elmas Kodu": t.used_diamond_code || "",
       "Görsel": "",
+      "Kesici Elmas Görseli": "",
       __imageUrl: t.image_url || "",
+      __diamondImageUrl: t.diamond_image_url || "",
     }));
     const suffix = q.trim() ? "filtreli" : "tam-liste";
     await downloadImageWorkbook({
@@ -224,6 +231,7 @@ export default function TakimTutucular() {
       rows,
       imageKey: "Görsel",
       imageSourceKey: "__imageUrl",
+      imageSlots: [{ key: "Kesici Elmas Görseli", sourceKey: "__diamondImageUrl" }],
       includeImages,
       filename: `takim-tutucular-${includeImages ? "resimli" : "resimsiz"}-${suffix}-${new Date().toISOString().slice(0, 10)}.xlsx`,
     });
@@ -335,6 +343,7 @@ export default function TakimTutucular() {
             <input type="number" step="1" min="0" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} data-testid="th-f-current" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3 font-mono-tab" />
           </div>
           <div className="md:col-span-3"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Takım tutucu görseli" /></div>
+          <div className="md:col-span-3 rounded-xl border border-amber-700/50 bg-amber-950/20 p-4 space-y-3"><div className="text-xs font-black uppercase tracking-wider text-amber-300">Kullanılan kesici elmas</div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><select value={form.diamond_product_id || ""} onChange={(e) => { const product = products.find((item) => item.id === e.target.value); setForm({ ...form, diamond_product_id: e.target.value, used_diamond_code: product?.code || form.used_diamond_code }); }} className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3"><option value="">Stoktaki üründen seç (isteğe bağlı)</option>{products.map((product) => <option key={product.id} value={product.id}>{product.code || "Kodsuz"} — {product.name}{product.brand ? ` | ${product.brand}` : ""}</option>)}</select><input value={form.used_diamond_code || ""} onChange={(e) => setForm({ ...form, used_diamond_code: e.target.value, diamond_product_id: "" })} placeholder="Biliyorsanız elmas kodunu yazın; yoksa boş bırakın" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" /></div><div className="text-xs text-slate-500">Stoktan seçim kodu otomatik doldurur; listede yoksa kodu elle yazabilirsiniz.</div><ImageUpload value={form.diamond_image_url} onChange={(diamond_image_url) => setForm({ ...form, diamond_image_url })} label="Kullanılan kesici elmas resmi (isteğe bağlı)" /></div>
           <div className="md:col-span-3 flex gap-3">
               <button type="submit" data-testid="th-f-submit" className="h-12 px-6 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">{editId ? "Mevcut Tutucuyu Güncelle" : "Yeni Tutucu Kaydet"}</button>
             <button type="button" onClick={() => { setShowForm(false); setEditId(null); }} className="h-12 px-6 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">İptal</button>
@@ -378,13 +387,14 @@ export default function TakimTutucular() {
                             <label className="text-xs font-bold text-slate-700">Minimum stok<input type="number" step="1" min="0" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
                             <label className="text-xs font-bold text-slate-700">Mevcut stok<input type="number" step="1" min="0" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} className="mt-1 w-full h-10 rounded-lg border border-slate-300 px-3" /></label>
                             <div className="md:col-span-4"><ImageUpload value={form.image_url} onChange={(image_url) => setForm({ ...form, image_url })} label="Takım tutucu görseli" /></div>
+                            <div className="md:col-span-4 rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2"><div className="text-xs font-black uppercase tracking-wider text-amber-800">Kullanılan kesici elmas</div><div className="grid grid-cols-1 md:grid-cols-2 gap-2"><select value={form.diamond_product_id || ""} onChange={(e) => { const product = products.find((item) => item.id === e.target.value); setForm({ ...form, diamond_product_id: e.target.value, used_diamond_code: product?.code || form.used_diamond_code }); }} className="w-full h-10 rounded-lg border border-slate-300 px-3"><option value="">Stoktaki üründen seç (isteğe bağlı)</option>{products.map((product) => <option key={product.id} value={product.id}>{product.code || "Kodsuz"} — {product.name}{product.brand ? ` | ${product.brand}` : ""}</option>)}</select><input value={form.used_diamond_code || ""} onChange={(e) => setForm({ ...form, used_diamond_code: e.target.value, diamond_product_id: "" })} placeholder="Elmas kodu (isteğe bağlı)" className="w-full h-10 rounded-lg border border-slate-300 px-3" /></div><ImageUpload value={form.diamond_image_url} onChange={(diamond_image_url) => setForm({ ...form, diamond_image_url })} label="Kullanılan kesici elmas resmi (isteğe bağlı)" /></div>
                             <div className="md:col-span-4 flex justify-end"><button type="submit" className="h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black">Kaydet</button></div>
                           </form>
                         </td>
                       </tr>
                     )}
                     <tr key={t.id} id={`th-row-${t.id}`} data-testid={`th-row-${t.id}`} className={`h-16 hover:bg-slate-700/40 ${crit ? "bg-red-950/20" : ""}`}>
-                    <td className="px-4 font-medium">{t.name}<ImageHover src={t.image_url} alt={t.name} /></td>
+                    <td className="px-4 font-medium"><div className="flex items-center gap-2 flex-wrap">{t.name}<span className="inline-flex items-center gap-1 text-[10px] text-slate-400">Tutucu <ImageHover src={t.image_url} alt={`${t.name} tutucu görseli`} /></span>{(t.used_diamond_code || t.diamond_image_url) && <span className="inline-flex items-center gap-1 text-[10px] text-amber-300">Kesici Elmas {t.used_diamond_code && <span className="font-mono-tab">{t.used_diamond_code}</span>}{t.diamond_image_url && <ImageHover src={t.diamond_image_url} alt={`${t.name} kesici elmas görseli`} />}</span>}</div></td>
                     <td className="px-4 text-slate-300">{t.brand || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-slate-300">{t.cutting_tool_code_name || <span className="text-slate-600">-</span>}</td>
                     <td className="px-4 text-slate-300">{t.type || <span className="text-slate-600">-</span>}</td>
