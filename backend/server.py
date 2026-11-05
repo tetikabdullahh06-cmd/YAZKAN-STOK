@@ -1413,6 +1413,44 @@ async def create_recipe(body: RecipeIn, user=Depends(require_admin)):
     return clean(doc)
 
 
+@api.put("/recipes/{rid}")
+async def update_recipe(rid: str, body: RecipeIn, user=Depends(require_admin)):
+    recipe = await db.recipes.find_one({"id": rid})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Reçete bulunamadı")
+    if recipe.get("status") == "bound":
+        raise HTTPException(status_code=400, detail="Tezgâha bağlanmış reçete düzenlenemez")
+    if not body.name.strip() or not body.workpiece_name.strip():
+        raise HTTPException(status_code=400, detail="Reçete adı ve işlenecek ürün zorunludur")
+    if not body.lines:
+        raise HTTPException(status_code=400, detail="Reçeteye en az bir takım veya tutucu ekleyin")
+    lines = []
+    for line in body.lines:
+        if line.kind not in {"product", "toolholder"} or line.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Geçersiz reçete satırı")
+        collection = db.products if line.kind == "product" else db.toolholders
+        item = await collection.find_one({"id": line.reference_id})
+        if not item:
+            raise HTTPException(status_code=404, detail="Reçete satırındaki stok kaydı bulunamadı")
+        lines.append({"kind": line.kind, "reference_id": item["id"], "name": item.get("name", ""), "code": item.get("code", ""), "quantity": line.quantity, "note": line.note or "", "pair_id": line.pair_id or "", "machining_length": line.machining_length or "", "cutting_speed": line.cutting_speed or "", "spindle_speed": line.spindle_speed or "", "feed_rate": line.feed_rate or ""})
+    await db.recipes.update_one({"id": rid}, {"$set": {"name": body.name.strip(), "workpiece_name": body.workpiece_name.strip(), "note": body.note or "", "lines": lines, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}})
+    updated = await db.recipes.find_one({"id": rid}, {"_id": 0})
+    return clean(updated)
+
+
+@api.delete("/recipes/{rid}")
+async def delete_recipe(rid: str, user=Depends(require_admin)):
+    recipe = await db.recipes.find_one({"id": rid})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Reçete bulunamadı")
+    if recipe.get("status") == "bound":
+        raise HTTPException(status_code=400, detail="Tezgâha bağlanmış reçete silinemez")
+    result = await db.recipes.delete_one({"id": rid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Reçete bulunamadı")
+    return {"ok": True}
+
+
 @api.post("/recipes/{rid}/bind")
 async def bind_recipe(rid: str, body: RecipeBindIn, user=Depends(require_admin)):
     recipe = await db.recipes.find_one({"id": rid})
