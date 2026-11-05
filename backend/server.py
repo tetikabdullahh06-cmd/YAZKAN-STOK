@@ -173,6 +173,9 @@ class ProductIn(BaseModel):
     diamond_image_url: Optional[str] = ""
     supplier_id: Optional[str] = ""
     supplier_name: Optional[str] = ""
+    cutting_speed: Optional[str] = ""
+    spindle_speed: Optional[str] = ""
+    feed_rate: Optional[str] = ""
 
 
 class QuickStockAdjustmentIn(BaseModel):
@@ -2906,9 +2909,9 @@ async def product_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ürünler"
-    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand", "used_diamond_code", "image_url", "diamond_image_url"])
-    ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik", "", "", ""])
-    ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch", "", "", ""])
+    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand", "cutting_speed", "spindle_speed", "feed_rate", "used_diamond_code", "image_url", "diamond_image_url"])
+    ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik", "120", "3500", "450", "", "", ""])
+    ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch", "80", "2800", "220", "", "", ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -2989,6 +2992,9 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
         location = _safe_str(_get(row, "location"))
         quality = _safe_str(_get(row, "quality"))
         brand = _safe_str(_get(row, "brand"))
+        cutting_speed = _safe_str(_get(row, "cutting_speed"))
+        spindle_speed = _safe_str(_get(row, "spindle_speed"))
+        feed_rate = _safe_str(_get(row, "feed_rate"))
         used_diamond_code = _safe_str(_get(row, "used_diamond_code"))
         image_url = _safe_str(_get(row, "image_url"))
         diamond_image_url = _safe_str(_get(row, "diamond_image_url"))
@@ -2998,7 +3004,7 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
             "row": row_num, "action": action, "error": None,
             "data": {"code": code, "name": name, "category": category, "unit": unit,
                      "min_stock": min_stock, "current_stock": current_stock,
-                     "location": location, "quality": quality, "brand": brand, "used_diamond_code": used_diamond_code,
+                     "location": location, "quality": quality, "brand": brand, "cutting_speed": cutting_speed, "spindle_speed": spindle_speed, "feed_rate": feed_rate, "used_diamond_code": used_diamond_code,
                      "image_url": image_url, "diamond_image_url": diamond_image_url},
         })
 

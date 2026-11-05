@@ -9,7 +9,7 @@ import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 import QrScannerButton from "@/components/QrScanner";
 import { useAuth } from "@/context/AuthContext";
 
-const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", supplier_id: "", supplier_name: "", is_special: false, image_url: "", image_url_2: "", used_diamond_code: "", diamond_image_url: "", diamond_product_id: "" };
+const emptyForm = { code: "", name: "", category: "Kesici Uç", unit: "adet", min_stock: 0, current_stock: 0, location: "", quality: "", brand: "", supplier_id: "", supplier_name: "", cutting_speed: "", spindle_speed: "", feed_rate: "", is_special: false, image_url: "", image_url_2: "", used_diamond_code: "", diamond_image_url: "", diamond_product_id: "" };
 const DEFAULT_CATS = ["Kesici Uç", "Matkap", "Kater", "Apparat", "Ölçüm Aleti", "Diğer"];
 const CATS_STORAGE_KEY = "cnc_extra_categories";
 
@@ -77,6 +77,9 @@ export default function Products() {
       "Marka": p.brand || "",
       "Tedarikçi": p.supplier_name || "",
       "Kalite": p.quality || "",
+      "Kesme Hızı": p.cutting_speed || "",
+      "Devir": p.spindle_speed || "",
+      "İlerleme": p.feed_rate || "",
       "Konum": p.location || "",
       "Minimum Stok": p.min_stock ?? 0,
       "Mevcut Stok": p.current_stock ?? 0,
@@ -100,7 +103,7 @@ export default function Products() {
 
   const downloadImportTemplate = () => {
     const rows = [
-      { code: "", name: "Örnek Kesici Uç", category: "Kesici Uç", unit: "adet", brand: "Örnek Marka", quality: "P25", location: "A-01", min_stock: 2, current_stock: 10, is_special: "Hayır", used_diamond_code: "", image_url: "Görsel 1 URL veya data:image/...", image_url_2: "Görsel 2 URL veya data:image/...", diamond_image_url: "Kesici elmas görseli URL veya data:image/..." },
+      { code: "", name: "Örnek Kesici Uç", category: "Kesici Uç", unit: "adet", brand: "Örnek Marka", quality: "P25", location: "A-01", min_stock: 2, current_stock: 10, cutting_speed: "120", spindle_speed: "3500", feed_rate: "450", is_special: "Hayır", used_diamond_code: "", image_url: "Görsel 1 URL veya data:image/...", image_url_2: "Görsel 2 URL veya data:image/...", diamond_image_url: "Kesici elmas görseli URL veya data:image/..." },
       { code: "MEVCUT_ÜRÜN_KODU", name: "Mevcut ürüne stok ekleme", category: "Kesici Uç", unit: "adet", brand: "Aynı marka", quality: "Aynı kalite", location: "", min_stock: "", current_stock: 5, is_special: "Hayır" },
     ];
     const worksheet = XLSX.utils.json_to_sheet(rows); const workbook = XLSX.utils.book_new();
@@ -359,6 +362,18 @@ export default function Products() {
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Konum</label>
             <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} data-testid="pf-location" placeholder="Raf A-1, Dolap 3..."
               className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Kesme Hızı</label>
+            <input value={form.cutting_speed || ""} onChange={(e) => setForm({ ...form, cutting_speed: e.target.value })} data-testid="pf-cutting-speed" placeholder="Vc (örn. 120 m/dk)" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Devir</label>
+            <input value={form.spindle_speed || ""} onChange={(e) => setForm({ ...form, spindle_speed: e.target.value })} data-testid="pf-spindle-speed" placeholder="dev/dk (örn. 3500)" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">İlerleme</label>
+            <input value={form.feed_rate || ""} onChange={(e) => setForm({ ...form, feed_rate: e.target.value })} data-testid="pf-feed-rate" placeholder="mm/dk (örn. 450)" className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-3" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Minimum Stok</label>

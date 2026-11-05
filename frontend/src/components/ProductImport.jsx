@@ -113,7 +113,7 @@ export default function ProductImport({ onClose, onCommitted }) {
           </div>
 
           <div className="text-xs text-slate-500 bg-slate-800/40 border border-slate-700 rounded-lg p-3">
-            <strong>Format:</strong> Başlık satırı zorunlu — <span className="font-mono text-slate-300">code, name, category, unit, unit_price, min_stock, current_stock</span>. code/name/category boş bırakılamaz.
+            <strong>Format:</strong> Başlık satırı zorunlu — <span className="font-mono text-slate-300">code, name, category, unit, min_stock, current_stock, cutting_speed, spindle_speed, feed_rate</span>. code/name/category boş bırakılamaz.
             Kayıtlı bir kod bulunursa <span className="text-amber-300 font-semibold">güncellenir</span>, yoksa <span className="text-emerald-300 font-semibold">oluşturulur</span>.
           </div>
 
