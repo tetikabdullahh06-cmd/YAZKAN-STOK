@@ -2909,9 +2909,9 @@ async def product_import_template(user=Depends(get_current_user)):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ürünler"
-    ws.append(["code", "name", "category", "unit", "min_stock", "current_stock", "location", "quality", "brand", "cutting_speed", "spindle_speed", "feed_rate", "used_diamond_code", "image_url", "diamond_image_url"])
-    ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik", "120", "3500", "450", "", "", ""])
-    ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch", "80", "2800", "220", "", "", ""])
+    ws.append(["Kod", "Ürün Adı", "Kategori", "Birim", "Minimum Stok", "Mevcut Stok", "Konum", "Kalite", "Marka", "Kesme Hızı", "Devir", "İlerleme", "Kullanılan Kesici Elmas Kodu", "Görsel", "Kesici Elmas Görseli"])
+    ws.append(["", "Örnek Kesici Uç", "Kesici Uç", "adet", 10, 25, "Raf A-1", "TiN", "Sandvik", "120 m/dk", "3500 dev/dk", "450 mm/dk", "", "", ""])
+    ws.append(["", "Örnek Matkap Ø8", "Matkap", "adet", 5, 15, "Raf B-2", "HSS", "Bosch", "80 m/dk", "2800 dev/dk", "220 mm/dk", "", "", ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -2938,8 +2938,37 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
     if len(rows) < 2:
         raise HTTPException(status_code=400, detail="Dosyada veri yok (başlık + en az bir satır gerekli)")
 
-    header = [str(c).strip().lower() if c else "" for c in rows[0]]
-    idx = {h: i for i, h in enumerate(header) if h}
+    def _header_key(value):
+        text = unicodedata.normalize("NFKD", str(value or "").casefold())
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        text = text.translate(str.maketrans({"ı": "i"}))
+        return "_".join("".join(ch if ch.isalnum() else " " for ch in text).split())
+
+    # Accept both the original English import template and the Turkish headers
+    # used by the Products export. This also tolerates minor punctuation/spacing.
+    aliases = {
+        "kod": "code", "code": "code",
+        "urun_adi": "name", "urun_adı": "name", "name": "name",
+        "kategori": "category", "category": "category",
+        "birim": "unit", "unit": "unit",
+        "minimum_stok": "min_stock", "min_stock": "min_stock",
+        "mevcut_stok": "current_stock", "current_stock": "current_stock",
+        "konum": "location", "location": "location",
+        "kalite": "quality", "quality": "quality",
+        "marka": "brand", "brand": "brand",
+        "kesme_hizi": "cutting_speed", "cutting_speed": "cutting_speed",
+        "devir": "spindle_speed", "spindle_speed": "spindle_speed",
+        "ilerleme": "feed_rate", "feed_rate": "feed_rate",
+        "kullanilan_kesici_elmas_kodu": "used_diamond_code", "used_diamond_code": "used_diamond_code",
+        "gorsel": "image_url", "image_url": "image_url",
+        "kesici_elmas_gorseli": "diamond_image_url", "diamond_image_url": "diamond_image_url",
+    }
+    idx = {}
+    for i, raw_header in enumerate(rows[0]):
+        key = _header_key(raw_header)
+        canonical = aliases.get(key)
+        if canonical:
+            idx[canonical] = i
     for r in ("name", "category"):
         if r not in idx:
             raise HTTPException(status_code=400, detail=f"Zorunlu sütun eksik: {r}")
