@@ -3059,7 +3059,15 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
                                           "created_at": now_utc().isoformat()})
             created += 1
         else:
-            await db.products.update_one({"code": d["code"]}, {"$set": d})
+            # Exported workbooks may contain embedded images while the visible
+            # image URL cells are blank. Do not erase existing media (or other
+            # optional metadata) merely because an import column is empty.
+            update_data = {
+                key: value for key, value in d.items()
+                if key not in {"image_url", "diamond_image_url", "used_diamond_code"}
+                or _safe_str(value) != ""
+            }
+            await db.products.update_one({"code": d["code"]}, {"$set": update_data})
             updated += 1
     return {"committed": True, "stats": stats, "created": created,
             "updated": updated, "preview": preview}
