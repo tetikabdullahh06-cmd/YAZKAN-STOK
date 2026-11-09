@@ -2967,6 +2967,13 @@ async def product_import(file: UploadFile = File(...), commit: bool = False,
     for i, raw_header in enumerate(rows[0]):
         key = _header_key(raw_header)
         canonical = aliases.get(key)
+        # Some exported workbooks include the unit in the header itself,
+        # e.g. "Kesme Hızı (m/dk)". Match the canonical field prefix too.
+        if not canonical:
+            for alias_key, alias_value in aliases.items():
+                if key.startswith(f"{alias_key}_"):
+                    canonical = alias_value
+                    break
         if canonical:
             idx[canonical] = i
     for r in ("name", "category"):
