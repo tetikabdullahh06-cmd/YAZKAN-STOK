@@ -1,4 +1,9 @@
 import ExcelJS from "exceljs";
+import { excelDate } from "@/lib/dateFormat";
+
+const isDateHeader = (header) => /tarih|date/i.test(String(header || ""));
+
+const dateValue = (header, value) => isDateHeader(header) ? excelDate(value) : (value ?? "");
 
 export async function downloadImageWorkbook({ sheetName, rows, filename, imageKey = "Görsel", imageSourceKey = "__imageUrl", imageSlots = [], includeImages = true }) {
   const workbook = new ExcelJS.Workbook();
@@ -14,7 +19,12 @@ export async function downloadImageWorkbook({ sheetName, rows, filename, imageKe
   worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
 
-  rows.forEach((row) => worksheet.addRow(row));
+  rows.forEach((row) => {
+    const excelRow = worksheet.addRow(Object.fromEntries(headers.map((header) => [header, dateValue(header, row[header])] )));
+    headers.forEach((header, index) => {
+      if (isDateHeader(header) && excelRow.getCell(index + 1).value instanceof Date) excelRow.getCell(index + 1).numFmt = "dd/mm/yy";
+    });
+  });
   if (headers.length) {
     worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rows.length + 1), column: headers.length } };
     worksheet.views = [{ state: "frozen", ySplit: 1 }];
@@ -57,8 +67,11 @@ export async function downloadPlainWorkbook({ sheetName, rows, filename }) {
   worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
   rows.forEach((row) => {
     const plain = {};
-    headers.forEach((header) => { plain[header] = row[header] ?? ""; });
-    worksheet.addRow(plain);
+    headers.forEach((header) => { plain[header] = dateValue(header, row[header]); });
+    const excelRow = worksheet.addRow(plain);
+    headers.forEach((header, index) => {
+      if (isDateHeader(header) && excelRow.getCell(index + 1).value instanceof Date) excelRow.getCell(index + 1).numFmt = "dd/mm/yy";
+    });
   });
   if (headers.length) {
     worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rows.length + 1), column: headers.length } };

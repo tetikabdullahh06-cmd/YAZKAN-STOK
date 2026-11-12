@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import ToolHolderImport from "@/components/ToolHolderImport";
 import ImageUpload, { ImageHover } from "@/components/ImageUpload";
+import { dateTimeTR } from "@/lib/dateFormat";
 
 const emptyForm = {
   name: "", brand: "", cutting_tool_code_name: "", type: "", length: "", diameter: "",
@@ -535,7 +536,7 @@ export default function TakimTutucular() {
                   <tbody className="divide-y divide-slate-700">
                     {movements.map((m) => (
                       <tr key={m.id}>
-                        <td className="px-3 py-2 font-mono-tab text-slate-400 whitespace-nowrap">{new Date(m.created_at).toLocaleString("tr-TR")}</td>
+                        <td className="px-3 py-2 font-mono-tab text-slate-400 whitespace-nowrap">{dateTimeTR(m.created_at)}</td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${m.type === "in" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" : "text-amber-400 bg-amber-500/10 border-amber-500/30"}`}>
                             {m.type === "in" ? "Takımhane" : "Tezgah"}

@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { Plus, Pencil, Trash2, Search, Building2, FileSpreadsheet, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { dateOnly } from "@/lib/dateFormat";
+import { downloadPlainWorkbook } from "@/lib/excelExport";
 
 const empty = { name: "", contact_person: "", phone: "", email: "", address: "", note: "" };
 
@@ -62,10 +64,7 @@ export default function Suppliers() {
   const exportSupplierMaterials = () => {
     if (!selectedSupplier || !materialRows.length) return toast.info("Dışa aktarılacak malzeme bulunamadı");
     const rows = materialRows.map((m) => ({ "Tarih": m.transaction_date || (m.created_at || "").slice(0, 10), "Stok Türü": m.stock_kind === "toolholder" ? "Takım Tutucu" : "Ürün", "Malzeme": m.material_name || "-", "Kod": m.product_code || m.code || "-", "Miktar": m.quantity ?? 0, "Birim": m.unit || "adet", "Not": m.note || "" }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    if (rows.length) ws["!autofilter"] = { ref: `A1:H${rows.length + 1}` };
-    ws["!cols"] = [{ wch: 14 }, { wch: 16 }, { wch: 34 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 42 }];
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Tedarikçi Malzemeleri"); XLSX.writeFile(wb, `${selectedSupplier.name}-malzemeler.xlsx`); toast.success("Tedarikçi malzemeleri, filtreli Excel olarak aktarıldı");
+    downloadPlainWorkbook({ sheetName: "Tedarikçi Malzemeleri", rows, filename: `${selectedSupplier.name}-malzemeler.xlsx` }); toast.success("Tedarikçi malzemeleri, filtreli Excel olarak aktarıldı");
   };
 
   return (
@@ -123,7 +122,7 @@ export default function Suppliers() {
             <button onClick={() => loadSupplierMaterials(selectedSupplier)} className="h-10 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold">Filtrele</button>
             <span className="text-xs text-slate-300 font-bold">En fazla 1 yıl</span>
           </div>
-          <div className="overflow-x-auto rounded-xl border border-slate-700"><table className="w-full text-sm"><thead><tr className="bg-slate-950 text-slate-100"><th className="text-left p-3 font-black">Tarih</th><th className="text-left p-3 font-black">Tür</th><th className="text-left p-3 font-black">Malzeme</th><th className="text-left p-3 font-black">Kod</th><th className="text-right p-3 font-black">Miktar</th><th className="text-left p-3 font-black">Birim</th><th className="text-left p-3 font-black">Açıklama</th></tr></thead><tbody>{materialLoading ? <tr><td colSpan="7" className="p-8 text-center font-bold text-slate-300">Yükleniyor...</td></tr> : materialRows.length === 0 ? <tr><td colSpan="7" className="p-8 text-center font-bold text-slate-300">Bu tarih aralığında alınan malzeme yok.</td></tr> : materialRows.map((m, i) => <tr key={`${m.id || m.created_at}-${i}`} className="border-t border-slate-700"><td className="p-3 font-bold">{m.transaction_date || (m.created_at || "").slice(0, 10) || "-"}</td><td className="p-3 font-bold">{m.stock_kind === "toolholder" ? "Takım Tutucu" : "Ürün"}</td><td className="p-3 font-bold">{m.material_name || "-"}</td><td className="p-3 font-mono font-bold">{m.product_code || m.code || "-"}</td><td className="p-3 text-right font-mono font-black">{m.quantity ?? 0}</td><td className="p-3 font-bold">{m.unit || "adet"}</td><td className="p-3 font-bold text-slate-300">{m.note || m.description || "-"}</td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto rounded-xl border border-slate-700"><table className="w-full text-sm"><thead><tr className="bg-slate-950 text-slate-100"><th className="text-left p-3 font-black">Tarih</th><th className="text-left p-3 font-black">Tür</th><th className="text-left p-3 font-black">Malzeme</th><th className="text-left p-3 font-black">Kod</th><th className="text-right p-3 font-black">Miktar</th><th className="text-left p-3 font-black">Birim</th><th className="text-left p-3 font-black">Açıklama</th></tr></thead><tbody>{materialLoading ? <tr><td colSpan="7" className="p-8 text-center font-bold text-slate-300">Yükleniyor...</td></tr> : materialRows.length === 0 ? <tr><td colSpan="7" className="p-8 text-center font-bold text-slate-300">Bu tarih aralığında alınan malzeme yok.</td></tr> : materialRows.map((m, i) => <tr key={`${m.id || m.created_at}-${i}`} className="border-t border-slate-700"><td className="p-3 font-bold">{dateOnly(m.transaction_date || m.created_at)}</td><td className="p-3 font-bold">{m.stock_kind === "toolholder" ? "Takım Tutucu" : "Ürün"}</td><td className="p-3 font-bold">{m.material_name || "-"}</td><td className="p-3 font-mono font-bold">{m.product_code || m.code || "-"}</td><td className="p-3 text-right font-mono font-black">{m.quantity ?? 0}</td><td className="p-3 font-bold">{m.unit || "adet"}</td><td className="p-3 font-bold text-slate-300">{m.note || m.description || "-"}</td></tr>)}</tbody></table></div>
         </section>
       )}
 

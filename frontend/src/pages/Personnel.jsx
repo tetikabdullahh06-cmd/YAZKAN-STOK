@@ -3,7 +3,8 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, FileSpreadsheet, Download } from "lucide-react";
 import * as XLSX from "xlsx";
-import { downloadImageWorkbook, imageExportNotice } from "@/lib/excelExport";
+import { downloadImageWorkbook, downloadPlainWorkbook, imageExportNotice } from "@/lib/excelExport";
+import { dateOnly } from "@/lib/dateFormat";
 import { useAuth } from "@/context/AuthContext";
 import ImageUpload, { ImageHover } from "@/components/ImageUpload";
 
@@ -87,9 +88,7 @@ export default function Personnel() {
       })),
     ].sort((a, b) => String(b["Tarih"]).localeCompare(String(a["Tarih"])));
     if (!rows.length) return toast.info("Seçilen filtrelerde dışa aktarılacak detay yok");
-    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Kullanım Detayları");
-    XLSX.writeFile(wb, `YAZKAN-${personName.replace(/\s+/g, "-")}-kullanim-detaylari-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    downloadPlainWorkbook({ sheetName: "Kullanım Detayları", rows, filename: `YAZKAN-${personName.replace(/\s+/g, "-")}-kullanim-detaylari-${new Date().toISOString().slice(0, 10)}.xlsx` });
     toast.success(`${rows.length} kullanım detayı Excel'e aktarıldı`);
   };
 
@@ -212,8 +211,8 @@ export default function Personnel() {
             {detailLoading ? <div className="py-8 text-center font-bold text-slate-600">Kullanım detayları yükleniyor...</div> : <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div className="rounded-xl bg-blue-50 border border-blue-200 p-4"><div className="text-xs font-bold text-blue-700">Kesici uç / elmas uç kullanımı</div><div className="text-2xl font-black text-slate-950">{filteredDetailRows.movements.reduce((n, row) => n + Number(row.quantity || 0), 0)}</div></div><div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4"><div className="text-xs font-bold text-emerald-700">Eldiven kullanımı</div><div className="text-2xl font-black text-slate-950">{filteredDetailRows.gloves.reduce((n, row) => n + Number(row.quantity || 0), 0)} çift</div></div><div className="rounded-xl bg-slate-50 border border-slate-200 p-4"><div className="text-xs font-bold text-slate-700">Kayıt sayısı</div><div className="text-2xl font-black text-slate-950">{filteredDetailRows.movements.length + filteredDetailRows.gloves.length}</div></div></div>
               <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-slate-700 border-b border-slate-200"><th className="p-3">Tarih</th><th className="p-3">Kayıt</th><th className="p-3">Ürün / Elmas uç</th><th className="p-3">Tezgah</th><th className="p-3">Eldiven</th><th className="p-3 text-right">Miktar</th><th className="p-3">Açıklama</th></tr></thead><tbody>
-                {filteredDetailRows.movements.map((row) => <tr key={`m-${row.id}`} className="border-b border-slate-100"><td className="p-3">{row.transaction_date || String(row.created_at || "").slice(0, 10) || "-"}</td><td className="p-3 font-bold text-blue-700">Kesici uç / stok</td><td className="p-3"><b>{row.product_code || "-"}</b><div>{row.product_name || "-"}</div></td><td className="p-3">{row.machine_name || row.machine_code || "-"}</td><td className="p-3">-</td><td className="p-3 text-right font-black">{row.quantity ?? 0} {row.unit || "adet"}</td><td className="p-3">{row.production_product || row.exit_reason || row.note || "-"}</td></tr>)}
-                {filteredDetailRows.gloves.map((row) => <tr key={`g-${row.id}`} className="border-b border-slate-100"><td className="p-3">{row.transaction_date || String(row.created_at || "").slice(0, 10) || "-"}</td><td className="p-3 font-bold text-emerald-700">Eldiven</td><td className="p-3">-</td><td className="p-3">-</td><td className="p-3">{row.glove_name || "-"}{row.size ? ` (${row.size})` : ""}{row.brand ? ` — ${row.brand}` : ""}</td><td className="p-3 text-right font-black">{row.quantity ?? 0} {row.unit || "çift"}</td><td className="p-3">{row.note || "-"}</td></tr>)}
+                {filteredDetailRows.movements.map((row) => <tr key={`m-${row.id}`} className="border-b border-slate-100"><td className="p-3">{dateOnly(row.transaction_date || row.created_at)}</td><td className="p-3 font-bold text-blue-700">Kesici uç / stok</td><td className="p-3"><b>{row.product_code || "-"}</b><div>{row.product_name || "-"}</div></td><td className="p-3">{row.machine_name || row.machine_code || "-"}</td><td className="p-3">-</td><td className="p-3 text-right font-black">{row.quantity ?? 0} {row.unit || "adet"}</td><td className="p-3">{row.production_product || row.exit_reason || row.note || "-"}</td></tr>)}
+                {filteredDetailRows.gloves.map((row) => <tr key={`g-${row.id}`} className="border-b border-slate-100"><td className="p-3">{dateOnly(row.transaction_date || row.created_at)}</td><td className="p-3 font-bold text-emerald-700">Eldiven</td><td className="p-3">-</td><td className="p-3">-</td><td className="p-3">{row.glove_name || "-"}{row.size ? ` (${row.size})` : ""}{row.brand ? ` — ${row.brand}` : ""}</td><td className="p-3 text-right font-black">{row.quantity ?? 0} {row.unit || "çift"}</td><td className="p-3">{row.note || "-"}</td></tr>)}
                 {!filteredDetailRows.movements.length && !filteredDetailRows.gloves.length && <tr><td colSpan={7} className="p-8 text-center font-bold text-slate-600">Seçilen filtrelerde kullanım detayı bulunamadı.</td></tr>}
               </tbody></table></div>
             </>}

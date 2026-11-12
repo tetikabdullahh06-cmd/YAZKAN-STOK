@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import * as XLSX from "xlsx";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
+import { downloadPlainWorkbook } from "@/lib/excelExport";
+import { dateOnly, dateTimeTR } from "@/lib/dateFormat";
 
 export default function Movements() {
   const [items, setItems] = useState([]);
@@ -59,7 +60,7 @@ export default function Movements() {
   const exportExcel = () => {
     if (!items.length) return toast.info("Dışa aktarılacak hareket bulunamadı");
     const rows = items.map((m) => ({
-      "İşlem Tarihi": m.transaction_date || (m.created_at ? new Date(m.created_at).toLocaleString("tr-TR") : ""),
+      "İşlem Tarihi": m.transaction_date || (m.created_at ? m.created_at : ""),
       "Tip": m.type === "in" ? "Giriş" : "Çıkış",
       "Çıkış Nedeni": m.type === "out" ? (m.exit_reason || m.movement_purpose || (m.sharpening_record_id ? "Bilemeye Giden" : "İşleme İçin Verildi")) : "-",
       "İşlem / Amaç": m.movement_category || m.exit_reason || (m.sharpening_record_id ? (m.type === "in" ? "Bilemeden Gelen" : "Bilemeye Giden") : (m.type === "in" ? "Stok Girişi" : "İşleme İçin Verildi")),
@@ -77,14 +78,7 @@ export default function Movements() {
       "Not": m.note || "",
       "Kullanıcı": m.user_name || "",
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const headers = Object.keys(rows[0]);
-    ws["!autofilter"] = { ref: `A1:P${rows.length + 1}` };
-    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
-    ws["!cols"] = headers.map((h) => ({ wch: Math.max(14, Math.min(32, h.length + 4)) }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Hareketler");
-    XLSX.writeFile(wb, `hareketler-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    downloadPlainWorkbook({ sheetName: "Hareketler", rows, filename: `hareketler-${new Date().toISOString().slice(0, 10)}.xlsx` });
     toast.success(`${rows.length} hareket Excel'e aktarıldı`);
   };
 
@@ -137,7 +131,7 @@ export default function Movements() {
               {items.length === 0 && <tr><td colSpan={10} className="p-8 text-center text-slate-500">Hareket yok</td></tr>}
               {items.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-700/40">
-                  <td className="px-4 py-3 font-mono-tab text-slate-400 whitespace-nowrap">{m.transaction_date ? new Date(`${m.transaction_date}T12:00:00`).toLocaleDateString("tr-TR") : new Date(m.created_at).toLocaleString("tr-TR")}</td>
+                  <td className="px-4 py-3 font-mono-tab text-slate-400 whitespace-nowrap">{m.transaction_date ? dateOnly(m.transaction_date) : dateTimeTR(m.created_at)}</td>
                                     <td className="px-4 py-3">
                     <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${m.movement_category === "Bilemeye Giden" ? "text-rose-700 bg-rose-100 border-rose-300" : m.movement_category === "Bilemeden Gelen" ? "text-emerald-700 bg-emerald-100 border-emerald-300" : m.type === "in" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" : "text-amber-400 bg-amber-500/10 border-amber-500/30"}`}>
                       {m.movement_category || m.exit_reason || (m.type === "in" ? "Giriş" : "Çıkış")}

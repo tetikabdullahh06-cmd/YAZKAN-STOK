@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, CheckCircle2, Package, Loader2, X, PackageCheck, Pencil } from "lucide-react";
 import OrderReceive from "@/components/OrderReceive";
 import { useAuth } from "@/context/AuthContext";
+import { dateOnly } from "@/lib/dateFormat";
 
 // Item mode: 'select' = pick from products list; 'manual' = type product info by hand
 const emptyItem = { mode: "select", kind: "product", product_id: "", toolholder_id: "", product_search: "", toolholder_search: "", product_code: "", product_name: "", category: "Diğer", unit: "adet", quantity: "" };
@@ -308,8 +309,8 @@ export default function Orders() {
                   <div>
                     <div className="font-display font-bold">{o.supplier_name}</div>
                     <div className="text-xs text-slate-500 font-mono-tab">
-                      #{o.id.slice(0, 8)} • {new Date(o.created_at).toLocaleDateString("tr-TR")}
-                      {o.delivery_date && ` • teslim: ${new Date(o.delivery_date).toLocaleDateString("tr-TR")}`}
+                      #{o.id.slice(0, 8)} • {dateOnly(o.created_at)}
+                      {o.delivery_date && ` • teslim: ${dateOnly(o.delivery_date)}`}
                     </div>
                   </div>
                 </div>
