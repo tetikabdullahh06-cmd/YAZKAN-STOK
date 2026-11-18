@@ -21,6 +21,8 @@ it("preserves the original F-165 merged headings, logo, footer and all filled va
   expect(ws.getCell("D2").value).toBe(recipe.workpiece_name); expect(ws.getCell("G3").value).toBe(recipe.machine_code); expect(ws.getCell("H3").value).toBe(recipe.machine_type);
   expect(ws.getCell("P4").value).toBe("TAKIM TAM BOY\n(mm)"); expect(ws.getCell("P6").value).toBe("185,25");
   expect(JSON.stringify(ws.getCell("P4").note)).toContain("ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.");
+  expect(ws.getCell("Q4").value).toBe("KESME HIZI\n(m/dk)"); expect(ws.getCell("Q5").master.address).toBe("Q4");
+  expect(ws.getCell("Q6").value).toBe(p.cutting_speed); expect(ws.pageSetup.printArea).toBe("A1:Q22");
   expect(ws.getCell("A6").value).toBe("T07"); expect(ws.getCell("B6").value).toBe(p.brand); expect(ws.getCell("J6").value).toBe(p.used_insert);
   expect(ws.getCell("L6").value).toBe(p.spindle_speed); expect(ws.getCell("M6").value).toBe(p.feed_rate);
   expect(ws.getCell("A20").value).toBe("HAZIRLAYAN"); expect(ws.getCell("A21").value).toBe(recipe.prepared_by); expect(ws.getCell("A22").value).toBe("F-165 / R.02 / 15.11.2019");
@@ -29,11 +31,21 @@ it("preserves the original F-165 merged headings, logo, footer and all filled va
 });
 
 it("paginates 29 rows without overwriting footer or losing images", async () => {
-  const groups = Array.from({ length: 29 }, (_, i) => ({ product: { ...p, tool_no: String(i + 1), name: `Takım ${i + 1}` }, holder: h }));
+  const groups = Array.from({ length: 29 }, (_, i) => ({ product: { ...p, tool_no: String(i + 1), name: `Takım ${i + 1}`, cutting_speed: `${i + 1} m/dk` }, holder: h }));
   const wb = await buildRecipeCardWorkbook(template, recipe, groups); const buffer = await wb.xlsx.writeBuffer();
   const loaded = new ExcelJS.Workbook(); await loaded.xlsx.load(buffer);
   expect(loaded.worksheets).toHaveLength(4);
-  [1, 2, 3].forEach((page) => { const ws = loaded.getWorksheet(`Takım Kartı ${page}`); expect(ws.getImages()).toHaveLength(1); expect(ws.getCell("A20").value).toBe("HAZIRLAYAN"); expect(ws.getCell("B4").value).toBe("TAKIM MARKASI"); });
+  [1, 2, 3].forEach((page) => {
+    const ws = loaded.getWorksheet(`Takım Kartı ${page}`);
+    expect(ws.getImages()).toHaveLength(1); expect(ws.getCell("A20").value).toBe("HAZIRLAYAN"); expect(ws.getCell("B4").value).toBe("TAKIM MARKASI");
+    expect(ws.getCell("P4").value).toBe("TAKIM TAM BOY\n(mm)");
+    expect(ws.getCell("Q4").value).toBe("KESME HIZI\n(m/dk)"); expect(ws.getCell("Q5").master.address).toBe("Q4");
+    expect(ws.pageSetup.printArea).toBe("A1:Q22");
+    groups.slice((page - 1) * 14, page * 14).forEach((group, i) => {
+      expect(ws.getCell(`P${i + 6}`).value).toBe(group.product.tool_total_length);
+      expect(ws.getCell(`Q${i + 6}`).value).toBe(group.product.cutting_speed);
+    });
+  });
   expect(loaded.getWorksheet("Takım Kartı 1").getCell("C19").value).toBe("Takım 14");
   expect(loaded.getWorksheet("Takım Kartı 2").getCell("C19").value).toBe("Takım 28");
   expect(loaded.getWorksheet("Takım Kartı 3").getCell("C6").value).toBe("Takım 29");
@@ -64,8 +76,9 @@ it("preserves legacy adjacent product/holder pairing and optional holder", () =>
 
 it("parses original F-165 safely and leaves unmatched tools out with warnings", () => {
   const book = XLSX.read(template, { type: "buffer" }); const matrix = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { header: 1, defval: "", raw: false });
-  const result = parseCardMatrix(matrix, [{ id: "one", name: "Ø55 ADİK", brand: "TEKNİK", code: "P1" }], []);
+  const result = parseCardMatrix(matrix, [{ id: "one", name: "Ø55 ADİK", brand: "TEKNİK", code: "P1", cutting_speed: "77 m/dk" }], []);
   expect(result.groups).toHaveLength(1); expect(result.warnings).toHaveLength(13); expect(result.groups[0].product.spindle_speed).toBe("450"); expect(result.groups[0].holder).toBeNull(); expect(result.card.publication_date).toBe("2025-05-09");
+  expect(result.groups[0].product.cutting_speed).toBe("77 m/dk");
 });
 
 it("supports GG/AA/YY input and canonical ISO persistence", () => {
@@ -74,19 +87,32 @@ it("supports GG/AA/YY input and canonical ISO persistence", () => {
 
 it("creates a completely blank reusable template and deliverable examples", async () => {
   const blank = await buildRecipeCardWorkbook(template, CARD_DEFAULTS, []);
-  for (let r = 6; r <= 19; r++) for (let c = 1; c <= 16; c++) expect(blank.worksheets[0].getCell(r, c).value).toBeNull();
+  for (let r = 6; r <= 19; r++) for (let c = 1; c <= 17; c++) expect(blank.worksheets[0].getCell(r, c).value).toBeNull();
   const dir = "/home/ubuntu/deliverables"; fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(`${dir}/F-165-zoller-recete-sablonu.xlsx`, await blank.xlsx.writeBuffer());
+  fs.writeFileSync(`${dir}/F-165-kesme-hizi-recete-sablonu.xlsx`, await blank.xlsx.writeBuffer());
   const example = await buildRecipeCardWorkbook(template, recipe, [{ product: p, holder: h }]);
-  fs.writeFileSync(`${dir}/F-165-zoller-ornek-recete-karti.xlsx`, await example.xlsx.writeBuffer());
+  fs.writeFileSync(`${dir}/F-165-kesme-hizi-ornek-recete-karti.xlsx`, await example.xlsx.writeBuffer());
 });
 
-it("imports Zoller length from the printed card without relying on the data sheet", async () => {
+it("imports Zoller length and cutting speed from the standalone printed card even when stock speed differs", async () => {
   const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: p, holder: h }]);
+  wb.removeWorksheet(wb.getWorksheet("Reçete Verileri").id);
+  const book = XLSX.read(await wb.xlsx.writeBuffer(), { type: "buffer" });
+  expect(book.SheetNames).toEqual(["Takım Kartı"]);
+  const matrix = XLSX.utils.sheet_to_json(book.Sheets["Takım Kartı"], { header: 1, defval: "", raw: false });
+  const result = parseCardMatrix(matrix, [{ id: "p1", name: p.name, code: p.code, brand: p.brand, cutting_speed: "999 m/dk" }], []);
+  expect(result.groups).toHaveLength(1); expect(result.groups[0].product.tool_total_length).toBe("185,25");
+  expect(result.groups[0].product.cutting_speed).toBe(p.cutting_speed);
+});
+
+it("preserves an explicitly blank cutting speed under the new printed heading instead of using stock speed", async () => {
+  const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: { ...p, cutting_speed: "" }, holder: h }]);
+  expect(wb.worksheets[0].getCell("Q4").value).toBe("KESME HIZI\n(m/dk)");
+  expect(wb.worksheets[0].getCell("Q6").value).toBe("");
   const book = XLSX.read(await wb.xlsx.writeBuffer(), { type: "buffer" });
   const matrix = XLSX.utils.sheet_to_json(book.Sheets["Takım Kartı"], { header: 1, defval: "", raw: false });
-  const result = parseCardMatrix(matrix, [{ id: "p1", name: p.name, code: p.code, brand: p.brand }], []);
-  expect(result.groups).toHaveLength(1); expect(result.groups[0].product.tool_total_length).toBe("185,25");
+  const result = parseCardMatrix(matrix, [{ id: "p1", name: p.name, code: p.code, brand: p.brand, cutting_speed: "999 m/dk" }], []);
+  expect(result.groups).toHaveLength(1); expect(result.groups[0].product.cutting_speed).toBe("");
 });
 it("keeps Zoller length optional for old recipes and old exported data", async () => {
   const legacy = { ...p }; delete legacy.tool_total_length;
