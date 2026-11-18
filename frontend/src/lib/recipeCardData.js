@@ -1,5 +1,5 @@
 export const CARD_DEFAULTS = { document_no: "T2.298", publication_date: "2025-05-09", revision_no: "00", revision_date: "", machine_code: "", machine_type: "", operation_no: "20", prepared_by: "", approved_by: "" };
-export const LINE_DEFAULTS = { tool_no: "", inner_cooling: "", holder_type: "", holder_length: "", drill_helix_length: "", insert_brand: "", used_insert: "", insert_quality: "", tool_life: "", special: "" };
+export const LINE_DEFAULTS = { tool_no: "", tool_total_length: "", inner_cooling: "", holder_type: "", holder_length: "", drill_helix_length: "", insert_brand: "", used_insert: "", insert_quality: "", tool_life: "", special: "" };
 export const norm = (value = "") => String(value ?? "").toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ı/g, "i").replace(/\s+/g, " ").trim();
 export const asText = (value) => String(value ?? "");
 
@@ -45,7 +45,7 @@ export function matchStock(items, { id = "", code = "", name = "", brand = "" })
 export function detailRows(recipe, groups) {
   return groups.map((g, i) => {
     const p = g.product || {}, h = g.holder || {};
-    return { "Reçete Adı": recipe.name || "", "İşlenecek Ürün": recipe.workpiece_name || "", Not: recipe.note || "", "Doküman No": recipe.document_no ?? CARD_DEFAULTS.document_no, "Yayın Tarihi": dateISO(recipe.publication_date ?? CARD_DEFAULTS.publication_date), "Revizyon No": recipe.revision_no ?? "00", "Revizyon Tarihi": dateISO(recipe.revision_date), "Makina Kodu": recipe.machine_code || "", "Makina Tipi": recipe.machine_type || "", "Operasyon No": recipe.operation_no ?? "20", Hazırlayan: recipe.prepared_by || "", Onaylayan: recipe.approved_by || "", "Takım No": p.tool_no || i + 1, "Takım Kodu": p.code || "", "Takım Adı": p.name || "", "Takım Markası": p.brand || "", "Takım Miktarı": p.quantity ?? "", "İşleme Boyu": p.machining_length || "", "Kesme Hızı": p.cutting_speed || "", Devir: p.spindle_speed || "", İlerleme: p.feed_rate || "", "İçten Soğutma": p.inner_cooling || "", "Tutucu Tipi": p.holder_type || "", "Tutucu Boyu": p.holder_length || "", "Matkap Helis Boyu": p.drill_helix_length || "", "İnsert Markası": p.insert_brand || "", "Kullanılan İnsert": p.used_insert || "", "İnsert Kalitesi": p.insert_quality || "", "Takım Ömrü": p.tool_life || "", Özel: p.special || "", "Tutucu Kodu": h.code || "", "Tutucu Adı": h.name || "", "Tutucu Markası": h.brand || "", "Tutucu Miktarı": h.quantity ?? "" };
+    return { "Reçete Adı": recipe.name || "", "İşlenecek Ürün": recipe.workpiece_name || "", Not: recipe.note || "", "Doküman No": recipe.document_no ?? CARD_DEFAULTS.document_no, "Yayın Tarihi": dateISO(recipe.publication_date ?? CARD_DEFAULTS.publication_date), "Revizyon No": recipe.revision_no ?? "00", "Revizyon Tarihi": dateISO(recipe.revision_date), "Makina Kodu": recipe.machine_code || "", "Makina Tipi": recipe.machine_type || "", "Operasyon No": recipe.operation_no ?? "20", Hazırlayan: recipe.prepared_by || "", Onaylayan: recipe.approved_by || "", "Takım No": p.tool_no || i + 1, "Takım Kodu": p.code || "", "Takım Adı": p.name || "", "Takım Markası": p.brand || "", "Takım Miktarı": p.quantity ?? "", "İşleme Boyu": p.machining_length || "", "Takım Tam Boy (mm)": p.tool_total_length || "", "Kesme Hızı": p.cutting_speed || "", Devir: p.spindle_speed || "", İlerleme: p.feed_rate || "", "İçten Soğutma": p.inner_cooling || "", "Tutucu Tipi": p.holder_type || "", "Tutucu Boyu": p.holder_length || "", "Matkap Helis Boyu": p.drill_helix_length || "", "İnsert Markası": p.insert_brand || "", "Kullanılan İnsert": p.used_insert || "", "İnsert Kalitesi": p.insert_quality || "", "Takım Ömrü": p.tool_life || "", Özel: p.special || "", "Tutucu Kodu": h.code || "", "Tutucu Adı": h.name || "", "Tutucu Markası": h.brand || "", "Tutucu Miktarı": h.quantity ?? "" };
   });
 }
 
@@ -56,7 +56,7 @@ export function parseDetailRows(rows, products, holders) {
     const p = matchStock(products, { code: row["Takım Kodu"], name: row["Takım Adı"], brand: row["Takım Markası"] });
     if (!p) { warnings.push(`${i + 1}. satır: ${row["Takım Adı"] || row["Takım Kodu"]} stokta tekil eşleşmedi`); return; }
     const pairId = `import-${Date.now()}-${i}`;
-    const product = { kind: "product", pair_id: pairId, reference_id: p.id, name: p.name, code: p.code || "", brand: p.brand || "", quantity: Number(row["Takım Miktarı"]) || 1, machining_length: asText(row["İşleme Boyu"]), cutting_speed: asText(row["Kesme Hızı"]), spindle_speed: asText(row.Devir), feed_rate: asText(row.İlerleme), tool_no: asText(row["Takım No"]), inner_cooling: asText(row["İçten Soğutma"]), holder_type: asText(row["Tutucu Tipi"]), holder_length: asText(row["Tutucu Boyu"]), drill_helix_length: asText(row["Matkap Helis Boyu"]), insert_brand: asText(row["İnsert Markası"]), used_insert: asText(row["Kullanılan İnsert"]), insert_quality: asText(row["İnsert Kalitesi"]), tool_life: asText(row["Takım Ömrü"]), special: asText(row.Özel) };
+    const product = { kind: "product", pair_id: pairId, reference_id: p.id, name: p.name, code: p.code || "", brand: p.brand || "", quantity: Number(row["Takım Miktarı"]) || 1, machining_length: asText(row["İşleme Boyu"]), tool_total_length: asText(row["Takım Tam Boy (mm)"] ?? row["Takım Tam Boy"]), cutting_speed: asText(row["Kesme Hızı"]), spindle_speed: asText(row.Devir), feed_rate: asText(row.İlerleme), tool_no: asText(row["Takım No"]), inner_cooling: asText(row["İçten Soğutma"]), holder_type: asText(row["Tutucu Tipi"]), holder_length: asText(row["Tutucu Boyu"]), drill_helix_length: asText(row["Matkap Helis Boyu"]), insert_brand: asText(row["İnsert Markası"]), used_insert: asText(row["Kullanılan İnsert"]), insert_quality: asText(row["İnsert Kalitesi"]), tool_life: asText(row["Takım Ömrü"]), special: asText(row.Özel) };
     let holder = null;
     if (row["Tutucu Adı"] || row["Tutucu Kodu"]) {
       const h = matchStock(holders, { name: row["Tutucu Adı"], code: row["Tutucu Kodu"], brand: row["Tutucu Markası"] });
@@ -74,6 +74,7 @@ export function parseCardMatrix(matrix, products, holders) {
   const warnings = [], groups = [];
   const header = matrix.findIndex((row) => norm(row[0]).includes("takim no") || norm(row[2]).includes("operasyon"));
   if (header < 0) throw new Error("F-165 kart başlıkları bulunamadı");
+  const totalLengthColumn = matrix[header].findIndex((value) => norm(value).includes("takim tam boy"));
   const r2 = matrix[1] || [], r3 = matrix[2] || [];
   const meta = asText(matrix[0]?.[12]);
   const extract = (key) => meta.match(new RegExp(`${key}\\s*:\\s*([^\\n]*)`, "i"))?.[1]?.trim() || "";
@@ -81,12 +82,12 @@ export function parseCardMatrix(matrix, products, holders) {
   const name = asText(r2[3] || r2[1]);
   for (let i = header + 2; i < matrix.length; i++) {
     const row = matrix[i];
-    if (norm(row[0]).includes("hazirlayan")) { card.prepared_by = asText(matrix[i + 1]?.[0]); card.approved_by = asText(matrix[i + 1]?.[2]); }
-    if (!/^\d+$/.test(asText(row[0]).trim()) || !row[2]) continue;
+    if (norm(row[0]).includes("hazirlayan")) { card.prepared_by = asText(matrix[i + 1]?.[0]); card.approved_by = asText(matrix[i + 1]?.[2]); break; }
+    if (!asText(row[0]).trim() || !row[2]) continue;
     const p = matchStock(products, { name: row[2], brand: row[1] });
     if (!p) { warnings.push(`${row[0]}. takım: ${row[2]} stokta tekil eşleşmedi; adı/markayı kontrol edin`); continue; }
     const pairId = `card-${Date.now()}-${i}`;
-    const product = { kind: "product", pair_id: pairId, reference_id: p.id, name: p.name, code: p.code || "", brand: p.brand || "", quantity: 1, ...LINE_DEFAULTS, tool_no: asText(row[0]), inner_cooling: row[3] ? "VAR" : row[4] ? "YOK" : "", holder_type: asText(row[5]), holder_length: asText(row[6]), drill_helix_length: asText(row[7]), insert_brand: asText(row[8]), used_insert: asText(row[9]), insert_quality: asText(row[10]), spindle_speed: asText(row[11]), feed_rate: asText(row[12]), tool_life: asText(row[13]), special: asText(row[14]), cutting_speed: asText(p.cutting_speed), machining_length: "" };
+    const product = { kind: "product", pair_id: pairId, reference_id: p.id, name: p.name, code: p.code || "", brand: p.brand || "", quantity: 1, ...LINE_DEFAULTS, tool_no: asText(row[0]), inner_cooling: row[3] ? "VAR" : row[4] ? "YOK" : "", holder_type: asText(row[5]), holder_length: asText(row[6]), drill_helix_length: asText(row[7]), insert_brand: asText(row[8]), used_insert: asText(row[9]), insert_quality: asText(row[10]), spindle_speed: asText(row[11]), feed_rate: asText(row[12]), tool_life: asText(row[13]), special: asText(row[14]), tool_total_length: totalLengthColumn >= 0 ? asText(row[totalLengthColumn]) : "", cutting_speed: asText(p.cutting_speed), machining_length: "" };
     // A holder TYPE (e.g. VELDON) is not a unique stock record. Preserve text only.
     groups.push({ pairId, product, holder: null });
   }

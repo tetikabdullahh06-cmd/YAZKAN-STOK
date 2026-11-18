@@ -14,11 +14,22 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     const ws = page === 0 ? source : wb.addWorksheet(`Takım Kartı ${page + 1}`);
     if (page > 0) { ws.model = clone(baseModel); }
     ws.name = pages === 1 ? "Takım Kartı" : `Takım Kartı ${page + 1}`;
-    ws.pageSetup = { ...ws.pageSetup, orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: "A1:O22" };
+    for (const [previous, expanded] of [["M1:O1", "M1:P1"], ["D2:O2", "D2:P2"], ["H3:O3", "H3:P3"]]) {
+      ws.unMergeCells(previous); ws.mergeCells(expanded);
+      const master = ws.getCell(expanded.split(":")[0]);
+      master.border = { ...master.border, right: { style: "medium", color: { argb: "FF000000" } } };
+    }
+    ws.mergeCells("P4:P5");
+    ws.getColumn(16).width = 13;
+    ws.getCell("P4").style = clone(ws.getCell("O4").style);
+    ws.getCell("P4").value = "TAKIM TAM BOY\n(mm)";
+    ws.getCell("P4").note = "ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.";
+    ws.pageSetup = { ...ws.pageSetup, orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: "A1:P22" };
     ws.pageSetup.margins = { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 };
     ws.views = [{ showGridLines: false }];
     for (let row = 6; row <= 19; row++) {
-      for (let col = 1; col <= 15; col++) ws.getCell(row, col).value = null;
+      ws.getCell(row, 16).style = clone(ws.getCell(row, 15).style);
+      for (let col = 1; col <= 16; col++) ws.getCell(row, col).value = null;
       ws.getRow(row).height = 25;
     }
     // Only merged MASTER cells are written; children would erase their headings.
@@ -30,7 +41,7 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     ws.getCell("M4").value = "İLERLEME\n(mm/dk)";
     ws.getCell("K4").value = "İNSERT\nKALİTESİ";
     ws.getCell("J4").value = "KULLANILAN İNSERT";
-    for (const address of ["B4", "C4", "D4", "F4", "H4", "I4", "J4", "K4", "L4", "M4", "N4", "O4", "A5", "C5", "D5", "E5", "F5", "G5"]) {
+    for (const address of ["B4", "C4", "D4", "F4", "H4", "I4", "J4", "K4", "L4", "M4", "N4", "O4", "P4", "A5", "C5", "D5", "E5", "F5", "G5"]) {
       ws.getCell(address).font = { name: "Arial", size: 9, bold: true };
       ws.getCell(address).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     }
@@ -43,15 +54,16 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     if (pages > 1) ws.getCell("H22").value = `Sayfa ${page + 1} / ${pages}`;
     groups.slice(page * PAGE_LINES, (page + 1) * PAGE_LINES).forEach((group, index) => {
       const p = group.product || {}, h = group.holder || {};
-      const values = [p.tool_no || page * PAGE_LINES + index + 1, p.brand || "", p.name || "", p.inner_cooling === "VAR" ? "X" : "", p.inner_cooling === "YOK" ? "X" : "", p.holder_type || h.name || "", p.holder_length || "", p.drill_helix_length || "", p.insert_brand || "", p.used_insert || "", p.insert_quality || "", p.spindle_speed || "", p.feed_rate || "", p.tool_life || "", p.special || ""];
+      const values = [p.tool_no || page * PAGE_LINES + index + 1, p.brand || "", p.name || "", p.inner_cooling === "VAR" ? "X" : "", p.inner_cooling === "YOK" ? "X" : "", p.holder_type || h.name || "", p.holder_length || "", p.drill_helix_length || "", p.insert_brand || "", p.used_insert || "", p.insert_quality || "", p.spindle_speed || "", p.feed_rate || "", p.tool_life || "", p.special || "", p.tool_total_length || ""];
       values.forEach((value, c) => { const cell = ws.getCell(6 + index, c + 1); cell.value = value; cell.font = { name: "Arial", size: 9 }; cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
     });
   }
-  // Preserve every legacy and new value without changing the original 15-column form.
+  // Preserve all legacy values; Zoller total length is appended to the original form.
   const detail = wb.addWorksheet("Reçete Verileri");
   const rows = detailRows(recipe, groups);
   const headers = Object.keys(rows[0] || detailRows(recipe, [{ product: {} }])[0]);
   detail.addRow(headers);
+  detail.getCell(1, headers.indexOf("Takım Tam Boy (mm)") + 1).note = "ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.";
   rows.forEach((row) => {
     const excelRow = detail.addRow(headers.map((key) => {
       if ((key === "Yayın Tarihi" || key === "Revizyon Tarihi") && row[key]) return new Date(`${row[key]}T00:00:00Z`);

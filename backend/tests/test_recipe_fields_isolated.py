@@ -52,6 +52,7 @@ LINE_VALUES = {
     "pair_id": "pair-1",
     "tool_no": "T07",
     "machining_length": "125 mm",
+    "tool_total_length": "185,25",
     "cutting_speed": "180 m/min",
     "spindle_speed": "4500 rpm",
     "feed_rate": "0.12 mm/rev",
@@ -279,6 +280,17 @@ class RecipeDraftTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated["lines"][0]["insert_brand"], LINE_VALUES["insert_brand"])
         self.assert_stock_unchanged()
 
+    async def test_tool_total_length_edit_can_clear_existing_measurement(self):
+        payload = complete_payload()
+        created = await self.create(payload)
+        self.assertEqual(created["lines"][0]["tool_total_length"], "185,25")
+        payload["lines"][0]["tool_total_length"] = ""
+        updated = await self.update(created["id"], payload)
+        self.assertEqual(updated["lines"][0]["tool_total_length"], "")
+        self.assertEqual(self.db.recipes.rows[created["id"]]["lines"][0]["tool_total_length"], "")
+        self.assertEqual(updated["lines"][1]["tool_total_length"], "185,25")
+        self.assert_stock_unchanged()
+
     async def test_missing_or_null_brand_becomes_empty_string(self):
         payload = legacy_payload()
         payload["lines"] = [{"kind": "product", "reference_id": "product-2", "quantity": 1}]
@@ -352,6 +364,7 @@ class RecipeDraftTests(unittest.IsolatedAsyncioTestCase):
         for field, default in HEADER_DEFAULTS.items():
             self.assertEqual(getattr(body, field), default)
         self.assertEqual(body.lines[0].tool_no, "")
+        self.assertEqual(body.lines[0].tool_total_length, "")
 
 
 if __name__ == "__main__":

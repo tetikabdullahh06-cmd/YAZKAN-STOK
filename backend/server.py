@@ -385,6 +385,7 @@ class RecipeLineIn(BaseModel):
     pair_id: Optional[str] = ""
     tool_no: Optional[str] = ""
     machining_length: Optional[str] = ""
+    tool_total_length: Optional[str] = ""
     cutting_speed: Optional[str] = ""
     spindle_speed: Optional[str] = ""
     feed_rate: Optional[str] = ""
