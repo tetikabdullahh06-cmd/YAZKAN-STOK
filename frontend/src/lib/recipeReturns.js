@@ -1,7 +1,8 @@
 import { dateISO } from "./recipeCardData";
 
 export const RETURN_CONDITIONS = { healthy: "Sağlam — stoğa ekle", broken: "Kırık — hurdaya ayır", scrap: "Hurda / kullanım dışı" };
-export const hasRecipeStockHistory = (recipe) => Boolean(recipe.bound_at || ["bound", "returned"].includes(recipe.status) || recipe.pending_operation || recipe.return_history?.length);
+export const hasRecipeStockHistory = (recipe) => Boolean(recipe.bound_at || ["bound", "returned"].includes(recipe.status) || recipe.pending_operation || recipe.return_history?.length || recipe.execution_history?.length);
+export const canBindRecipe = (recipe) => !recipe.pending_operation && (recipe.status === "draft" || recipe.status === "returned" || (!recipe.status && !hasRecipeStockHistory(recipe)));
 
 export function makeReturnChoices(lines) {
   return Object.fromEntries(lines.map((line) => [line.line_id, {
@@ -9,7 +10,7 @@ export function makeReturnChoices(lines) {
   }]));
 }
 
-export function buildReturnPayload(choices, lines, { request_id, return_date, note = "" }) {
+export function buildReturnPayload(choices, lines, { request_id, return_date, note = "", execution_id }) {
   if (!request_id) throw new Error("İade işlem kimliği eksik");
   const date = dateISO(return_date);
   if (!date) throw new Error("İade tarihini GG/AA/YY biçiminde girin");
@@ -23,5 +24,5 @@ export function buildReturnPayload(choices, lines, { request_id, return_date, no
     return { line_id: line.line_id, quantity: Math.round(quantity * 1e6) / 1e6, condition: choice.condition, note: String(choice.note || "").trim() };
   });
   if (!items.length) throw new Error("Geri gelen en az bir takım veya tutucuyu seçin");
-  return { request_id, return_date: date, note: String(note || "").trim(), items };
+  return { request_id, return_date: date, note: String(note || "").trim(), items, ...(execution_id ? { execution_id } : {}) };
 }

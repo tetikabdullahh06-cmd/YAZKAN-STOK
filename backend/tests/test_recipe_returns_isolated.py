@@ -215,6 +215,28 @@ class RecipeReturnTests(unittest.IsolatedAsyncioTestCase):
             values["request_id"] = request_id
         return await self.production.bind_recipe("r", self.production.RecipeBindIn(**values), user=USER)
 
+    async def edit_template(self, reference_id="p2", quantity=2, **fields):
+        values = {"name": "Next recipe", "workpiece_name": "Next part", "machine_code": "CARD-CNC",
+                  "lines": [{"kind": "product", "reference_id": reference_id, "quantity": quantity,
+                             "tool_no": "T99", "cutting_speed": "new speed"}], **fields}
+        return await self.production.update_recipe("r", self.production.RecipeIn(**values), user=USER)
+
+    async def finish_cycle(self, request_id, condition="healthy"):
+        info = await self.production.get_recipe_returns("r", user=USER)
+        body = self.body(request_id, [{"line_id": line["line_id"], "quantity": line["outstanding_quantity"], "condition": condition}
+                                      for line in info["lines"] if line["outstanding_quantity"] > 0],
+                         execution_id=info["execution_id"], return_date="2026-11-18")
+        result = await self.receive(body)
+        return body, result
+
+    async def start_second_cycle(self):
+        self.reset("draft")
+        first_bind = await self.bind("bind-one")
+        first_return_body, first_return = await self.finish_cycle("return-one")
+        await self.edit_template()
+        second_bind = await self.bind("bind-two")
+        return first_bind, first_return_body, first_return, second_bind
+
     async def assert_http(self, status, awaitable):
         with self.assertRaises(HTTPException) as caught:
             await awaitable
@@ -223,7 +245,11 @@ class RecipeReturnTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_legacy_bound_is_read_only_and_uses_original_quantity(self):
         initial = self.db.snapshot()
         result = await self.production.get_recipe_returns("r", user=USER)
-        self.assertEqual(set(result), {"recipe", "lines", "history", "pending_operation"})
+        self.assertEqual(set(result), {"recipe", "lines", "history", "pending_operation", "execution", "execution_id", "execution_no", "execution_history"})
+        self.assertEqual(result["execution"]["lines"], self.original_lines)
+        self.assertEqual(result["execution_no"], 1)
+        self.assertEqual(result["execution_history"], [])
+        self.assertEqual(result["execution_id"], self.production._recipe_operation_id("r", "bind", "bind:r"))
         self.assertEqual(result["history"], [])
         self.assertIsNone(result["pending_operation"])
         for index, line in enumerate(result["lines"]):
@@ -281,7 +307,9 @@ class RecipeReturnTests(unittest.IsolatedAsyncioTestCase):
         for row in self.db.movements.rows.values():
             self.assertEqual(row["source"], "recipe_return")
         await self.assert_http(409, self.receive(self.body("extra")))
-        await self.assert_http(409, self.bind())
+        rebound = await self.bind("next-cycle")
+        self.assertEqual(rebound["recipe"]["execution_no"], 2)
+        self.assertEqual(len(rebound["recipe"]["execution_history"]), 1)
 
     async def test_quantity_validation_zero_negative_nan_inf_precision_and_invalid_scrap(self):
         initial = self.db.snapshot()
@@ -506,7 +534,7 @@ class RecipeReturnTests(unittest.IsolatedAsyncioTestCase):
         info = await self.production.get_recipe_returns("r", user=USER)
         self.assertEqual([line["outstanding_quantity"] for line in info["lines"]], [5, 3, 0])
 
-    async def test_bound_returned_and_pending_recipe_edit_delete_protection(self):
+    async def test_bound_returned_editable_but_pending_and_ledger_delete_protected(self):
         for status in ("bound", "returned", "pending-bind", "pending-return"):
             with self.subTest(status=status):
                 self.reset("draft" if status == "pending-bind" else "bound")
@@ -516,11 +544,21 @@ class RecipeReturnTests(unittest.IsolatedAsyncioTestCase):
                     self.db.recipes.rows["r"]["pending_operation"] = {"id": "pending"}
                 payload = self.production.RecipeIn(name="Changed", workpiece_name="Changed", lines=[{"kind": "product", "reference_id": "p", "quantity": 1}])
                 initial = self.db.snapshot()
-                expected = 409 if status.startswith("pending") else 400
-                await self.assert_http(expected, self.production.update_recipe("r", payload, user=USER))
-                await self.assert_http(expected, self.production.delete_recipe("r", user=USER))
-                self.assertEqual(self.db.snapshot(), initial)
-                self.assertEqual(self.db.writes, [])
+                if status.startswith("pending"):
+                    await self.assert_http(409, self.production.update_recipe("r", payload, user=USER))
+                    await self.assert_http(409, self.production.delete_recipe("r", user=USER))
+                    self.assertEqual(self.db.snapshot(), initial)
+                    self.assertEqual(self.db.writes, [])
+                else:
+                    updated = await self.production.update_recipe("r", payload, user=USER)
+                    self.assertEqual(updated["execution_snapshot"]["lines"], self.original_lines)
+                    self.assertEqual(updated["name"], "Changed")
+                    self.assertEqual(updated["execution_snapshot"]["name"], "Recipe")
+                    self.assertEqual(self.stock(), (20, 10))
+                    self.assertEqual([write[0] for write in self.db.writes], ["recipes"])
+                    edited = self.db.snapshot()
+                    await self.assert_http(400, self.production.delete_recipe("r", user=USER))
+                    self.assertEqual(self.db.snapshot(), edited)
 
     async def test_draft_edit_delete_cas_cannot_overwrite_concurrent_bind(self):
         for action in ("update", "delete"):
@@ -582,6 +620,329 @@ class RecipeReturnTests(unittest.IsolatedAsyncioTestCase):
                 await self.production.delete_toolholder_scrap("normal", user=USER)
                 self.assertEqual(collection.document(reference_id)["current_stock"], stock + 2)
                 self.assertIsNone(self.db.toolholder_scraps.document("normal"))
+
+    async def test_three_cycles_partial_edit_remove_add_finish_original_and_rebind(self):
+        self.reset("draft")
+        card_fields = {key: f"original-{key}" for key in self.production.RecipeIn.model_fields if key not in {"name", "workpiece_name", "lines"}}
+        self.db.recipes.rows["r"].update(card_fields)
+        first = await self.bind("cycle-one")
+        first_id = first["recipe"]["execution_id"]
+        snapshot = deepcopy(first["recipe"]["execution_snapshot"])
+        self.assertEqual(self.stock(), (15, 7))
+        await self.receive(self.body("partial-one", [{"line_id": "0", "quantity": 2, "condition": "healthy"}], execution_id=first_id))
+        ledger = deepcopy({key: self.db.recipes.rows["r"][key] for key in ("return_totals", "return_history", "bind_operation", "bound_at")})
+        stock_rows = deepcopy((self.db.products.rows, self.db.toolholders.rows))
+        edited = await self.edit_template()
+        self.assertEqual(edited["status"], "bound")
+        self.assertEqual((self.db.products.rows, self.db.toolholders.rows), stock_rows)
+        for key, value in ledger.items():
+            self.assertEqual(edited[key], value)
+        info = await self.production.get_recipe_returns("r", user=USER)
+        self.assertEqual([line["reference_id"] for line in info["recipe"]["lines"]], ["p2"])
+        self.assertEqual([line["reference_id"] for line in info["lines"]], ["p", "h"])
+        self.assertEqual([line["outstanding_quantity"] for line in info["lines"]], [3, 3])
+        self.assertEqual(info["execution"]["name"], "Recipe")
+        self.assertEqual(info["execution"]["workpiece_name"], "Part")
+        self.assertEqual(info["execution"]["machine_code"], "M1")
+        await self.receive(self.body("finish-one", [{"line_id": "0", "quantity": 3, "condition": "scrap"},
+                                                    {"line_id": "1", "quantity": 3, "condition": "healthy"}],
+                                     execution_id=first_id, return_date="2026-11-18"))
+        self.assertEqual(self.stock(), (17, 10))
+        closed_one = deepcopy(self.db.recipes.rows["r"])
+        await self.edit_template(quantity=4, name="Cycle two card", revision_no="02")
+        second = await self.bind("cycle-two")
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 6)
+        archive = deepcopy(second["recipe"]["execution_history"][0])
+        self.assertEqual(archive["execution_id"], first_id)
+        self.assertEqual(archive["execution_snapshot"], snapshot)
+        self.assertEqual(archive["lines"], snapshot["lines"])
+        for key in ("bound_at", "returned_at", "bind_operation", "return_history", "return_totals"):
+            self.assertEqual(archive[key], closed_one[key])
+        for key, value in card_fields.items():
+            self.assertEqual(archive["execution_snapshot"][key], value)
+        self.assertEqual(archive["machine_code"], "M1")
+        self.assertEqual(second["recipe"]["machine_code"], "CARD-CNC")
+        self.assertIsNone(second["recipe"]["returned_at"])
+        before = self.db.snapshot()
+        await self.assert_http(409, self.receive(self.body("stale-one", execution_id=first_id)))
+        self.assertEqual(self.db.snapshot(), before)
+        await self.finish_cycle("finish-two")
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 10)
+        await self.edit_template(reference_id="p", quantity=1, name="Cycle three card")
+        third = await self.bind("cycle-three")
+        self.assertEqual(third["recipe"]["execution_no"], 3)
+        self.assertEqual(third["recipe"]["execution_history"][0], archive)
+        self.assertEqual([cycle["execution_no"] for cycle in third["recipe"]["execution_history"]], [1, 2])
+        self.assertEqual(self.stock(), (16, 10))
+        await self.finish_cycle("finish-three")
+        self.assertEqual(self.stock(), (17, 10))
+        self.assertEqual(len({cycle["execution_id"] for cycle in [*third["recipe"]["execution_history"], third["recipe"]]}), 3)
+        for collection in (self.db.recipe_movements, self.db.movements, self.db.toolholder_movements, self.db.toolholder_scraps):
+            for key, row in collection.rows.items():
+                self.assertEqual(key, row["id"])
+                self.assertIn(row["execution_no"], (1, 2, 3))
+                self.assertTrue(row["execution_id"])
+
+    async def test_legacy_bound_edit_captures_labels_and_virtual_token_atomically(self):
+        before = await self.production.get_recipe_returns("r", user=USER)
+        original = deepcopy(self.db.recipes.rows["r"])
+        self.db.products.document("p").update({"name": "Renamed stock", "code": "RENAMED", "brand": "New brand"})
+        edited = await self.edit_template()
+        self.assertEqual(edited["execution_id"], before["execution_id"])
+        self.assertEqual(edited["execution_snapshot"]["lines"], original["lines"])
+        write = self.db.writes[-1]
+        self.assertEqual(write[0], "recipes")
+        self.assertIn("execution_snapshot", write[3]["$set"])
+        self.assertIn("lines", write[3]["$set"])
+        info = await self.production.get_recipe_returns("r", user=USER)
+        self.assertEqual(info["lines"][0]["name"], "Drill")
+        await self.receive(self.body(execution_id=before["execution_id"]))
+        row = next(iter(self.db.recipe_movements.rows.values()))
+        self.assertEqual((row["recipe_name"], row["production_product"], row["product_name"], row["product_code"]), ("Recipe", "Part", "Drill", "D1"))
+        self.assertEqual(row["execution_no"], 1)
+
+    async def test_legacy_returned_edit_then_bind_archives_original_not_template(self):
+        await self.finish_cycle("legacy-close")
+        legacy = deepcopy(self.db.recipes.rows["r"])
+        self.assertNotIn("execution_snapshot", legacy)
+        await self.edit_template(name="Replacement")
+        rebound = await self.bind("legacy-rebind")
+        archived = rebound["recipe"]["execution_history"][0]
+        self.assertEqual((archived["name"], archived["workpiece_name"], archived["lines"]), ("Recipe", "Part", self.original_lines))
+        self.assertEqual(archived["return_history"], legacy["return_history"])
+        self.assertEqual(archived["return_totals"], legacy["return_totals"])
+        self.assertIsNone(archived["bind_operation"])
+        self.assertEqual(rebound["recipe"]["execution_snapshot"]["name"], "Replacement")
+
+    async def test_repeated_bound_parameter_edits_never_replace_execution_snapshot(self):
+        self.reset("draft")
+        first = await self.bind("snapshot-bind")
+        snapshot = deepcopy(first["recipe"]["execution_snapshot"])
+        original_machine = self.production._recipe_execution(first["recipe"])["machine_code"]
+        for quantity in (1, 3, 2):
+            edited = await self.edit_template(quantity=quantity, revision_no=str(quantity), operation_no="55")
+            self.assertEqual(edited["execution_snapshot"], snapshot)
+            self.assertEqual(self.production._recipe_execution(edited)["machine_code"], original_machine)
+            self.assertEqual(self.stock(), (15, 7))
+        self.assertEqual([line["outstanding_quantity"] for line in self.production._recipe_return_lines(edited)], [5, 3])
+
+    async def test_archived_bind_and_return_retries_after_second_and_third_are_read_only(self):
+        first_bind, old_body, first_return, second = await self.start_second_cycle()
+        for cycle in (2, 3):
+            before, writes = self.db.snapshot(), len(self.db.writes)
+            duplicate_bind = await self.bind("bind-one")
+            duplicate_return = await self.receive(old_body)
+            self.assertTrue(duplicate_bind["duplicate"])
+            self.assertTrue(duplicate_return["duplicate"])
+            self.assertEqual(duplicate_bind["movements"], first_bind["movements"])
+            self.assertEqual(duplicate_return["return"], first_return["return"])
+            self.assertEqual(duplicate_bind["recipe"]["execution_no"], cycle)
+            self.assertEqual(self.db.snapshot(), before)
+            self.assertEqual(len(self.db.writes), writes)
+            if cycle == 2:
+                await self.finish_cycle("return-two")
+                await self.bind("bind-three")
+
+    async def test_archived_request_id_conflicts_and_cross_type_reuse_rejected(self):
+        await self.start_second_cycle()
+        before, writes = self.db.snapshot(), len(self.db.writes)
+        token = self.db.recipes.rows["r"]["execution_id"]
+        await self.assert_http(409, self.receive(self.body("return-one", execution_id=token, note="changed")))
+        await self.assert_http(409, self.receive(self.body("bind-one", execution_id=token)))
+        await self.assert_http(409, self.bind("return-one"))
+        await self.assert_http(409, self.production.bind_recipe("r", self.production.RecipeBindIn(machine_id="other", request_id="bind-one"), user=USER))
+        self.assertEqual(self.db.snapshot(), before)
+        self.assertEqual(len(self.db.writes), writes)
+
+    async def test_execution_token_required_on_second_cycle_and_stale_never_writes(self):
+        first_bind, _, _, second = await self.start_second_cycle()
+        for fields in ({}, {"execution_id": None}, {"execution_id": ""}, {"execution_id": first_bind["recipe"]["execution_id"]}):
+            before, writes = self.db.snapshot(), len(self.db.writes)
+            await self.assert_http(409, self.receive(self.body("new-token-check", **fields)))
+            self.assertEqual(self.db.snapshot(), before)
+            self.assertEqual(len(self.db.writes), writes)
+        result = await self.receive(self.body("second-valid", execution_id=second["recipe"]["execution_id"]))
+        self.assertEqual(result["return"]["execution_no"], 2)
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 9)
+
+    async def test_second_cycle_return_journal_failures_keep_body_history_and_template(self):
+        for target in ("products", "recipe_movements", "movements", "toolholder_scraps", "final"):
+            with self.subTest(target=target):
+                _, old_body, _, second = await self.start_second_cycle()
+                archive = deepcopy(second["recipe"]["execution_history"])
+                await self.edit_template(reference_id="p", quantity=7, name="Editable future card")
+                token = second["recipe"]["execution_id"]
+                body = self.body("journal-cycle-two", execution_id=token,
+                                 items=[{"line_id": "0", "quantity": 1, "condition": "healthy", "note": "immutable request"}])
+                if target == "toolholder_scraps":
+                    body = self.body("journal-cycle-two", execution_id=token,
+                                     items=[{"line_id": "0", "quantity": 1, "condition": "scrap"}])
+                self.db.failure = lambda collection, query, update, phase: (collection == "recipes" and "$unset" in update and phase == "before") if target == "final" else (collection == target and phase == "after")
+                with self.assertRaises(RuntimeError):
+                    await self.receive(body)
+                plan = deepcopy(self.db.recipes.rows["r"]["pending_operation"])
+                before = self.db.snapshot()
+                await self.assert_http(409, self.edit_template(name="Not allowed"))
+                await self.assert_http(409, self.receive(old_body))
+                await self.assert_http(409, self.receive(self.body("journal-cycle-two", execution_id=token, note="changed")))
+                await self.assert_http(409, self.production.delete_recipe("r", user=USER))
+                self.assertEqual(self.db.snapshot(), before)
+                resumed = await self.receive(body)
+                self.assertEqual(resumed["return"], plan["event"])
+                self.assertEqual(resumed["recipe"]["name"], "Editable future card")
+                self.assertEqual(resumed["return"]["recipe_name"], "Next recipe")
+                self.assertEqual(resumed["recipe"]["execution_history"], archive)
+                self.assertEqual(self.db.products.document("p2")["current_stock"], 8 if target == "toolholder_scraps" else 9)
+
+    async def test_rebind_failure_archives_exactly_once_and_recovers_without_rededucting(self):
+        self.reset("draft")
+        await self.bind("first-bind")
+        await self.finish_cycle("first-close")
+        await self.edit_template()
+        closed = deepcopy(self.db.recipes.rows["r"])
+        self.db.failure = lambda collection, query, update, phase: collection == "products" and "$inc" in update and phase == "after"
+        with self.assertRaises(RuntimeError):
+            await self.bind("second-bind")
+        plan = deepcopy(self.db.recipes.rows["r"]["pending_operation"])
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 8)
+        self.assertEqual(self.db.recipes.rows["r"]["status"], "returned")
+        self.assertEqual(plan["final"]["execution_history"][0]["return_totals"], closed["return_totals"])
+        await self.assert_http(409, self.edit_template())
+        await self.assert_http(409, self.bind("different-bind"))
+        results = await asyncio.gather(*(self.bind("second-bind") for _ in range(6)))
+        self.assertEqual(sum(not result["duplicate"] for result in results), 1)
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 8)
+        self.assertEqual(len(self.db.recipes.rows["r"]["execution_history"]), 1)
+        self.assertEqual(self.db.recipes.rows["r"]["return_history"], [])
+
+    async def test_concurrent_second_bind_duplicates_cas_one_archive_and_stock_marker(self):
+        self.reset("draft")
+        await self.bind("first-bind")
+        await self.finish_cycle("first-close")
+        await self.edit_template()
+        results = await asyncio.gather(*(self.bind("second-bind") for _ in range(8)))
+        self.assertEqual(sum(not result["duplicate"] for result in results), 1)
+        recipe = self.db.recipes.rows["r"]
+        self.assertEqual(recipe["execution_no"], 2)
+        self.assertEqual(len(recipe["execution_history"]), 1)
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 8)
+        self.assertEqual(len(self.db.products.document("p2")["recipe_stock_operations"]), 1)
+        self.assertEqual(len(self.db.recipe_movements.rows), 5)
+
+    async def test_concurrent_different_second_binds_only_one_execution_can_claim(self):
+        self.reset("draft")
+        await self.bind("first-bind")
+        await self.finish_cycle("first-close")
+        await self.edit_template()
+        results = await asyncio.gather(self.bind("second-a"), self.bind("second-b"), return_exceptions=True)
+        self.assertEqual(sum(isinstance(result, dict) for result in results), 1)
+        self.assertEqual(next(result for result in results if isinstance(result, HTTPException)).status_code, 409)
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 8)
+        self.assertEqual(len(self.db.recipes.rows["r"]["execution_history"]), 1)
+
+    async def test_rebind_cas_rejects_stale_template_plan_and_legacy_edit_losing_cas(self):
+        self.reset("draft")
+        await self.bind("first-bind")
+        await self.finish_cycle("first-close")
+        await self.edit_template()
+        original_update = self.db.recipes.update_one
+        async def edit_before_claim(query, update, upsert=False):
+            if "pending_operation" in update.get("$set", {}):
+                self.db.recipes.rows["r"]["lines"][0]["quantity"] = 4
+                self.db.recipes.rows["r"]["recipe_revision"] += 1
+            return await original_update(query, update, upsert)
+        self.db.recipes.update_one = edit_before_claim
+        await self.assert_http(409, self.bind("second-bind"))
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 10)
+        self.assertNotIn("pending_operation", self.db.recipes.rows["r"])
+        self.assertEqual(self.db.recipes.rows["r"]["lines"][0]["quantity"], 4)
+        self.reset()
+        original_update = self.db.recipes.update_one
+        async def return_claim_before_edit(query, update, upsert=False):
+            self.db.recipes.rows["r"]["pending_operation"] = {"id": "return-worker"}
+            self.db.recipes.rows["r"]["recipe_revision"] = 1
+            return await original_update(query, update, upsert)
+        self.db.recipes.update_one = return_claim_before_edit
+        await self.assert_http(409, self.edit_template())
+        self.assertEqual(self.db.recipes.rows["r"]["lines"], self.original_lines)
+        self.assertNotIn("execution_snapshot", self.db.recipes.rows["r"])
+        self.assertEqual(self.stock(), (20, 10))
+
+    async def test_late_old_bind_and_return_plan_fallback_resolves_archived_receipt(self):
+        self.reset("draft")
+        self.db.failure = lambda collection, query, update, phase: collection == "recipes" and "pending_operation" in update.get("$set", {}) and phase == "after"
+        with self.assertRaises(RuntimeError):
+            await self.bind("old-bind")
+        old_bind_recipe = deepcopy(self.db.recipes.rows["r"])
+        bind_plan = deepcopy(old_bind_recipe["pending_operation"])
+        first_bind = await self.bind("old-bind")
+        info = await self.production.get_recipe_returns("r", user=USER)
+        body = self.body("old-return", [{"line_id": "0", "quantity": 5, "condition": "healthy"},
+                                        {"line_id": "1", "quantity": 3, "condition": "healthy"}], execution_id=info["execution_id"])
+        self.db.failure = lambda collection, query, update, phase: collection == "recipes" and "pending_operation" in update.get("$set", {}) and phase == "after"
+        with self.assertRaises(RuntimeError):
+            await self.receive(body)
+        old_return_recipe = deepcopy(self.db.recipes.rows["r"])
+        return_plan = deepcopy(old_return_recipe["pending_operation"])
+        first_return = await self.receive(body)
+        await self.edit_template()
+        await self.bind("new-bind")
+        original_find = self.db.recipes.find_one
+        for plan, stale, receipt in ((bind_plan, old_bind_recipe, first_bind["movements"]),
+                                     (return_plan, old_return_recipe, first_return["return"])):
+            before = self.db.snapshot()
+            stale_read = True
+            async def lagged_read(query, projection=None):
+                nonlocal stale_read
+                if stale_read:
+                    stale_read = False
+                    return deepcopy(stale)
+                return await original_find(query, projection)
+            self.db.recipes.find_one = lagged_read
+            result = await self.production._recipe_run_operation("r", plan)
+            self.assertTrue(result["duplicate"])
+            self.assertEqual(result["movements" if plan["type"] == "bind" else "return"], receipt)
+            self.assertEqual(self.db.snapshot(), before)
+            self.db.recipes.find_one = original_find
+
+    async def test_archived_history_blocks_delete_and_archived_scrap_identity_stays_protected(self):
+        self.reset("draft")
+        await self.bind("scrap-bind")
+        await self.finish_cycle("scrap-close", condition="scrap")
+        await self.edit_template()
+        await self.bind("second-bind")
+        archive = deepcopy(self.db.recipes.rows["r"]["execution_history"])
+        for scrap in self.db.toolholder_scraps.rows.values():
+            await self.assert_http(409, self.production.delete_toolholder_scrap(scrap["id"], user=USER))
+            body = self.production.ToolHolderScrapIn(quantity=scrap["quantity"] + 1, scrap_reason="Changed", scrap_date="2026-11-18")
+            await self.assert_http(409, self.production.update_toolholder_scrap(scrap["id"], body, user=USER))
+            self.assertEqual(scrap["execution_id"], archive[0]["execution_id"])
+        self.db.recipes.rows["r"] = {"id": "r", "status": "draft", "lines": [], "execution_history": archive}
+        before, writes = self.db.snapshot(), len(self.db.writes)
+        await self.assert_http(400, self.production.delete_recipe("r", user=USER))
+        self.assertEqual(self.db.snapshot(), before)
+        self.assertEqual(len(self.db.writes), writes)
+
+    async def test_no_request_id_bind_per_cycle_fallback_and_insufficient_rebind_no_writes(self):
+        self.reset("draft")
+        first = await self.bind()
+        self.assertEqual(first["recipe"]["bind_operation"]["request_id"], "bind:r")
+        await self.finish_cycle("close-one")
+        await self.edit_template(quantity=11)
+        before, writes = self.db.snapshot(), len(self.db.writes)
+        await self.assert_http(400, self.bind())
+        self.assertEqual(self.db.snapshot(), before)
+        self.assertEqual(len(self.db.writes), writes)
+        await self.edit_template(quantity=2)
+        second = await self.bind()
+        self.assertEqual(second["recipe"]["bind_operation"]["request_id"], "bind:r:2")
+        self.assertEqual(second["recipe"]["execution_no"], 2)
+        self.assertTrue((await self.bind())["duplicate"])
+        await self.finish_cycle("close-two")
+        third = await self.bind()
+        self.assertEqual(third["recipe"]["bind_operation"]["request_id"], "bind:r:3")
+        self.assertEqual(third["recipe"]["execution_no"], 3)
+        self.assertEqual(self.db.products.document("p2")["current_stock"], 8)
 
     def test_routes_and_auth_contract_are_actual_server_decorators(self):
         tree = ast.parse(SERVER_PATH.read_text(encoding="utf-8"))

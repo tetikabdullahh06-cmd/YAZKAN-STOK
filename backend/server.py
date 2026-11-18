@@ -457,6 +457,7 @@ class RecipeReturnItemIn(BaseModel):
 
 class RecipeReturnIn(BaseModel):
     request_id: str = Field(min_length=1)
+    execution_id: Optional[str] = None
     return_date: str = Field(default_factory=lambda: date.today().isoformat())
     note: str = ""
     items: List[RecipeReturnItemIn]
@@ -1500,6 +1501,63 @@ async def _recipe_fields(body: RecipeIn):
     return fields
 
 
+def _recipe_has_execution(recipe):
+    return bool(recipe.get("status") in {"bound", "returned"} or recipe.get("bound_at") or
+                recipe.get("return_history") or recipe.get("bind_operation") or recipe.get("execution_snapshot"))
+
+
+def _recipe_execution_no(recipe):
+    return recipe.get("execution_no") or (1 if _recipe_has_execution(recipe) else 0)
+
+
+def _recipe_execution_id(recipe):
+    if recipe.get("execution_id"):
+        return recipe["execution_id"]
+    if not _recipe_has_execution(recipe):
+        return None
+    request_id = (recipe.get("bind_operation") or {}).get("request_id") or f"bind:{recipe['id']}"
+    return _recipe_operation_id(recipe["id"], "bind", request_id)
+
+
+def _recipe_snapshot(recipe):
+    """Copy only the reusable card, never mutable execution/return journal state."""
+    from copy import deepcopy
+    return deepcopy({"id": recipe["id"], **{key: recipe[key] for key in RecipeIn.model_fields if key in recipe}})
+
+
+def _recipe_bound_machine(recipe):
+    # machine_code is also an editable F-165 card field. Keep its bound value
+    # separately so later card edits cannot change return/archive attribution.
+    return {f"execution_machine_{key}": recipe.get(f"execution_machine_{key}", recipe.get(f"machine_{key}", ""))
+            for key in ("id", "name", "code")}
+
+
+def _recipe_execution(recipe):
+    from copy import deepcopy
+    if not _recipe_has_execution(recipe):
+        return None
+    snapshot = deepcopy(recipe.get("execution_snapshot") or _recipe_snapshot(recipe))
+    machine = _recipe_bound_machine(recipe)
+    snapshot.update({"execution_id": _recipe_execution_id(recipe), "execution_no": _recipe_execution_no(recipe),
+                     "status": recipe.get("status", "bound"),
+                     **{f"machine_{key}": machine[f"execution_machine_{key}"] for key in ("id", "name", "code")},
+                     **{key: recipe.get(key) for key in ("bound_at", "bound_by", "returned_at")}})
+    return snapshot
+
+
+def _recipe_completed_operation(recipe, operation_type, request_id, payload_hash):
+    """Resolve exact receipts across the active and all closed executions."""
+    for cycle in [recipe, *recipe.get("execution_history", [])]:
+        events = ([("bind", cycle["bind_operation"])] if cycle.get("bind_operation") else [])
+        events += [("return", event) for event in cycle.get("return_history", [])]
+        for event_type, event in events:
+            if event.get("request_id") == request_id:
+                if event_type != operation_type or event.get("body_hash") != payload_hash:
+                    raise HTTPException(status_code=409, detail="request_id farklı içerikle kullanılmış")
+                return event
+    return None
+
+
 @api.post("/recipes")
 async def create_recipe(body: RecipeIn, user=Depends(require_admin)):
     fields = await _recipe_fields(body)
@@ -1515,13 +1573,18 @@ async def update_recipe(rid: str, body: RecipeIn, user=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
     if recipe.get("pending_operation"):
         raise HTTPException(status_code=409, detail="Reçetede tamamlanmayı bekleyen işlem var")
-    if recipe.get("status") in {"bound", "returned"} or recipe.get("bound_at") or recipe.get("return_history"):
-        raise HTTPException(status_code=400, detail="Tezgâha bağlanmış reçete düzenlenemez")
     fields = await _recipe_fields(body)
+    # Capture a legacy execution in the same CAS that replaces its template.
+    # Editing never changes stock, return quantities, receipts or stock markers.
+    execution_fields = {}
+    if _recipe_has_execution(recipe) and not recipe.get("execution_snapshot"):
+        execution_fields = {"execution_snapshot": _recipe_snapshot(recipe),
+                            "execution_id": _recipe_execution_id(recipe), "execution_no": _recipe_execution_no(recipe),
+                            **_recipe_bound_machine(recipe)}
     revision = recipe.get("recipe_revision", 0)
     query = {"id": rid, "status": recipe.get("status", "draft"), "pending_operation": None,
              "recipe_revision": revision if "recipe_revision" in recipe else {"$exists": False}}
-    result = await db.recipes.update_one(query, {"$set": {**fields, "recipe_revision": revision + 1, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}})
+    result = await db.recipes.update_one(query, {"$set": {**fields, **execution_fields, "recipe_revision": revision + 1, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}})
     if not result.matched_count:
         raise HTTPException(status_code=409, detail="Reçete başka bir işlem tarafından değiştirildi")
     updated = await db.recipes.find_one({"id": rid}, {"_id": 0})
@@ -1535,7 +1598,7 @@ async def delete_recipe(rid: str, user=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
     if recipe.get("pending_operation"):
         raise HTTPException(status_code=409, detail="Reçetede tamamlanmayı bekleyen işlem var")
-    if recipe.get("status") in {"bound", "returned"} or recipe.get("bound_at") or recipe.get("return_history"):
+    if _recipe_has_execution(recipe) or recipe.get("execution_history"):
         raise HTTPException(status_code=400, detail="Tezgâha bağlanmış reçete silinemez")
     query = {"id": rid, "status": recipe.get("status", "draft"), "pending_operation": None,
              "recipe_revision": recipe.get("recipe_revision", 0) if "recipe_revision" in recipe else {"$exists": False}}
@@ -1547,21 +1610,30 @@ async def delete_recipe(rid: str, user=Depends(require_admin)):
 
 @api.post("/recipes/{rid}/bind")
 async def bind_recipe(rid: str, body: RecipeBindIn, user=Depends(require_admin)):
+    from copy import deepcopy
     recipe = await db.recipes.find_one({"id": rid})
     if not recipe:
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
-    request_id = body.request_id or f"bind:{rid}"
+    next_no = _recipe_execution_no(recipe) + 1
+    # No-token clients have a stable per-cycle fallback, preserving cycle 1's
+    # original bind:<rid> marker. Explicit request IDs remain the retry contract.
+    default_request_id = f"bind:{rid}" if next_no == 1 else f"bind:{rid}:{next_no}"
+    if (recipe.get("pending_operation") or {}).get("type") == "bind":
+        default_request_id = recipe["pending_operation"]["request_id"]
+    elif recipe.get("status") == "bound":
+        default_request_id = (recipe.get("bind_operation") or {}).get("request_id") or f"bind:{rid}"
+    request_id = body.request_id or default_request_id
     original = body.model_dump(exclude_unset=True)
     payload_hash = _recipe_payload_hash(original)
     pending, completed = _recipe_existing_operation(recipe, "bind", request_id, payload_hash)
-    if recipe.get("status") == "returned":
-        raise HTTPException(status_code=409, detail="İade edilmiş reçete yeniden bağlanamaz")
     if completed:
         return {"ok": True, "recipe": clean(recipe), "movements": completed["movements"], "duplicate": True}
     if pending:
         return await _recipe_run_operation(rid, pending)
-    if recipe.get("status") != "draft" or recipe.get("bound_at") or recipe.get("return_history"):
-        raise HTTPException(status_code=409, detail="Bu reçete daha önce tezgâha bağlanmış")
+    closed = recipe.get("status") == "returned" and all(line["outstanding_quantity"] == 0 for line in _recipe_return_lines(recipe))
+    first_use = recipe.get("status") == "draft" and not _recipe_has_execution(recipe) and not recipe.get("execution_history")
+    if not first_use and not closed:
+        raise HTTPException(status_code=409, detail="Reçetenin önceki bağlama çevrimindeki tüm takımlar iade edilmeli")
     machine = await db.machines.find_one({"id": body.machine_id})
     if not machine:
         raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
@@ -1571,7 +1643,9 @@ async def bind_recipe(rid: str, body: RecipeBindIn, user=Depends(require_admin))
     aggregates, movements, stocks = {}, [], []
     operation_id = _recipe_operation_id(rid, "bind", request_id)
     now = now_utc().isoformat()
-    for index, line in enumerate(recipe["lines"]):
+    snapshot = _recipe_snapshot(recipe)
+    execution = {**snapshot, "execution_id": operation_id, "execution_no": next_no}
+    for index, line in enumerate(snapshot["lines"]):
         quantity = _recipe_decimal(line.get("quantity", 0), positive=True)
         if line.get("kind") not in {"product", "toolholder"}:
             raise HTTPException(status_code=400, detail="Geçersiz reçete satırı")
@@ -1582,18 +1656,30 @@ async def bind_recipe(rid: str, body: RecipeBindIn, user=Depends(require_admin))
         key = (line["kind"], item["id"])
         aggregate = aggregates.setdefault(key, {"quantity": Decimal(0), "item": item})
         aggregate["quantity"] += quantity
-        movement = _recipe_movement(recipe, line, str(index), float(quantity), machine, user, now,
+        movement = _recipe_movement(execution, line, str(index), float(quantity), machine, user, now,
                                     _recipe_operation_id(operation_id, "line", str(index)), "recipe_bind")
+        movement["request_id"] = request_id
         movements.append(movement)
     for (kind, reference_id), aggregate in aggregates.items():
         if aggregate["quantity"] > _recipe_decimal(aggregate["item"].get("current_stock", 0)):
             raise HTTPException(status_code=400, detail=f"Yetersiz stok: {aggregate['item'].get('name', '')}")
         stocks.append({"kind": kind, "reference_id": reference_id, "delta": -float(aggregate["quantity"]),
                        "marker": _recipe_operation_id(operation_id, kind, reference_id)})
-    completed = {"request_id": request_id, "body": original, "body_hash": payload_hash, "movements": movements}
+    history = deepcopy(recipe.get("execution_history", []))
+    if closed:
+        archived = {**_recipe_execution(recipe), "execution_snapshot": deepcopy(recipe.get("execution_snapshot") or _recipe_snapshot(recipe)),
+                    "return_totals": deepcopy(recipe.get("return_totals", {})),
+                    "return_history": deepcopy(recipe.get("return_history", [])),
+                    "bind_operation": deepcopy(recipe.get("bind_operation"))}
+        if not any(cycle.get("execution_id") == archived["execution_id"] for cycle in history):
+            history.append(archived)
+    completed = {"id": operation_id, "execution_id": operation_id, "execution_no": next_no,
+                 "request_id": request_id, "body": original, "body_hash": payload_hash, "movements": movements}
     final = {"status": "bound", "machine_id": machine["id"], "machine_name": machine.get("name", ""),
-             "machine_code": machine.get("code", ""), "bound_at": now, "bound_by": user.get("name", ""),
-             "bind_operation": completed}
+             **{f"execution_machine_{key}": machine.get(key, "") for key in ("id", "name", "code")},
+             "bound_at": now, "bound_by": user.get("name", ""), "bind_operation": completed,
+             "execution_snapshot": snapshot, "execution_id": operation_id, "execution_no": next_no,
+             "execution_history": history, "return_totals": {}, "return_history": [], "returned_at": None}
     pending = {"id": operation_id, "type": "bind", "request_id": request_id, "body": original,
                "body_hash": payload_hash, "stocks": stocks, "movements": movements, "scraps": [], "final": final}
     pending = await _recipe_claim_operation(recipe, pending)
@@ -1628,14 +1714,7 @@ def _recipe_existing_operation(recipe, operation_type, request_id, payload_hash)
         if pending["type"] != operation_type or pending["request_id"] != request_id or pending["body_hash"] != payload_hash:
             raise HTTPException(status_code=409, detail="Başka veya farklı içerikli bir işlem tamamlanmayı bekliyor")
         return pending, None
-    completed = ([recipe["bind_operation"]] if recipe.get("bind_operation") else []) + recipe.get("return_history", [])
-    for event in completed:
-        if event.get("request_id") == request_id:
-            event_type = "bind" if event is recipe.get("bind_operation") else "return"
-            if event_type != operation_type or event.get("body_hash") != payload_hash:
-                raise HTTPException(status_code=409, detail="request_id farklı içerikle kullanılmış")
-            return None, event
-    return None, None
+    return None, _recipe_completed_operation(recipe, operation_type, request_id, payload_hash)
 
 
 async def _recipe_claim_operation(recipe, pending):
@@ -1664,7 +1743,8 @@ def _recipe_return_lines(recipe):
     from decimal import Decimal
     totals = recipe.get("return_totals", {})
     result = []
-    for index, line in enumerate(recipe.get("lines", [])):
+    snapshot = recipe.get("execution_snapshot") or recipe
+    for index, line in enumerate(snapshot.get("lines", [])):
         line_id = str(index)
         sent = _recipe_decimal(line.get("quantity", 0))
         received = totals.get(line_id, {})
@@ -1685,12 +1765,15 @@ async def get_recipe_returns(rid: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
     pending = recipe.get("pending_operation")
     return {"recipe": recipe, "lines": _recipe_return_lines(recipe), "history": recipe.get("return_history", []),
+            "execution": _recipe_execution(recipe), "execution_id": _recipe_execution_id(recipe),
+            "execution_no": _recipe_execution_no(recipe), "execution_history": recipe.get("execution_history", []),
             "pending_operation": {key: pending[key] for key in ("type", "request_id", "body")} if pending else None}
 
 
 def _recipe_movement(recipe, line, line_id, quantity, machine, user, now, movement_id, movement_type):
     return {"id": movement_id, "type": movement_type, "source": "recipe_bind" if movement_type == "recipe_bind" else "recipe_return",
             "recipe_id": recipe["id"], "recipe_name": recipe.get("name", ""), "recipe_line_id": line_id,
+            "execution_id": _recipe_execution_id(recipe), "execution_no": _recipe_execution_no(recipe),
             "kind": line["kind"], "reference_id": line["reference_id"], "product_id": line["reference_id"] if line["kind"] == "product" else "",
             "tool_holder_id": line["reference_id"] if line["kind"] == "toolholder" else "",
             "product_code": line.get("code", ""), "product_name": line.get("name", ""), "name": line.get("name", ""),
@@ -1715,6 +1798,9 @@ async def return_recipe_items(rid: str, body: RecipeReturnIn, user=Depends(requi
         return await _recipe_run_operation(rid, pending)
     if recipe.get("status") != "bound":
         raise HTTPException(status_code=409, detail="Yalnızca tezgâha bağlı reçeteden iade yapılabilir")
+    execution_id, execution_no = _recipe_execution_id(recipe), _recipe_execution_no(recipe)
+    if (body.execution_id is not None and body.execution_id != execution_id) or (execution_no >= 2 and not body.execution_id):
+        raise HTTPException(status_code=409, detail="İade çevrimi değişti; güncel execution_id ile yeniden yükleyin")
     if not body.items:
         raise HTTPException(status_code=400, detail="En az bir iade satırı seçin")
     available = {line["line_id"]: line for line in _recipe_return_lines(recipe)}
@@ -1722,7 +1808,8 @@ async def return_recipe_items(rid: str, body: RecipeReturnIn, user=Depends(requi
     totals = deepcopy(recipe.get("return_totals", {}))
     operation_id = _recipe_operation_id(rid, "return", body.request_id)
     now = now_utc().isoformat()
-    machine = {"id": recipe.get("machine_id", ""), "name": recipe.get("machine_name", ""), "code": recipe.get("machine_code", "")}
+    execution = _recipe_execution(recipe)
+    machine = {key: execution.get(f"machine_{key}", "") for key in ("id", "name", "code")}
     healthy, discarded = Decimal(0), Decimal(0)
     # Validate and fully plan every selected line before claiming the journal.
     for requested in body.items:
@@ -1744,7 +1831,7 @@ async def return_recipe_items(rid: str, body: RecipeReturnIn, user=Depends(requi
         line_totals = totals.setdefault(requested.line_id, {"healthy": 0, "broken": 0, "scrap": 0})
         line_totals[requested.condition] = float(_recipe_decimal(line_totals.get(requested.condition, 0)) + quantity)
         movement_id = _recipe_operation_id(operation_id, "line", requested.line_id)
-        movement = _recipe_movement(recipe, line, requested.line_id, float(quantity), machine, user, now, movement_id,
+        movement = _recipe_movement(execution, line, requested.line_id, float(quantity), machine, user, now, movement_id,
                                     "recipe_return" if requested.condition == "healthy" else "recipe_scrap")
         movement.update({"return_id": operation_id, "request_id": body.request_id, "condition": requested.condition,
                          "note": requested.note or body.note, "transaction_date": body.return_date, "date": body.return_date,
@@ -1769,7 +1856,9 @@ async def return_recipe_items(rid: str, body: RecipeReturnIn, user=Depends(requi
                      "approved_by": "", "witness": "", "before_image_urls": [], "after_image_urls": []}
             scraps.append(scrap)
     event = {"id": operation_id, "request_id": body.request_id, "body": original, "body_hash": payload_hash,
-             "recipe_id": rid, "recipe_name": recipe.get("name", ""), "date": body.return_date, "return_date": body.return_date,
+             "execution_id": execution_id, "execution_no": execution_no,
+             "recipe_id": rid, "recipe_name": execution.get("name", ""), "workpiece_name": execution.get("workpiece_name", ""),
+             "date": body.return_date, "return_date": body.return_date,
              "note": body.note, "machine_id": machine["id"], "machine_name": machine["name"], "machine_code": machine["code"],
              "items": selected, "healthy_quantity": float(healthy), "scrap_quantity": float(discarded),
              "broken_quantity": float(sum((_recipe_decimal(item["quantity"]) for item in selected if item["condition"] == "broken"), Decimal(0))),
@@ -1792,6 +1881,14 @@ async def _recipe_run_operation(rid, pending):
     each delta+marker is one atomic document update and each log uses Mongo's
     unique _id. Different operations cannot claim until the final recipe CAS.
     """
+    recipe = await db.recipes.find_one({"id": rid}, {"_id": 0})
+    if not recipe:
+        raise HTTPException(status_code=409, detail="İşlem sonlandırılamadı")
+    completed = _recipe_completed_operation(recipe, pending["type"], pending["request_id"], pending["body_hash"])
+    if completed:
+        response = {"ok": True, "recipe": recipe, "duplicate": True}
+        response["movements" if pending["type"] == "bind" else "return"] = completed["movements"] if pending["type"] == "bind" else completed
+        return response
     for stock in pending["stocks"]:
         collection = db.products if stock["kind"] == "product" else db.toolholders
         query = {"id": stock["reference_id"], "recipe_stock_operations": {"$ne": stock["marker"]}}
@@ -1818,16 +1915,14 @@ async def _recipe_run_operation(rid, pending):
     recipe = await db.recipes.find_one({"id": rid}, {"_id": 0})
     if not recipe:
         raise HTTPException(status_code=409, detail="İşlem sonlandırılamadı")
-    if not result.matched_count:
-        completed = recipe.get("bind_operation") if pending["type"] == "bind" else next(
-            (event for event in recipe.get("return_history", []) if event["request_id"] == pending["request_id"]), None)
-        if not completed or completed.get("body_hash") != pending["body_hash"]:
-            raise HTTPException(status_code=409, detail="İşlem sonlandırılamadı; bekleyen işlem korunuyor")
+    completed = _recipe_completed_operation(recipe, pending["type"], pending["request_id"], pending["body_hash"])
+    if not completed:
+        raise HTTPException(status_code=409, detail="İşlem sonlandırılamadı; bekleyen işlem korunuyor")
     response = {"ok": True, "recipe": recipe, "duplicate": not bool(result.matched_count)}
     if pending["type"] == "bind":
-        response["movements"] = recipe["bind_operation"]["movements"]
+        response["movements"] = completed["movements"]
     else:
-        response["return"] = next(event for event in recipe["return_history"] if event["request_id"] == pending["request_id"])
+        response["return"] = completed
     return response
 
 

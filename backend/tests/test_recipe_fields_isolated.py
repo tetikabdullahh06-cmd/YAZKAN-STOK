@@ -28,6 +28,8 @@ SERVER_PATH = Path(__file__).resolve().parents[1] / "server.py"
 DEFINITIONS = {
     "RecipeLineIn", "RecipeIn", "_recipe_fields", "create_recipe",
     "update_recipe", "clean", "new_id", "now_utc",
+    "_recipe_has_execution", "_recipe_snapshot", "_recipe_execution_id", "_recipe_execution_no",
+    "_recipe_bound_machine", "_recipe_operation_id", "_recipe_payload_hash",
 }
 HEADER_DEFAULTS = {
     "document_no": "T2.298",
@@ -305,17 +307,28 @@ class RecipeDraftTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(updated["lines"][0]["brand"], "")
                 self.assert_stock_unchanged()
 
-    async def test_bound_update_guard_runs_before_stock_reads_or_any_writes(self):
-        self.db.recipes.rows["bound-recipe"] = {"id": "bound-recipe", "status": "bound", "name": "Locked"}
-        initial = deepcopy(self.db.recipes.rows)
-        with self.assertRaises(HTTPException) as raised:
-            await self.update("bound-recipe", complete_payload())
-        self.assertEqual(raised.exception.status_code, 400)
-        self.assertIn("düzenlenemez", raised.exception.detail)
-        self.assertEqual(self.db.recipes.rows, initial)
-        self.assertEqual(self.db.recipes.writes, [])
-        self.assertEqual(self.db.products.reads, [])
-        self.assertEqual(self.db.toolholders.reads, [])
+    async def test_bound_update_edits_template_with_atomic_snapshot_and_zero_stock_writes(self):
+        original = await self.create(complete_payload())
+        rid = original["id"]
+        self.db.recipes.rows[rid].update({"status": "bound", "machine_id": "machine-1", "machine_code": "ORIGINAL-CNC",
+                                          "bound_at": "2026-11-01T00:00:00Z", "return_totals": {"0": {"healthy": 1}},
+                                          "return_history": [{"request_id": "original-receipt"}]})
+        before = deepcopy(self.db.recipes.rows[rid])
+        payload = complete_payload()
+        payload["name"] = "Editable card"
+        payload["lines"] = [{"kind": "product", "reference_id": "product-2", "quantity": 2}]
+        updated = await self.update(rid, payload)
+        self.assertEqual(updated["name"], "Editable card")
+        self.assertEqual(updated["lines"][0]["reference_id"], "product-2")
+        self.assertEqual(updated["execution_snapshot"]["name"], original["name"])
+        self.assertEqual(updated["execution_snapshot"]["lines"], before["lines"])
+        self.assertEqual(updated["execution_machine_code"], "ORIGINAL-CNC")
+        for key in ("status", "bound_at", "return_history", "return_totals"):
+            self.assertEqual(updated[key], before[key])
+        snapshot = deepcopy(updated["execution_snapshot"])
+        again = await self.update(rid, legacy_payload())
+        self.assertEqual(again["execution_snapshot"], snapshot)
+        self.assertEqual(again["execution_id"], updated["execution_id"])
         self.assert_stock_unchanged()
 
     async def test_missing_recipe_update_returns_404_without_stock_access(self):

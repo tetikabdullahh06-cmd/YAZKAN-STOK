@@ -1,4 +1,4 @@
-import { buildReturnPayload, hasRecipeStockHistory, makeReturnChoices } from "./recipeReturns";
+import { buildReturnPayload, canBindRecipe, hasRecipeStockHistory, makeReturnChoices } from "./recipeReturns";
 
 const makeLines = () => [
   { line_id: "tool-1", reference_id: "same-product", name: "Takım 1", outstanding_quantity: 5 },
@@ -41,6 +41,28 @@ describe("makeReturnChoices", () => {
 });
 
 describe("buildReturnPayload", () => {
+  test("preserves an optional execution ID without mutating inputs", () => {
+    const { lines, choices, options } = fixture();
+    options.execution_id = "execution-123";
+    const before = JSON.stringify({ lines, choices, options });
+    [lines, choices, options].forEach(deepFreeze);
+
+    const payload = buildReturnPayload(choices, lines, options);
+    expect(payload.execution_id).toBe("execution-123");
+    payload.execution_id = "changed-output";
+    expect(JSON.stringify({ lines, choices, options })).toBe(before);
+  });
+
+  test("omits execution_id entirely for legacy options without mutating inputs", () => {
+    const { lines, choices, options } = fixture();
+    const before = JSON.stringify({ lines, choices, options });
+    [lines, choices, options].forEach(deepFreeze);
+
+    const payload = buildReturnPayload(choices, lines, options);
+    expect(Object.hasOwn(payload, "execution_id")).toBe(false);
+    expect(JSON.stringify({ lines, choices, options })).toBe(before);
+  });
+
   test("includes only selected lines with all three conditions, canonical date, and trimmed notes", () => {
     const { lines, choices, options } = fixture();
     choices["tool-1"] = { selected: true, quantity: "2", condition: "healthy", note: "  sağlam  " };
@@ -151,6 +173,11 @@ describe("buildReturnPayload", () => {
 });
 
 describe("hasRecipeStockHistory", () => {
+  test("recognizes nonempty execution history but not an empty history", () => {
+    expect(hasRecipeStockHistory(deepFreeze({ execution_history: [{ execution_id: "execution-123" }] }))).toBe(true);
+    expect(hasRecipeStockHistory(deepFreeze({ execution_history: [] }))).toBe(false);
+  });
+
   test("recognizes stock-history markers without mutation, but not a plain draft", () => {
     const cases = [
       [{}, false],
@@ -166,6 +193,35 @@ describe("hasRecipeStockHistory", () => {
       deepFreeze(recipe);
       expect(hasRecipeStockHistory(recipe)).toBe(expected);
       expect(JSON.stringify(recipe)).toBe(before);
+    });
+  });
+});
+
+describe("canBindRecipe", () => {
+  test("allows drafts and returned recipes, including returned recipes with history", () => {
+    expect(canBindRecipe({ status: "draft" })).toBe(true);
+    expect(canBindRecipe({ status: "returned", execution_history: [{ execution_id: "execution-123" }] })).toBe(true);
+  });
+
+  test("does not allow a bound recipe", () => {
+    expect(canBindRecipe({ status: "bound" })).toBe(false);
+  });
+
+  test("blocks pending operations even when the recipe is returned", () => {
+    ["draft", "returned"].forEach((status) => {
+      expect(canBindRecipe({ status, pending_operation: { request_id: "pending-123" } })).toBe(false);
+    });
+  });
+
+  test("allows a legacy empty status only when it has no stock history", () => {
+    expect(canBindRecipe({})).toBe(true);
+    expect(canBindRecipe({ status: "", return_history: [], execution_history: [] })).toBe(true);
+    [
+      { bound_at: "2026-11-18T09:00:00Z" },
+      { return_history: [{ request_id: "return-123" }] },
+      { execution_history: [{ execution_id: "execution-123" }] },
+    ].forEach((history) => {
+      expect(canBindRecipe({ status: "", ...history })).toBe(false);
     });
   });
 });
