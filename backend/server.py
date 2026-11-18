@@ -383,16 +383,35 @@ class RecipeLineIn(BaseModel):
     quantity: float
     note: Optional[str] = ""
     pair_id: Optional[str] = ""
+    tool_no: Optional[str] = ""
     machining_length: Optional[str] = ""
     cutting_speed: Optional[str] = ""
     spindle_speed: Optional[str] = ""
     feed_rate: Optional[str] = ""
+    inner_cooling: Optional[str] = ""
+    holder_type: Optional[str] = ""
+    holder_length: Optional[str] = ""
+    drill_helix_length: Optional[str] = ""
+    insert_brand: Optional[str] = ""
+    used_insert: Optional[str] = ""
+    insert_quality: Optional[str] = ""
+    tool_life: Optional[str] = ""
+    special: Optional[str] = ""
 
 
 class RecipeIn(BaseModel):
     name: str
     workpiece_name: str
     note: Optional[str] = ""
+    document_no: Optional[str] = "T2.298"
+    publication_date: Optional[str] = "2025-05-09"
+    revision_no: Optional[str] = "00"
+    revision_date: Optional[str] = ""
+    machine_code: Optional[str] = ""
+    machine_type: Optional[str] = ""
+    operation_no: Optional[str] = "20"
+    prepared_by: Optional[str] = ""
+    approved_by: Optional[str] = ""
     lines: List[RecipeLineIn]
 
 
@@ -1396,8 +1415,8 @@ async def list_recipes(user=Depends(get_current_user)):
     return await db.recipes.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
 
 
-@api.post("/recipes")
-async def create_recipe(body: RecipeIn, user=Depends(require_admin)):
+async def _recipe_fields(body: RecipeIn):
+    """Resolve stock labels and serialize draft fields without changing stock."""
     if not body.name.strip() or not body.workpiece_name.strip():
         raise HTTPException(status_code=400, detail="Reçete adı ve işlenecek ürün zorunludur")
     if not body.lines:
@@ -1410,8 +1429,20 @@ async def create_recipe(body: RecipeIn, user=Depends(require_admin)):
         item = await collection.find_one({"id": line.reference_id})
         if not item:
             raise HTTPException(status_code=404, detail="Reçete satırındaki stok kaydı bulunamadı")
-        lines.append({"kind": line.kind, "reference_id": item["id"], "name": item.get("name", ""), "code": item.get("code", ""), "quantity": line.quantity, "note": line.note or "", "pair_id": line.pair_id or "", "machining_length": line.machining_length or "", "cutting_speed": line.cutting_speed or "", "spindle_speed": line.spindle_speed or "", "feed_rate": line.feed_rate or ""})
-    doc = {"id": new_id(), "name": body.name.strip(), "workpiece_name": body.workpiece_name.strip(), "note": body.note or "", "lines": lines, "status": "draft", "created_at": now_utc().isoformat(), "created_by": user.get("name", "")}
+        line_fields = {key: value if value is not None else "" for key, value in line.model_dump().items()}
+        line_fields.update({"reference_id": item["id"], "name": item.get("name", ""), "code": item.get("code", ""), "brand": item.get("brand") or ""})
+        lines.append(line_fields)
+    fields = {key: value if value is not None else "" for key, value in body.model_dump(exclude={"lines"}).items()}
+    for key in ("document_no", "publication_date", "revision_no", "operation_no"):
+        fields[key] = fields[key] or RecipeIn.model_fields[key].default
+    fields.update({"name": body.name.strip(), "workpiece_name": body.workpiece_name.strip(), "lines": lines})
+    return fields
+
+
+@api.post("/recipes")
+async def create_recipe(body: RecipeIn, user=Depends(require_admin)):
+    fields = await _recipe_fields(body)
+    doc = {"id": new_id(), **fields, "status": "draft", "created_at": now_utc().isoformat(), "created_by": user.get("name", "")}
     await db.recipes.insert_one(doc)
     return clean(doc)
 
@@ -1423,20 +1454,8 @@ async def update_recipe(rid: str, body: RecipeIn, user=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
     if recipe.get("status") == "bound":
         raise HTTPException(status_code=400, detail="Tezgâha bağlanmış reçete düzenlenemez")
-    if not body.name.strip() or not body.workpiece_name.strip():
-        raise HTTPException(status_code=400, detail="Reçete adı ve işlenecek ürün zorunludur")
-    if not body.lines:
-        raise HTTPException(status_code=400, detail="Reçeteye en az bir takım veya tutucu ekleyin")
-    lines = []
-    for line in body.lines:
-        if line.kind not in {"product", "toolholder"} or line.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Geçersiz reçete satırı")
-        collection = db.products if line.kind == "product" else db.toolholders
-        item = await collection.find_one({"id": line.reference_id})
-        if not item:
-            raise HTTPException(status_code=404, detail="Reçete satırındaki stok kaydı bulunamadı")
-        lines.append({"kind": line.kind, "reference_id": item["id"], "name": item.get("name", ""), "code": item.get("code", ""), "quantity": line.quantity, "note": line.note or "", "pair_id": line.pair_id or "", "machining_length": line.machining_length or "", "cutting_speed": line.cutting_speed or "", "spindle_speed": line.spindle_speed or "", "feed_rate": line.feed_rate or ""})
-    await db.recipes.update_one({"id": rid}, {"$set": {"name": body.name.strip(), "workpiece_name": body.workpiece_name.strip(), "note": body.note or "", "lines": lines, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}})
+    fields = await _recipe_fields(body)
+    await db.recipes.update_one({"id": rid}, {"$set": {**fields, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}})
     updated = await db.recipes.find_one({"id": rid}, {"_id": 0})
     return clean(updated)
 
