@@ -33,7 +33,7 @@ from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -242,6 +242,7 @@ class GloveStockOut(BaseModel):
 class ToolHolderScrapIn(BaseModel):
     stock_type: Optional[str] = "holder"
     product_id: Optional[str] = ""
+    tool_holder_id: Optional[str] = ""
     quantity: float
     scrap_reason: str
     description: Optional[str] = ""
@@ -418,6 +419,65 @@ class RecipeIn(BaseModel):
 
 class RecipeBindIn(BaseModel):
     machine_id: str
+    request_id: Optional[str] = None
+
+    @field_validator("request_id")
+    @classmethod
+    def valid_request_id(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("request_id boş olamaz")
+        return value
+
+
+class RecipeReturnItemIn(BaseModel):
+    line_id: str
+    quantity: float = Field(gt=0, allow_inf_nan=False)
+    condition: str
+    note: str = ""
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def valid_quantity(cls, value):
+        from decimal import Decimal, InvalidOperation
+        try:
+            number = Decimal(str(value))
+            if not number.is_finite() or number <= 0 or number != number.quantize(Decimal("0.000001")):
+                raise ValueError("Miktar sonlu, pozitif ve en fazla 6 ondalık basamaklı olmalı")
+        except InvalidOperation:
+            raise ValueError("Geçersiz miktar")
+        return value
+
+    @field_validator("condition")
+    @classmethod
+    def valid_condition(cls, value):
+        if value not in {"healthy", "broken", "scrap"}:
+            raise ValueError("Geçersiz iade durumu")
+        return value
+
+
+class RecipeReturnIn(BaseModel):
+    request_id: str = Field(min_length=1)
+    return_date: str = Field(default_factory=lambda: date.today().isoformat())
+    note: str = ""
+    items: List[RecipeReturnItemIn]
+
+    @field_validator("request_id")
+    @classmethod
+    def valid_request_id(cls, value):
+        if not value.strip():
+            raise ValueError("request_id boş olamaz")
+        return value
+
+    @field_validator("return_date")
+    @classmethod
+    def valid_return_date(cls, value):
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError:
+            raise ValueError("İade tarihi YYYY-MM-DD biçiminde olmalı")
+        if parsed.isoformat() != value:
+            raise ValueError("İade tarihi YYYY-MM-DD biçiminde olmalı")
+        return value
 
 
 class SupplierIn(BaseModel):
@@ -1453,10 +1513,17 @@ async def update_recipe(rid: str, body: RecipeIn, user=Depends(require_admin)):
     recipe = await db.recipes.find_one({"id": rid})
     if not recipe:
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
-    if recipe.get("status") == "bound":
+    if recipe.get("pending_operation"):
+        raise HTTPException(status_code=409, detail="Reçetede tamamlanmayı bekleyen işlem var")
+    if recipe.get("status") in {"bound", "returned"} or recipe.get("bound_at") or recipe.get("return_history"):
         raise HTTPException(status_code=400, detail="Tezgâha bağlanmış reçete düzenlenemez")
     fields = await _recipe_fields(body)
-    await db.recipes.update_one({"id": rid}, {"$set": {**fields, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}})
+    revision = recipe.get("recipe_revision", 0)
+    query = {"id": rid, "status": recipe.get("status", "draft"), "pending_operation": None,
+             "recipe_revision": revision if "recipe_revision" in recipe else {"$exists": False}}
+    result = await db.recipes.update_one(query, {"$set": {**fields, "recipe_revision": revision + 1, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}})
+    if not result.matched_count:
+        raise HTTPException(status_code=409, detail="Reçete başka bir işlem tarafından değiştirildi")
     updated = await db.recipes.find_one({"id": rid}, {"_id": 0})
     return clean(updated)
 
@@ -1466,11 +1533,15 @@ async def delete_recipe(rid: str, user=Depends(require_admin)):
     recipe = await db.recipes.find_one({"id": rid})
     if not recipe:
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
-    if recipe.get("status") == "bound":
+    if recipe.get("pending_operation"):
+        raise HTTPException(status_code=409, detail="Reçetede tamamlanmayı bekleyen işlem var")
+    if recipe.get("status") in {"bound", "returned"} or recipe.get("bound_at") or recipe.get("return_history"):
         raise HTTPException(status_code=400, detail="Tezgâha bağlanmış reçete silinemez")
-    result = await db.recipes.delete_one({"id": rid})
+    query = {"id": rid, "status": recipe.get("status", "draft"), "pending_operation": None,
+             "recipe_revision": recipe.get("recipe_revision", 0) if "recipe_revision" in recipe else {"$exists": False}}
+    result = await db.recipes.delete_one(query)
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Reçete bulunamadı")
+        raise HTTPException(status_code=409, detail="Reçete başka bir işlem tarafından değiştirildi")
     return {"ok": True}
 
 
@@ -1479,30 +1550,285 @@ async def bind_recipe(rid: str, body: RecipeBindIn, user=Depends(require_admin))
     recipe = await db.recipes.find_one({"id": rid})
     if not recipe:
         raise HTTPException(status_code=404, detail="Reçete bulunamadı")
-    if recipe.get("status") == "bound":
-        raise HTTPException(status_code=400, detail="Bu reçete daha önce tezgâha bağlanmış")
+    request_id = body.request_id or f"bind:{rid}"
+    original = body.model_dump(exclude_unset=True)
+    payload_hash = _recipe_payload_hash(original)
+    pending, completed = _recipe_existing_operation(recipe, "bind", request_id, payload_hash)
+    if recipe.get("status") == "returned":
+        raise HTTPException(status_code=409, detail="İade edilmiş reçete yeniden bağlanamaz")
+    if completed:
+        return {"ok": True, "recipe": clean(recipe), "movements": completed["movements"], "duplicate": True}
+    if pending:
+        return await _recipe_run_operation(rid, pending)
+    if recipe.get("status") != "draft" or recipe.get("bound_at") or recipe.get("return_history"):
+        raise HTTPException(status_code=409, detail="Bu reçete daha önce tezgâha bağlanmış")
     machine = await db.machines.find_one({"id": body.machine_id})
     if not machine:
         raise HTTPException(status_code=404, detail="Tezgah bulunamadı")
-    resolved = []
-    for line in recipe.get("lines", []):
+    if not recipe.get("lines"):
+        raise HTTPException(status_code=400, detail="Reçete satırı bulunamadı")
+    from decimal import Decimal
+    aggregates, movements, stocks = {}, [], []
+    operation_id = _recipe_operation_id(rid, "bind", request_id)
+    now = now_utc().isoformat()
+    for index, line in enumerate(recipe["lines"]):
+        quantity = _recipe_decimal(line.get("quantity", 0), positive=True)
+        if line.get("kind") not in {"product", "toolholder"}:
+            raise HTTPException(status_code=400, detail="Geçersiz reçete satırı")
         collection = db.products if line.get("kind") == "product" else db.toolholders
         item = await collection.find_one({"id": line.get("reference_id")})
         if not item:
             raise HTTPException(status_code=404, detail=f"Stok kaydı bulunamadı: {line.get('name', '')}")
-        if line.get("quantity", 0) > item.get("current_stock", 0):
-            raise HTTPException(status_code=400, detail=f"Yetersiz stok: {line.get('name', '')}")
-        resolved.append((line, collection, item))
-    movements = []
-    for line, collection, item in resolved:
-        new_stock = item.get("current_stock", 0) - line["quantity"]
-        await collection.update_one({"id": item["id"]}, {"$set": {"current_stock": new_stock}})
-        movement = {"id": new_id(), "type": "recipe_bind", "recipe_id": rid, "recipe_name": recipe["name"], "kind": line["kind"], "reference_id": item["id"], "product_code": item.get("code", ""), "product_name": item.get("name", ""), "quantity": line["quantity"], "machine_id": machine["id"], "machine_name": machine.get("name", ""), "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat()}
-        await db.recipe_movements.insert_one(movement)
-        movements.append(clean(movement))
-    await db.recipes.update_one({"id": rid}, {"$set": {"status": "bound", "machine_id": machine["id"], "machine_name": machine.get("name", ""), "bound_at": now_utc().isoformat(), "bound_by": user.get("name", "")}})
-    updated = await db.recipes.find_one({"id": rid}, {"_id": 0})
-    return {"ok": True, "recipe": updated, "movements": movements}
+        key = (line["kind"], item["id"])
+        aggregate = aggregates.setdefault(key, {"quantity": Decimal(0), "item": item})
+        aggregate["quantity"] += quantity
+        movement = _recipe_movement(recipe, line, str(index), float(quantity), machine, user, now,
+                                    _recipe_operation_id(operation_id, "line", str(index)), "recipe_bind")
+        movements.append(movement)
+    for (kind, reference_id), aggregate in aggregates.items():
+        if aggregate["quantity"] > _recipe_decimal(aggregate["item"].get("current_stock", 0)):
+            raise HTTPException(status_code=400, detail=f"Yetersiz stok: {aggregate['item'].get('name', '')}")
+        stocks.append({"kind": kind, "reference_id": reference_id, "delta": -float(aggregate["quantity"]),
+                       "marker": _recipe_operation_id(operation_id, kind, reference_id)})
+    completed = {"request_id": request_id, "body": original, "body_hash": payload_hash, "movements": movements}
+    final = {"status": "bound", "machine_id": machine["id"], "machine_name": machine.get("name", ""),
+             "machine_code": machine.get("code", ""), "bound_at": now, "bound_by": user.get("name", ""),
+             "bind_operation": completed}
+    pending = {"id": operation_id, "type": "bind", "request_id": request_id, "body": original,
+               "body_hash": payload_hash, "stocks": stocks, "movements": movements, "scraps": [], "final": final}
+    pending = await _recipe_claim_operation(recipe, pending)
+    return await _recipe_run_operation(rid, pending)
+
+
+def _recipe_payload_hash(body):
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+
+
+def _recipe_operation_id(recipe_id, operation_type, request_id):
+    return _recipe_payload_hash([recipe_id, operation_type, request_id])
+
+
+def _recipe_decimal(value, positive=False):
+    from decimal import Decimal, InvalidOperation
+    try:
+        number = Decimal(str(value))
+        if not number.is_finite() or number < 0 or (positive and number <= 0) or number != number.quantize(Decimal("0.000001")):
+            raise ValueError()
+        return number
+    except (InvalidOperation, ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Miktar sonlu, pozitif ve en fazla 6 ondalık basamaklı olmalı")
+
+
+def _recipe_existing_operation(recipe, operation_type, request_id, payload_hash):
+    """A pending operation blocks every different request, including completed replays."""
+    pending = recipe.get("pending_operation")
+    if pending:
+        if pending["type"] != operation_type or pending["request_id"] != request_id or pending["body_hash"] != payload_hash:
+            raise HTTPException(status_code=409, detail="Başka veya farklı içerikli bir işlem tamamlanmayı bekliyor")
+        return pending, None
+    completed = ([recipe["bind_operation"]] if recipe.get("bind_operation") else []) + recipe.get("return_history", [])
+    for event in completed:
+        if event.get("request_id") == request_id:
+            event_type = "bind" if event is recipe.get("bind_operation") else "return"
+            if event_type != operation_type or event.get("body_hash") != payload_hash:
+                raise HTTPException(status_code=409, detail="request_id farklı içerikle kullanılmış")
+            return None, event
+    return None, None
+
+
+async def _recipe_claim_operation(recipe, pending):
+    """Standalone-safe CAS: persist the complete immutable plan before any stock write."""
+    revision = recipe.get("recipe_revision", 0)
+    pending["revision"] = revision + 1
+    query = {"id": recipe["id"], "status": recipe["status"], "pending_operation": None,
+             "recipe_revision": revision if "recipe_revision" in recipe else {"$exists": False}}
+    result = await db.recipes.update_one(query, {"$set": {"pending_operation": pending, "recipe_revision": revision + 1}})
+    if result.matched_count:
+        return pending
+    current = await db.recipes.find_one({"id": recipe["id"]})
+    if not current:
+        raise HTTPException(status_code=409, detail="Reçete başka bir işlem tarafından değiştirildi")
+    existing, completed = _recipe_existing_operation(current, pending["type"], pending["request_id"], pending["body_hash"])
+    if existing:
+        return existing
+    if completed:
+        # Another worker finished this exact request. Replay its immutable plan;
+        # stock markers and unique Mongo _id upserts make the replay harmless.
+        return pending
+    raise HTTPException(status_code=409, detail="Reçete başka bir işlem tarafından değiştirildi; yeniden deneyin")
+
+
+def _recipe_return_lines(recipe):
+    from decimal import Decimal
+    totals = recipe.get("return_totals", {})
+    result = []
+    for index, line in enumerate(recipe.get("lines", [])):
+        line_id = str(index)
+        sent = _recipe_decimal(line.get("quantity", 0))
+        received = totals.get(line_id, {})
+        quantities = {condition: _recipe_decimal(received.get(condition, 0)) for condition in ("healthy", "broken", "scrap")}
+        outstanding = sent - sum(quantities.values(), Decimal(0))
+        result.append({"line_id": line_id, "kind": line.get("kind", ""), "reference_id": line.get("reference_id", ""),
+                       "name": line.get("name", ""), "code": line.get("code", ""), "brand": line.get("brand", ""),
+                       "sent_quantity": float(sent), "healthy_quantity": float(quantities["healthy"]),
+                       "broken_quantity": float(quantities["broken"]), "scrap_quantity": float(quantities["scrap"]),
+                       "outstanding_quantity": float(outstanding)})
+    return result
+
+
+@api.get("/recipes/{rid}/returns")
+async def get_recipe_returns(rid: str, user=Depends(get_current_user)):
+    recipe = await db.recipes.find_one({"id": rid}, {"_id": 0})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Reçete bulunamadı")
+    pending = recipe.get("pending_operation")
+    return {"recipe": recipe, "lines": _recipe_return_lines(recipe), "history": recipe.get("return_history", []),
+            "pending_operation": {key: pending[key] for key in ("type", "request_id", "body")} if pending else None}
+
+
+def _recipe_movement(recipe, line, line_id, quantity, machine, user, now, movement_id, movement_type):
+    return {"id": movement_id, "type": movement_type, "source": "recipe_bind" if movement_type == "recipe_bind" else "recipe_return",
+            "recipe_id": recipe["id"], "recipe_name": recipe.get("name", ""), "recipe_line_id": line_id,
+            "kind": line["kind"], "reference_id": line["reference_id"], "product_id": line["reference_id"] if line["kind"] == "product" else "",
+            "tool_holder_id": line["reference_id"] if line["kind"] == "toolholder" else "",
+            "product_code": line.get("code", ""), "product_name": line.get("name", ""), "name": line.get("name", ""),
+            "code": line.get("code", ""), "brand": line.get("brand", ""), "quantity": quantity,
+            "machine_id": machine.get("id", ""), "machine_name": machine.get("name", ""), "machine_code": machine.get("code", ""),
+            "production_product": recipe.get("workpiece_name", ""), "user_id": user.get("id", ""), "user_name": user.get("name", ""), "created_at": now}
+
+
+@api.post("/recipes/{rid}/returns")
+async def return_recipe_items(rid: str, body: RecipeReturnIn, user=Depends(require_admin)):
+    from copy import deepcopy
+    from decimal import Decimal
+    recipe = await db.recipes.find_one({"id": rid})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Reçete bulunamadı")
+    original = body.model_dump(exclude_unset=True)
+    payload_hash = _recipe_payload_hash(original)
+    pending, completed = _recipe_existing_operation(recipe, "return", body.request_id, payload_hash)
+    if completed:
+        return {"ok": True, "recipe": clean(recipe), "return": completed, "duplicate": True}
+    if pending:
+        return await _recipe_run_operation(rid, pending)
+    if recipe.get("status") != "bound":
+        raise HTTPException(status_code=409, detail="Yalnızca tezgâha bağlı reçeteden iade yapılabilir")
+    if not body.items:
+        raise HTTPException(status_code=400, detail="En az bir iade satırı seçin")
+    available = {line["line_id"]: line for line in _recipe_return_lines(recipe)}
+    seen, selected, stocks, movements, scraps = set(), [], [], [], []
+    totals = deepcopy(recipe.get("return_totals", {}))
+    operation_id = _recipe_operation_id(rid, "return", body.request_id)
+    now = now_utc().isoformat()
+    machine = {"id": recipe.get("machine_id", ""), "name": recipe.get("machine_name", ""), "code": recipe.get("machine_code", "")}
+    healthy, discarded = Decimal(0), Decimal(0)
+    # Validate and fully plan every selected line before claiming the journal.
+    for requested in body.items:
+        if requested.line_id in seen or requested.line_id not in available:
+            raise HTTPException(status_code=400, detail="Geçersiz veya yinelenen reçete satırı")
+        seen.add(requested.line_id)
+        line = available[requested.line_id]
+        quantity = _recipe_decimal(requested.quantity, positive=True)
+        if requested.condition not in {"healthy", "broken", "scrap"} or line["kind"] not in {"product", "toolholder"}:
+            raise HTTPException(status_code=400, detail="Geçersiz iade durumu veya stok türü")
+        if quantity > _recipe_decimal(line["outstanding_quantity"]):
+            raise HTTPException(status_code=400, detail="İade miktarı bekleyen miktarı aşamaz")
+        collection = db.products if line["kind"] == "product" else db.toolholders
+        item = await collection.find_one({"id": line["reference_id"]})
+        if not item:
+            raise HTTPException(status_code=404, detail="İade satırındaki stok kaydı bulunamadı")
+        receipt = {**line, "quantity": float(quantity), "condition": requested.condition, "note": requested.note}
+        selected.append(receipt)
+        line_totals = totals.setdefault(requested.line_id, {"healthy": 0, "broken": 0, "scrap": 0})
+        line_totals[requested.condition] = float(_recipe_decimal(line_totals.get(requested.condition, 0)) + quantity)
+        movement_id = _recipe_operation_id(operation_id, "line", requested.line_id)
+        movement = _recipe_movement(recipe, line, requested.line_id, float(quantity), machine, user, now, movement_id,
+                                    "recipe_return" if requested.condition == "healthy" else "recipe_scrap")
+        movement.update({"return_id": operation_id, "request_id": body.request_id, "condition": requested.condition,
+                         "note": requested.note or body.note, "transaction_date": body.return_date, "date": body.return_date,
+                         "stock_delta": float(quantity) if requested.condition == "healthy" else 0})
+        movements.append(movement)
+        if requested.condition == "healthy":
+            healthy += quantity
+            stocks.append({"kind": line["kind"], "reference_id": line["reference_id"], "delta": float(quantity), "marker": movement_id})
+        else:
+            discarded += quantity
+            scrap_id = _recipe_operation_id(operation_id, "scrap", requested.line_id)
+            reason = "Kırıldı" if requested.condition == "broken" else "Hurda / Kullanım dışı"
+            # Deterministic numeric reference avoids a non-atomic counter allocation
+            # and survives a crash before scrap insertion (same PDF prefix/format).
+            scrap = {**movement, "id": scrap_id, "record_no": f"YAZKANİŞLEME{int(scrap_id[:15], 16):018d}",
+                     "stock_type": "product" if line["kind"] == "product" else "holder", "stock_already_deducted": True,
+                     "qty": float(quantity), "unit": item.get("unit") or "adet", "scrap_reason": reason, "reason": reason,
+                     "scrap_date": body.return_date, "description": requested.note or body.note, "location": item.get("location", ""),
+                     "holder_type": item.get("type", item.get("category", "")), "length": item.get("length", ""),
+                     "diameter": item.get("diameter", ""), "cutting_tool_code_name": item.get("cutting_tool_code_name", item.get("code", "")),
+                     "operator_name": user.get("name", ""), "prepared_by": "Abdullah Tetik", "foreman_name": "Celal",
+                     "approved_by": "", "witness": "", "before_image_urls": [], "after_image_urls": []}
+            scraps.append(scrap)
+    event = {"id": operation_id, "request_id": body.request_id, "body": original, "body_hash": payload_hash,
+             "recipe_id": rid, "recipe_name": recipe.get("name", ""), "date": body.return_date, "return_date": body.return_date,
+             "note": body.note, "machine_id": machine["id"], "machine_name": machine["name"], "machine_code": machine["code"],
+             "items": selected, "healthy_quantity": float(healthy), "scrap_quantity": float(discarded),
+             "broken_quantity": float(sum((_recipe_decimal(item["quantity"]) for item in selected if item["condition"] == "broken"), Decimal(0))),
+             "user_id": user.get("id", ""), "user_name": user.get("name", ""), "created_at": now}
+    all_returned = all(line["outstanding_quantity"] == 0 for line in _recipe_return_lines({**recipe, "return_totals": totals}))
+    final = {"return_totals": totals, "return_history": recipe.get("return_history", []) + [event],
+             "status": "returned" if all_returned else "bound", "updated_at": now}
+    if all_returned:
+        final["returned_at"] = now
+    pending = {"id": operation_id, "type": "return", "request_id": body.request_id, "body": original,
+               "body_hash": payload_hash, "stocks": stocks, "movements": movements, "scraps": scraps, "event": event, "final": final}
+    pending = await _recipe_claim_operation(recipe, pending)
+    return await _recipe_run_operation(rid, pending)
+
+
+async def _recipe_run_operation(rid, pending):
+    """Repeatable journal replay; failures intentionally retain the plan and applied markers.
+
+    No transactions/replica set required. Same-operation workers may overlap, but
+    each delta+marker is one atomic document update and each log uses Mongo's
+    unique _id. Different operations cannot claim until the final recipe CAS.
+    """
+    for stock in pending["stocks"]:
+        collection = db.products if stock["kind"] == "product" else db.toolholders
+        query = {"id": stock["reference_id"], "recipe_stock_operations": {"$ne": stock["marker"]}}
+        if stock["delta"] < 0:
+            query["current_stock"] = {"$gte": -stock["delta"]}
+        result = await collection.update_one(query, {"$inc": {"current_stock": stock["delta"]},
+                                                      "$addToSet": {"recipe_stock_operations": stock["marker"]}})
+        if not result.matched_count:
+            item = await collection.find_one({"id": stock["reference_id"]})
+            if not item or stock["marker"] not in item.get("recipe_stock_operations", []):
+                raise HTTPException(status_code=409, detail="Stok işlemi tamamlanamadı; bekleyen işlem korunuyor")
+    for movement in pending["movements"]:
+        await db.recipe_movements.update_one({"_id": movement["id"]}, {"$setOnInsert": movement}, upsert=True)
+        normal = {**movement, "id": _recipe_operation_id(movement["id"], "normal", "movement"),
+                  "type": "out" if pending["type"] == "bind" else ("in" if movement.get("condition") == "healthy" else "recipe_scrap"),
+                  "reason": "recipe_bind" if pending["type"] == "bind" else "recipe_return"}
+        collection = db.movements if movement["kind"] == "product" else db.toolholder_movements
+        await collection.update_one({"_id": normal["id"]}, {"$setOnInsert": normal}, upsert=True)
+    for scrap in pending["scraps"]:
+        await db.toolholder_scraps.update_one({"_id": scrap["id"]}, {"$setOnInsert": scrap}, upsert=True)
+    result = await db.recipes.update_one({"id": rid, "recipe_revision": pending["revision"], "pending_operation.id": pending["id"],
+                                         "pending_operation.body_hash": pending["body_hash"]},
+                                        {"$set": {**pending["final"], "recipe_revision": pending["revision"] + 1}, "$unset": {"pending_operation": ""}})
+    recipe = await db.recipes.find_one({"id": rid}, {"_id": 0})
+    if not recipe:
+        raise HTTPException(status_code=409, detail="İşlem sonlandırılamadı")
+    if not result.matched_count:
+        completed = recipe.get("bind_operation") if pending["type"] == "bind" else next(
+            (event for event in recipe.get("return_history", []) if event["request_id"] == pending["request_id"]), None)
+        if not completed or completed.get("body_hash") != pending["body_hash"]:
+            raise HTTPException(status_code=409, detail="İşlem sonlandırılamadı; bekleyen işlem korunuyor")
+    response = {"ok": True, "recipe": recipe, "duplicate": not bool(result.matched_count)}
+    if pending["type"] == "bind":
+        response["movements"] = recipe["bind_operation"]["movements"]
+    else:
+        response["return"] = next(event for event in recipe["return_history"] if event["request_id"] == pending["request_id"])
+    return response
 
 
 @api.get("/recipe-movements")
@@ -2194,6 +2520,39 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
     record = await db.toolholder_scraps.find_one({"id": scrap_id})
     if not record:
         raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    if record.get("source") == "recipe_return":
+        supplied = body.model_dump(exclude_unset=True)
+        try:
+            unchanged_quantity = _recipe_decimal(body.quantity, positive=True) == _recipe_decimal(record.get("quantity", 0))
+        except HTTPException:
+            unchanged_quantity = False
+        if not unchanged_quantity:
+            raise HTTPException(status_code=409, detail="Reçete iadesine bağlı hurda miktarı değiştirilemez")
+        for key in ("stock_type", "product_id", "tool_holder_id"):
+            if key in supplied and (supplied[key] or "") != (record.get(key) or ""):
+                raise HTTPException(status_code=409, detail="Reçete iadesine bağlı stok kimliği değiştirilemez")
+        if not body.scrap_reason.strip():
+            raise HTTPException(status_code=400, detail="Hurda nedeni zorunludur")
+        update = {key: value for key, value in supplied.items() if key not in {"quantity", "stock_type", "product_id", "tool_holder_id"}}
+        update["scrap_reason"] = body.scrap_reason.strip()
+        update["reason"] = update["scrap_reason"]
+        if "description" in supplied:
+            update["note"] = supplied["description"] or ""
+        if "scrap_date" in supplied:
+            update["date"] = supplied["scrap_date"]
+        update.update({"updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")})
+        if "machine_id" in update:
+            machine = await db.machines.find_one({"id": update["machine_id"]}) if update["machine_id"] else None
+            update.update({"machine_name": machine.get("name", "") if machine else "", "machine_code": machine.get("code", "") if machine else ""})
+        for key, name_key in (("operator_personnel_id", "operator_name"), ("approver_personnel_id", "approver_name"), ("witness_personnel_id", "witness")):
+            if key in update:
+                person = await db.personnel.find_one({"id": update[key]}) if update[key] else None
+                update[name_key] = f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else ""
+        await db.toolholder_scraps.update_one({"id": scrap_id, "source": "recipe_return"}, {"$set": update})
+        updated = await db.toolholder_scraps.find_one({"id": scrap_id}, {"_id": 0})
+        collection = db.products if record.get("stock_type") == "product" else db.toolholders
+        item = await collection.find_one({"id": record.get("product_id") if record.get("stock_type") == "product" else record.get("tool_holder_id")})
+        return {"ok": True, "new_stock": item.get("current_stock", 0) if item else None, "scrap": updated}
     if body.quantity <= 0 or not body.scrap_reason.strip():
         raise HTTPException(status_code=400, detail="Miktar ve hurda nedeni zorunludur")
     if record.get("stock_type") == "product":
@@ -2253,6 +2612,8 @@ async def delete_toolholder_scrap(scrap_id: str, user=Depends(require_admin)):
     record = await db.toolholder_scraps.find_one({"id": scrap_id})
     if not record:
         raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    if record.get("source") == "recipe_return":
+        raise HTTPException(status_code=409, detail="Reçete iadesine bağlı hurda kaydı silinemez; stok zaten düşülmüştür")
     if record.get("stock_type") == "product":
         product = await db.products.find_one({"id": record.get("product_id")})
         if not product:
