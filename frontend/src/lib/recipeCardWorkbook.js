@@ -2,7 +2,9 @@ import ExcelJS from "exceljs";
 import { CARD_DEFAULTS, cardDate, detailRows } from "./recipeCardData";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
-const PAGE_LINES = 14;
+const PAGE_LINES = 28;
+const FIRST_LINE_ROW = 6;
+const FOOTER_ROW = FIRST_LINE_ROW + PAGE_LINES;
 
 export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
   const wb = new ExcelJS.Workbook();
@@ -12,6 +14,11 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
   // ExcelJS exports `merges`, but its model setter restores `mergeCells`.
   baseModel.mergeCells = baseModel.merges;
   const originalTechnicalWidths = [12, 13, 14, 15].map((col) => source.getColumn(col).width);
+  const bodyStyles = Array.from({ length: 17 }, (_, i) => clone(source.getCell(FIRST_LINE_ROW, Math.min(i + 1, 15)).style));
+  const footer = [20, 21, 22].map((row) => ({
+    height: source.getRow(row).height,
+    cells: Array.from({ length: 17 }, (_, i) => ({ value: source.getCell(row, i + 1).value, style: clone(source.getCell(row, i + 1).style) })),
+  }));
   const pages = Math.max(1, Math.ceil(groups.length / PAGE_LINES));
   for (let page = 0; page < pages; page++) {
     const ws = page === 0 ? source : wb.addWorksheet(`Takım Kartı ${page + 1}`);
@@ -33,15 +40,30 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     ws.getCell("Q4").note = "ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.";
     ws.getColumn(12).width = 13;
     originalTechnicalWidths.forEach((width, index) => { ws.getColumn(13 + index).width = width; });
-    ws.pageSetup = { ...ws.pageSetup, orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: "A1:Q22" };
+    ws.pageSetup = { ...ws.pageSetup, orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: `A1:Q${FOOTER_ROW + 2}` };
     ws.pageSetup.margins = { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 };
     ws.views = [{ showGridLines: false }];
-    for (let row = 6; row <= 19; row++) {
-      ws.getCell(row, 16).style = clone(ws.getCell(row, 15).style);
-      ws.getCell(row, 17).style = clone(ws.getCell(row, 15).style);
-      for (let col = 1; col <= 17; col++) ws.getCell(row, col).value = null;
-      ws.getRow(row).height = 25;
+    ws.unMergeCells("A20:B20");
+    ws.unMergeCells("A21:B21");
+    for (let row = FIRST_LINE_ROW; row < FOOTER_ROW; row++) {
+      for (let col = 1; col <= 17; col++) {
+        const cell = ws.getCell(row, col);
+        cell.style = clone(bodyStyles[col - 1]);
+        cell.value = null;
+      }
+      ws.getRow(row).height = 28;
     }
+    footer.forEach((saved, index) => {
+      const row = FOOTER_ROW + index;
+      ws.getRow(row).height = saved.height;
+      saved.cells.forEach((savedCell, col) => {
+        const cell = ws.getCell(row, col + 1);
+        cell.value = savedCell.value;
+        cell.style = clone(savedCell.style);
+      });
+    });
+    ws.mergeCells(`A${FOOTER_ROW}:B${FOOTER_ROW}`);
+    ws.mergeCells(`A${FOOTER_ROW + 1}:B${FOOTER_ROW + 1}`);
     // Only merged MASTER cells are written; children would erase their headings.
     ws.getCell("D2").value = recipe.workpiece_name || "";
     ws.getCell("G3").value = recipe.machine_code || "";
@@ -60,14 +82,14 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     ws.getCell("M1").value = `Doküman No: ${recipe.document_no ?? CARD_DEFAULTS.document_no}\nYayın Tarihi: ${cardDate(recipe.publication_date ?? CARD_DEFAULTS.publication_date)}\nRevizyon No: ${recipe.revision_no ?? CARD_DEFAULTS.revision_no}\nRevizyon Tarihi: ${cardDate(recipe.revision_date)}`;
     ws.getCell("M1").font = { ...ws.getCell("M1").font, size: 9 };
     ws.getCell("M1").alignment = { vertical: "middle", wrapText: true };
-    ws.getCell("A21").value = recipe.prepared_by || "";
-    ws.getCell("C21").value = recipe.approved_by || "";
-    ws.getCell("A22").value = "F-165 / R.02 / 15.11.2019";
-    if (pages > 1) ws.getCell("H22").value = `Sayfa ${page + 1} / ${pages}`;
+    ws.getCell(FOOTER_ROW + 1, 1).value = recipe.prepared_by || "";
+    ws.getCell(FOOTER_ROW + 1, 3).value = recipe.approved_by || "";
+    ws.getCell(FOOTER_ROW + 2, 1).value = "F-165 / R.02 / 15.11.2019";
+    if (pages > 1) ws.getCell(FOOTER_ROW + 2, 8).value = `Sayfa ${page + 1} / ${pages}`;
     groups.slice(page * PAGE_LINES, (page + 1) * PAGE_LINES).forEach((group, index) => {
       const p = group.product || {}, h = group.holder || {};
       const values = [p.tool_no || page * PAGE_LINES + index + 1, p.brand || "", p.name || "", p.inner_cooling === "VAR" ? "X" : "", p.inner_cooling === "YOK" ? "X" : "", p.holder_type || h.name || "", p.holder_length || "", p.drill_helix_length || "", p.insert_brand || "", p.used_insert || "", p.insert_quality || "", p.cutting_speed || "", p.spindle_speed || "", p.feed_rate || "", p.tool_life || "", p.special || "", p.tool_total_length || ""];
-      values.forEach((value, c) => { const cell = ws.getCell(6 + index, c + 1); cell.value = value; cell.font = { name: "Arial", size: 9 }; cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
+      values.forEach((value, c) => { const cell = ws.getCell(FIRST_LINE_ROW + index, c + 1); cell.value = value; cell.font = { name: "Arial", size: 9 }; cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
     });
   }
   // Preserve all legacy values; Zoller total length and cutting speed extend the original form.
