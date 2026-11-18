@@ -10,6 +10,7 @@ const template = fs.readFileSync(path.join(__dirname, "../templates/F-165-origin
 const p = { kind: "product", reference_id: "p1", pair_id: "pair1", code: "YZK-01", name: "Ø20 KARBÜR FREZE", brand: "GÜHRİNG", quantity: 2, tool_no: "T07", machining_length: "32 mm", tool_total_length: "185,25", cutting_speed: "65 m/dk", spindle_speed: "1035 dev/dk", feed_rate: "124 mm/dk", inner_cooling: "YOK", holder_type: "HİDROLİK", holder_length: "STANDART", drill_helix_length: "45 mm", insert_brand: "ZCC-CT", used_insert: "TCMT110404", insert_quality: "P25", tool_life: "120", special: "Kaba işleme" };
 const h = { kind: "toolholder", reference_id: "h1", pair_id: "pair1", code: "H-01", name: "Hidrolik Tutucu", brand: "AKKO", quantity: 1 };
 const recipe = { ...CARD_DEFAULTS, name: "TEST — örnek reçete", workpiece_name: "ÖRNEK PARÇA", machine_code: "DİK-01", machine_type: "CNC DİK İŞLEM", revision_date: "2026-11-18", prepared_by: "Örnek hazırlayan", approved_by: "Örnek onaylayan", note: "Yalnızca test verisi", lines: [p, h] };
+const shiftedFields = ["insert_quality", "cutting_speed", "spindle_speed", "feed_rate", "tool_life", "special", "tool_total_length"];
 
 it("preserves the original F-165 merged headings, logo, footer and all filled values", async () => {
   const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: p, holder: h }]);
@@ -19,15 +20,29 @@ it("preserves the original F-165 merged headings, logo, footer and all filled va
   expect(ws.getCell("A5").value).toBe("TAKIM NO:");
   expect(ws.getCell("M1").value).toContain("09/05/25"); expect(ws.getCell("M1").value).toContain("18/11/26");
   expect(ws.getCell("D2").value).toBe(recipe.workpiece_name); expect(ws.getCell("G3").value).toBe(recipe.machine_code); expect(ws.getCell("H3").value).toBe(recipe.machine_type);
-  expect(ws.getCell("P4").value).toBe("TAKIM TAM BOY\n(mm)"); expect(ws.getCell("P6").value).toBe("185,25");
-  expect(JSON.stringify(ws.getCell("P4").note)).toContain("ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.");
-  expect(ws.getCell("Q4").value).toBe("KESME HIZI\n(m/dk)"); expect(ws.getCell("Q5").master.address).toBe("Q4");
-  expect(ws.getCell("Q6").value).toBe(p.cutting_speed); expect(ws.pageSetup.printArea).toBe("A1:Q22");
+  expect(ws.getCell("Q4").value).toBe("TAKIM TAM BOY\n(mm)"); expect(ws.getCell("Q6").value).toBe("185,25");
+  expect(JSON.stringify(ws.getCell("Q4").note)).toContain("ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.");
+  expect(ws.getCell("L4").value).toBe("KESME HIZI\n(m/dk)"); expect(ws.getCell("L5").master.address).toBe("L4");
+  expect(ws.getCell("L6").value).toBe(p.cutting_speed); expect(ws.pageSetup.printArea).toBe("A1:Q22");
   expect(ws.getCell("A6").value).toBe("T07"); expect(ws.getCell("B6").value).toBe(p.brand); expect(ws.getCell("J6").value).toBe(p.used_insert);
-  expect(ws.getCell("L6").value).toBe(p.spindle_speed); expect(ws.getCell("M6").value).toBe(p.feed_rate);
+  expect(ws.getCell("M6").value).toBe(p.spindle_speed); expect(ws.getCell("N6").value).toBe(p.feed_rate);
   expect(ws.getCell("A20").value).toBe("HAZIRLAYAN"); expect(ws.getCell("A21").value).toBe(recipe.prepared_by); expect(ws.getCell("A22").value).toBe("F-165 / R.02 / 15.11.2019");
   expect(ws.getImages()).toHaveLength(1); expect(ws.getCell("A7").value).toBeNull();
   const detail = loaded.getWorksheet("Reçete Verileri"); expect(detail.getCell("E2").numFmt).toBe("dd/mm/yy");
+});
+
+it("prints K:Q in insert quality, cutting speed, spindle speed, feed, life, special and Zoller length order", async () => {
+  const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: p, holder: h }]);
+  const loaded = new ExcelJS.Workbook(); await loaded.xlsx.load(await wb.xlsx.writeBuffer());
+  const ws = loaded.getWorksheet("Takım Kartı");
+  const columns = ["K", "L", "M", "N", "O", "P", "Q"];
+  expect(columns.map((column) => String(ws.getCell(`${column}4`).value).replace(/\s+/g, " ").trim())).toEqual([
+    "İNSERT KALİTESİ", "KESME HIZI (m/dk)", "DEVİR (dev/dk)", "İLERLEME (mm/dk)", "TAKIM ÖMRÜ (ADET)", "ÖZEL", "TAKIM TAM BOY (mm)",
+  ]);
+  expect(columns.map((column) => ws.getCell(`${column}6`).value)).toEqual(shiftedFields.map((key) => p[key]));
+  expect(ws.columnCount).toBe(17); expect(ws.pageSetup.printArea).toBe("A1:Q22");
+  expect(ws.getCell("Q5").master.address).toBe("Q4");
+  expect(JSON.stringify(ws.getCell("Q4").note)).toContain("ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.");
 });
 
 it("paginates 29 rows without overwriting footer or losing images", async () => {
@@ -38,12 +53,12 @@ it("paginates 29 rows without overwriting footer or losing images", async () => 
   [1, 2, 3].forEach((page) => {
     const ws = loaded.getWorksheet(`Takım Kartı ${page}`);
     expect(ws.getImages()).toHaveLength(1); expect(ws.getCell("A20").value).toBe("HAZIRLAYAN"); expect(ws.getCell("B4").value).toBe("TAKIM MARKASI");
-    expect(ws.getCell("P4").value).toBe("TAKIM TAM BOY\n(mm)");
-    expect(ws.getCell("Q4").value).toBe("KESME HIZI\n(m/dk)"); expect(ws.getCell("Q5").master.address).toBe("Q4");
+    expect(ws.getCell("Q4").value).toBe("TAKIM TAM BOY\n(mm)");
+    expect(ws.getCell("L4").value).toBe("KESME HIZI\n(m/dk)"); expect(ws.getCell("L5").master.address).toBe("L4");
     expect(ws.pageSetup.printArea).toBe("A1:Q22");
     groups.slice((page - 1) * 14, page * 14).forEach((group, i) => {
-      expect(ws.getCell(`P${i + 6}`).value).toBe(group.product.tool_total_length);
-      expect(ws.getCell(`Q${i + 6}`).value).toBe(group.product.cutting_speed);
+      expect(ws.getCell(`Q${i + 6}`).value).toBe(group.product.tool_total_length);
+      expect(ws.getCell(`L${i + 6}`).value).toBe(group.product.cutting_speed);
     });
   });
   expect(loaded.getWorksheet("Takım Kartı 1").getCell("C19").value).toBe("Takım 14");
@@ -89,26 +104,51 @@ it("creates a completely blank reusable template and deliverable examples", asyn
   const blank = await buildRecipeCardWorkbook(template, CARD_DEFAULTS, []);
   for (let r = 6; r <= 19; r++) for (let c = 1; c <= 17; c++) expect(blank.worksheets[0].getCell(r, c).value).toBeNull();
   const dir = "/home/ubuntu/deliverables"; fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(`${dir}/F-165-kesme-hizi-recete-sablonu.xlsx`, await blank.xlsx.writeBuffer());
+  fs.writeFileSync(`${dir}/F-165-sirali-recete-sablonu.xlsx`, await blank.xlsx.writeBuffer());
   const example = await buildRecipeCardWorkbook(template, recipe, [{ product: p, holder: h }]);
-  fs.writeFileSync(`${dir}/F-165-kesme-hizi-ornek-recete-karti.xlsx`, await example.xlsx.writeBuffer());
+  fs.writeFileSync(`${dir}/F-165-sirali-ornek-recete-karti.xlsx`, await example.xlsx.writeBuffer());
 });
 
-it("imports Zoller length and cutting speed from the standalone printed card even when stock speed differs", async () => {
+it("imports all seven shifted fields from the standalone printed card instead of differing stock values", async () => {
   const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: p, holder: h }]);
   wb.removeWorksheet(wb.getWorksheet("Reçete Verileri").id);
   const book = XLSX.read(await wb.xlsx.writeBuffer(), { type: "buffer" });
   expect(book.SheetNames).toEqual(["Takım Kartı"]);
   const matrix = XLSX.utils.sheet_to_json(book.Sheets["Takım Kartı"], { header: 1, defval: "", raw: false });
-  const result = parseCardMatrix(matrix, [{ id: "p1", name: p.name, code: p.code, brand: p.brand, cutting_speed: "999 m/dk" }], []);
-  expect(result.groups).toHaveLength(1); expect(result.groups[0].product.tool_total_length).toBe("185,25");
-  expect(result.groups[0].product.cutting_speed).toBe(p.cutting_speed);
+  const stock = { id: "p1", name: p.name, code: p.code, brand: p.brand, ...Object.fromEntries(shiftedFields.map((key) => [key, `stock ${key}`])) };
+  const result = parseCardMatrix(matrix, [stock], []);
+  expect(result.warnings).toEqual([]); expect(result.groups).toHaveLength(1);
+  for (const key of shiftedFields) expect(result.groups[0].product[key]).toBe(p[key]);
+});
+
+it("imports the previous K quality, L spindle, M feed, N life, O special, P length and Q cutting-speed layout", async () => {
+  const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: p, holder: h }]);
+  wb.removeWorksheet(wb.getWorksheet("Reçete Verileri").id);
+  const book = XLSX.read(await wb.xlsx.writeBuffer(), { type: "buffer" });
+  const matrix = XLSX.utils.sheet_to_json(book.Sheets["Takım Kartı"], { header: 1, defval: "", raw: false });
+  const metaRows = matrix.slice(0, 3).map((row) => [...row]);
+  // Reorder only the two header rows and the 14 body rows, never M1 metadata.
+  matrix.slice(3, 19).forEach((row) => {
+    const shifted = row.slice(11, 17);
+    [1, 2, 3, 4, 5, 0].forEach((source, index) => { row[11 + index] = shifted[source]; });
+  });
+  expect(matrix.slice(0, 3)).toEqual(metaRows);
+  expect(matrix[3].slice(10, 17).map((value) => String(value).replace(/\s+/g, " ").trim())).toEqual([
+    "İNSERT KALİTESİ", "DEVİR (dev/dk)", "İLERLEME (mm/dk)", "TAKIM ÖMRÜ (ADET)", "ÖZEL", "TAKIM TAM BOY (mm)", "KESME HIZI (m/dk)",
+  ]);
+  expect(matrix[5].slice(10, 17)).toEqual([p.insert_quality, p.spindle_speed, p.feed_rate, p.tool_life, p.special, p.tool_total_length, p.cutting_speed]);
+  const stock = { id: "p1", name: p.name, code: p.code, brand: p.brand, ...Object.fromEntries(shiftedFields.map((key) => [key, `stock ${key}`])) };
+  const result = parseCardMatrix(matrix, [stock], []);
+  expect(result.warnings).toEqual([]); expect(result.groups).toHaveLength(1);
+  for (const key of shiftedFields) expect(result.groups[0].product[key]).toBe(p[key]);
+  expect(result.card).toMatchObject({ document_no: recipe.document_no, publication_date: recipe.publication_date, revision_no: recipe.revision_no, revision_date: recipe.revision_date, machine_code: recipe.machine_code, machine_type: recipe.machine_type, prepared_by: recipe.prepared_by, approved_by: recipe.approved_by });
+  expect(result.workpiece).toBe(recipe.workpiece_name);
 });
 
 it("preserves an explicitly blank cutting speed under the new printed heading instead of using stock speed", async () => {
   const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: { ...p, cutting_speed: "" }, holder: h }]);
-  expect(wb.worksheets[0].getCell("Q4").value).toBe("KESME HIZI\n(m/dk)");
-  expect(wb.worksheets[0].getCell("Q6").value).toBe("");
+  expect(wb.worksheets[0].getCell("L4").value).toBe("KESME HIZI\n(m/dk)");
+  expect(wb.worksheets[0].getCell("L6").value).toBe("");
   const book = XLSX.read(await wb.xlsx.writeBuffer(), { type: "buffer" });
   const matrix = XLSX.utils.sheet_to_json(book.Sheets["Takım Kartı"], { header: 1, defval: "", raw: false });
   const result = parseCardMatrix(matrix, [{ id: "p1", name: p.name, code: p.code, brand: p.brand, cutting_speed: "999 m/dk" }], []);
@@ -117,7 +157,7 @@ it("preserves an explicitly blank cutting speed under the new printed heading in
 it("keeps Zoller length optional for old recipes and old exported data", async () => {
   const legacy = { ...p }; delete legacy.tool_total_length;
   const wb = await buildRecipeCardWorkbook(template, recipe, [{ product: legacy }]);
-  expect(wb.worksheets[0].getCell("P6").value).toBe("");
+  expect(wb.worksheets[0].getCell("Q6").value).toBe("");
   const result = parseDetailRows([{ "Takım Adı": p.name, "Takım Kodu": p.code, "Takım Markası": p.brand }], [{ id: "p1", name: p.name, code: p.code, brand: p.brand }], []);
   expect(result.groups[0].product.tool_total_length).toBe("");
 });

@@ -76,6 +76,12 @@ export function parseCardMatrix(matrix, products, holders) {
   if (header < 0) throw new Error("F-165 kart başlıkları bulunamadı");
   const totalLengthColumn = matrix[header].findIndex((value) => norm(value).includes("takim tam boy"));
   const cuttingSpeedColumn = matrix[header].findIndex((value) => norm(value).includes("kesme hizi"));
+  const headerColumn = (text, fallback) => {
+    const index = matrix[header].findIndex((value) => norm(value).includes(text));
+    return index >= 0 ? index : fallback;
+  };
+  const spindleColumn = headerColumn("devir", 11), feedColumn = headerColumn("ilerleme", 12);
+  const lifeColumn = headerColumn("takim omru", 13), specialColumn = headerColumn("ozel", 14);
   const r2 = matrix[1] || [], r3 = matrix[2] || [];
   const meta = asText(matrix[0]?.[12]);
   const extract = (key) => meta.match(new RegExp(`${key}\\s*:\\s*([^\\n]*)`, "i"))?.[1]?.trim() || "";
@@ -88,7 +94,7 @@ export function parseCardMatrix(matrix, products, holders) {
     const p = matchStock(products, { name: row[2], brand: row[1] });
     if (!p) { warnings.push(`${row[0]}. takım: ${row[2]} stokta tekil eşleşmedi; adı/markayı kontrol edin`); continue; }
     const pairId = `card-${Date.now()}-${i}`;
-    const product = { kind: "product", pair_id: pairId, reference_id: p.id, name: p.name, code: p.code || "", brand: p.brand || "", quantity: 1, ...LINE_DEFAULTS, tool_no: asText(row[0]), inner_cooling: row[3] ? "VAR" : row[4] ? "YOK" : "", holder_type: asText(row[5]), holder_length: asText(row[6]), drill_helix_length: asText(row[7]), insert_brand: asText(row[8]), used_insert: asText(row[9]), insert_quality: asText(row[10]), spindle_speed: asText(row[11]), feed_rate: asText(row[12]), tool_life: asText(row[13]), special: asText(row[14]), tool_total_length: totalLengthColumn >= 0 ? asText(row[totalLengthColumn]) : "", cutting_speed: cuttingSpeedColumn >= 0 ? asText(row[cuttingSpeedColumn]) : asText(p.cutting_speed), machining_length: "" };
+    const product = { kind: "product", pair_id: pairId, reference_id: p.id, name: p.name, code: p.code || "", brand: p.brand || "", quantity: 1, ...LINE_DEFAULTS, tool_no: asText(row[0]), inner_cooling: row[3] ? "VAR" : row[4] ? "YOK" : "", holder_type: asText(row[5]), holder_length: asText(row[6]), drill_helix_length: asText(row[7]), insert_brand: asText(row[8]), used_insert: asText(row[9]), insert_quality: asText(row[10]), spindle_speed: asText(row[spindleColumn]), feed_rate: asText(row[feedColumn]), tool_life: asText(row[lifeColumn]), special: asText(row[specialColumn]), tool_total_length: totalLengthColumn >= 0 ? asText(row[totalLengthColumn]) : "", cutting_speed: cuttingSpeedColumn >= 0 ? asText(row[cuttingSpeedColumn]) : asText(p.cutting_speed), machining_length: "" };
     // A holder TYPE (e.g. VELDON) is not a unique stock record. Preserve text only.
     groups.push({ pairId, product, holder: null });
   }

@@ -9,6 +9,9 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
   await wb.xlsx.load(templateBytes);
   const source = wb.worksheets[0];
   const baseModel = clone(source.model);
+  // ExcelJS exports `merges`, but its model setter restores `mergeCells`.
+  baseModel.mergeCells = baseModel.merges;
+  const originalTechnicalWidths = [12, 13, 14, 15].map((col) => source.getColumn(col).width);
   const pages = Math.max(1, Math.ceil(groups.length / PAGE_LINES));
   for (let page = 0; page < pages; page++) {
     const ws = page === 0 ? source : wb.addWorksheet(`Takım Kartı ${page + 1}`);
@@ -22,12 +25,14 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     ws.mergeCells("P4:P5");
     ws.getColumn(16).width = 13;
     ws.getCell("P4").style = clone(ws.getCell("O4").style);
-    ws.getCell("P4").value = "TAKIM TAM BOY\n(mm)";
-    ws.getCell("P4").note = "ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.";
+    ws.getCell("P4").value = "ÖZEL";
     ws.mergeCells("Q4:Q5");
     ws.getColumn(17).width = 13;
     ws.getCell("Q4").style = clone(ws.getCell("O4").style);
-    ws.getCell("Q4").value = "KESME HIZI\n(m/dk)";
+    ws.getCell("Q4").value = "TAKIM TAM BOY\n(mm)";
+    ws.getCell("Q4").note = "ZOLLER TAM BOY ÖLÇÜSÜNÜ GİRİNİZ.";
+    ws.getColumn(12).width = 13;
+    originalTechnicalWidths.forEach((width, index) => { ws.getColumn(13 + index).width = width; });
     ws.pageSetup = { ...ws.pageSetup, orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 1, printArea: "A1:Q22" };
     ws.pageSetup.margins = { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 };
     ws.views = [{ showGridLines: false }];
@@ -42,8 +47,10 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     ws.getCell("G3").value = recipe.machine_code || "";
     ws.getCell("H3").value = recipe.machine_type || "";
     ws.getCell("C4").value = `OPERASYON ${recipe.operation_no ?? CARD_DEFAULTS.operation_no}`;
-    ws.getCell("L4").value = "DEVİR\n(dev/dk)";
-    ws.getCell("M4").value = "İLERLEME\n(mm/dk)";
+    ws.getCell("L4").value = "KESME HIZI\n(m/dk)";
+    ws.getCell("M4").value = "DEVİR\n(dev/dk)";
+    ws.getCell("N4").value = "İLERLEME\n(mm/dk)";
+    ws.getCell("O4").value = "TAKIM ÖMRÜ\n(ADET)";
     ws.getCell("K4").value = "İNSERT\nKALİTESİ";
     ws.getCell("J4").value = "KULLANILAN İNSERT";
     for (const address of ["B4", "C4", "D4", "F4", "H4", "I4", "J4", "K4", "L4", "M4", "N4", "O4", "P4", "Q4", "A5", "C5", "D5", "E5", "F5", "G5"]) {
@@ -59,7 +66,7 @@ export async function buildRecipeCardWorkbook(templateBytes, recipe, groups) {
     if (pages > 1) ws.getCell("H22").value = `Sayfa ${page + 1} / ${pages}`;
     groups.slice(page * PAGE_LINES, (page + 1) * PAGE_LINES).forEach((group, index) => {
       const p = group.product || {}, h = group.holder || {};
-      const values = [p.tool_no || page * PAGE_LINES + index + 1, p.brand || "", p.name || "", p.inner_cooling === "VAR" ? "X" : "", p.inner_cooling === "YOK" ? "X" : "", p.holder_type || h.name || "", p.holder_length || "", p.drill_helix_length || "", p.insert_brand || "", p.used_insert || "", p.insert_quality || "", p.spindle_speed || "", p.feed_rate || "", p.tool_life || "", p.special || "", p.tool_total_length || "", p.cutting_speed || ""];
+      const values = [p.tool_no || page * PAGE_LINES + index + 1, p.brand || "", p.name || "", p.inner_cooling === "VAR" ? "X" : "", p.inner_cooling === "YOK" ? "X" : "", p.holder_type || h.name || "", p.holder_length || "", p.drill_helix_length || "", p.insert_brand || "", p.used_insert || "", p.insert_quality || "", p.cutting_speed || "", p.spindle_speed || "", p.feed_rate || "", p.tool_life || "", p.special || "", p.tool_total_length || ""];
       values.forEach((value, c) => { const cell = ws.getCell(6 + index, c + 1); cell.value = value; cell.font = { name: "Arial", size: 9 }; cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
     });
   }
