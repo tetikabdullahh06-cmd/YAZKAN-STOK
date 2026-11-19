@@ -55,6 +55,19 @@ api = APIRouter(prefix="/api")
 
 JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.environ["JWT_SECRET"]
+
+
+# Uptime pingi icin hafif saglik kontrolu: veritabanina dokunmaz, bu yuzden
+# Render free planindaki servisi uyandirip uyanik tutmak icin en hizli yoldur.
+@api.get("/health")
+async def health_check():
+    return {
+        "status": "ok",
+        "service": "yazkan-stok-api",
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "CNC Takımhane")

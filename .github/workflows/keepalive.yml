@@ -1,0 +1,46 @@
+name: API Keep-Alive
+
+# Render free planindaki web servisleri 15 dakika istek almazsa uykuya gecer.
+# Bu is akisi her 5 dakikada bir /api/health adresine istek atarak servisi
+# uyanik tutar; boylece kullanici siteye girdiginde 30-60 saniyelik soguk
+# baslangic beklemesi yasanmaz.
+#
+# Not: GitHub, 60 gun boyunca depoya commit gelmezse zamanlanmis is akislarini
+# otomatik olarak devre disi birakir. Uyari maili gelirse Actions sekmesinden
+# "Enable workflow" ile yeniden acilabilir.
+
+on:
+  schedule:
+    # Her 5 dakikada bir (GitHub bazen 5-15 dk geciktirebilir; 15 dk esigi
+    # nedeniyle yine de servis uyanik kalir).
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: api-keepalive
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ping health endpoint
+        env:
+          API_URL: https://yazkan-stok-api.onrender.com/api/health
+        run: |
+          set -u
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 100 "$API_URL" || echo "000")
+            echo "Deneme $attempt -> HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "API uyanik."
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "API saglik kontrolu basarisiz (son kod: $code)." >&2
+          exit 1
