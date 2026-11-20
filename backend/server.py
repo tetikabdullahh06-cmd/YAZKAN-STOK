@@ -21,6 +21,7 @@ import base64
 import mimetypes
 import logging
 import unicodedata
+from urllib.parse import quote
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, List
 from zoneinfo import ZoneInfo
@@ -2989,6 +2990,14 @@ def _scrap_card_text(*values) -> str:
     return ""
 
 
+def _ascii_filename(value: str, fallback: str = "kirilan-takim-karti") -> str:
+    """Türkçe karakterleri sadeleştirip HTTP başlığına güvenli dosya adı üretir."""
+    normalized = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
+    cleaned = "".join(char if (char.isalnum() or char in "._-") else "-" for char in normalized)
+    cleaned = "-".join(part for part in cleaned.split("-") if part)
+    return cleaned or fallback
+
+
 def _scrap_card_column_pixels(sheet, index: int) -> int:
     width = sheet.column_dimensions[get_column_letter(index)].width or 8.43
     return int(round(width * 7 + 5))
@@ -3100,11 +3109,14 @@ async def toolholder_scrap_excel(scrap_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
     content = await asyncio.to_thread(build_scrap_card_workbook, scrap)
     record_no = _scrap_card_text(scrap.get("record_no"), scrap_id[:8])
-    filename = f"kirilan-takim-karti-{record_no}.xlsx"
+    raw_filename = f"kirilan-takim-karti-{record_no}.xlsx"
+    # HTTP başlıkları latin-1 ile kodlanır; Türkçe karakterler (İ, Ş) burada patlar.
+    ascii_filename = _ascii_filename(raw_filename)
+    disposition = f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(raw_filename)}"
     return StreamingResponse(
         io.BytesIO(content),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": disposition},
     )
 
 
