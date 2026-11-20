@@ -153,6 +153,34 @@ def clean_break_reasons(values) -> List[str]:
     return [str(item).strip() for item in (values or []) if str(item or "").strip()]
 
 
+def scrap_card_backfill_update(doc: dict) -> dict:
+    """Tek bir hurda kaydı için eksik kart alanlarını türetir; mevcut değerleri ezmez."""
+    update = {}
+    if not str(doc.get("tool_manufacturer") or "").strip():
+        update["tool_manufacturer"] = str(doc.get("brand") or "").strip()
+    if not str(doc.get("tool_name_code") or "").strip():
+        update["tool_name_code"] = str(doc.get("name") or "").strip()
+    if "part_no" not in doc:
+        update["part_no"] = ""
+    if not clean_break_reasons(doc.get("break_reasons")):
+        candidates = [str(doc.get("scrap_reason") or "").strip(), str(doc.get("description") or "").strip()]
+        update["break_reasons"] = [value for value in candidates if value]
+    return update
+
+
+async def backfill_scrap_card_fields() -> int:
+    """Eski hurda kayıtlarını Kırılan Takım Kartı (T4.000) alanlarıyla uyumlu hale getirir."""
+    projection = {"_id": 1, "brand": 1, "name": 1, "part_no": 1, "break_reasons": 1, "scrap_reason": 1, "description": 1, "tool_manufacturer": 1, "tool_name_code": 1}
+    updated = 0
+    async for doc in db.toolholder_scraps.find({}, projection):
+        update = scrap_card_backfill_update(doc)
+        if not update:
+            continue
+        await db.toolholder_scraps.update_one({"_id": doc["_id"]}, {"$set": update})
+        updated += 1
+    return updated
+
+
 # ---------- Models ----------
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -609,6 +637,11 @@ async def startup():
         {"used_diamond_code": {"$exists": False}},
         {"$set": {"used_diamond_code": "", "diamond_image_url": ""}},
     )
+    # Eski hurda kayıtları Kırılan Takım Kartı (T4.000) alanlarıyla uyumlanır (idempotent).
+    try:
+        await backfill_scrap_card_fields()
+    except Exception as exc:
+        logger.warning("Hurda kartı alanları güncellenemedi: %s", exc)
     if admin_email and admin_pw:
         existing = await db.users.find_one({"email": admin_email})
         if not existing:

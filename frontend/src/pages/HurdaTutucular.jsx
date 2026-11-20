@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileSpreadsheet, FileText, ImagePlus, Loader2, PackageX, Pencil, Plus, Search, ShieldAlert, Trash2, X } from "lucide-react";
+import { FileSpreadsheet, FileText, ImagePlus, Loader2, PackageX, Pencil, Plus, Search, ShieldAlert, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
 import { ImageHover, ImageLightbox } from "@/components/ImageUpload";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -291,15 +291,6 @@ export default function HurdaTutucular() {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const downloadPdf = async (s) => {
-    try {
-      const r = await api.get(`/toolholder-scraps/${s.id}/pdf`, { responseType: "blob" });
-      downloadBlob(r.data, `hurda-tutanagi-${s.id.slice(0, 8)}.pdf`);
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "PDF tutanak indirilemedi");
-    }
   };
 
   const downloadExcel = async (s) => {
@@ -648,10 +639,7 @@ export default function HurdaTutucular() {
                           <Trash2 className="w-4 h-4" /> Sil
                         </button>
                         <button type="button" onClick={() => downloadExcel(s)} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-black">
-                          <FileSpreadsheet className="w-4 h-4" /> Excel Kartı
-                        </button>
-                        <button type="button" onClick={() => downloadPdf(s)} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-900 font-black">
-                          <Download className="w-4 h-4" /> PDF
+                          <FileSpreadsheet className="w-4 h-4" /> Tutanağı Excel İndir
                         </button>
                       </div>
                     </td>
