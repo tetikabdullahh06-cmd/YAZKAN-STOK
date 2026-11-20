@@ -34,7 +34,12 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr, field_validator
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
+from copy import copy
+from PIL import Image as PILImage
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.ttfonts import TTFont
@@ -141,6 +146,11 @@ def clean(doc: dict) -> dict:
     if doc and "_id" in doc:
         doc.pop("_id")
     return doc
+
+
+def clean_break_reasons(values) -> List[str]:
+    """Kırılan Takım Kartı formundaki numaralı sebep/uyarı/önlem satırlarını normalize eder."""
+    return [str(item).strip() for item in (values or []) if str(item or "").strip()]
 
 
 # ---------- Models ----------
@@ -278,6 +288,11 @@ class ToolHolderScrapIn(BaseModel):
     corrective_action: Optional[str] = ""
     preventive_action: Optional[str] = ""
     disposition: Optional[str] = ""
+    # Kırılan Takım Kartı (T4.000) formundaki alanlar
+    tool_manufacturer: Optional[str] = ""
+    tool_name_code: Optional[str] = ""
+    part_no: Optional[str] = ""
+    break_reasons: List[str] = []
 
 
 class PersonnelIn(BaseModel):
@@ -2561,6 +2576,10 @@ async def toolholder_scrap(tid: str, body: ToolHolderScrapIn, user=Depends(requi
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
         "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
         "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
+        "tool_manufacturer": (body.tool_manufacturer or holder.get("brand", "")).strip(),
+        "tool_name_code": (body.tool_name_code or holder.get("name", "")).strip(),
+        "part_no": (body.part_no or "").strip(),
+        "break_reasons": clean_break_reasons(body.break_reasons),
         "created_at": now, "new_stock": new_stock,
     }
     await db.toolholders.update_one({"id": tid}, {"$set": {"current_stock": new_stock}})
@@ -2611,7 +2630,12 @@ async def product_scrap(pid: str, body: ToolHolderScrapIn, user=Depends(require_
         "approver_personnel_id": body.approver_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "", "operator_name": operator_name,
         "user_id": user["id"], "user_name": user.get("name", ""), "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
         "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
-        "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []), "created_at": now, "new_stock": new_stock,
+        "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
+        "tool_manufacturer": (body.tool_manufacturer or product.get("brand", "")).strip(),
+        "tool_name_code": (body.tool_name_code or f"{product.get('name', '')} {product.get('code', '')}".strip()).strip(),
+        "part_no": (body.part_no or "").strip(),
+        "break_reasons": clean_break_reasons(body.break_reasons),
+        "created_at": now, "new_stock": new_stock,
     }
     await db.products.update_one({"id": pid}, {"$set": {"current_stock": new_stock}})
     await db.toolholder_scraps.insert_one(doc)
@@ -2670,7 +2694,7 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
         old_qty = float(record.get("quantity", 0)); current_stock = float(product.get("current_stock", 0)); new_stock = round(current_stock + old_qty - body.quantity, 6)
         if new_stock < 0:
             raise HTTPException(status_code=400, detail="Bu düzeltme stok miktarını eksiye düşürüyor")
-        update = {"quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "description": body.description or "", "scrap_date": body.scrap_date, "location": body.location or product.get("location", ""), "disposition": body.disposition or "", "operator_personnel_id": body.operator_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "", "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "", "before_image_urls": body.before_image_urls or [], "after_image_urls": body.after_image_urls or [], "new_stock": new_stock, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}
+        update = {"quantity": body.quantity, "scrap_reason": body.scrap_reason.strip(), "description": body.description or "", "scrap_date": body.scrap_date, "location": body.location or product.get("location", ""), "disposition": body.disposition or "", "operator_personnel_id": body.operator_personnel_id or "", "witness_personnel_id": body.witness_personnel_id or "", "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "", "before_image_urls": body.before_image_urls or [], "after_image_urls": body.after_image_urls or [], "tool_manufacturer": (body.tool_manufacturer or "").strip(), "tool_name_code": (body.tool_name_code or "").strip(), "part_no": (body.part_no or "").strip(), "break_reasons": clean_break_reasons(body.break_reasons), "new_stock": new_stock, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", "")}
         await db.products.update_one({"id": product["id"]}, {"$set": {"current_stock": new_stock}})
         await db.toolholder_scraps.update_one({"id": scrap_id}, {"$set": update})
         await db.movements.insert_one({"id": new_id(), "type": "scrap_adjustment", "product_id": product["id"], "product_code": product.get("code", ""), "product_name": product.get("name", ""), "quantity": round(body.quantity - old_qty, 6), "note": "Ürün hurda kaydı düzeltildi", "scrap_id": scrap_id, "user_id": user["id"], "user_name": user.get("name", ""), "created_at": now_utc().isoformat()})
@@ -2702,6 +2726,10 @@ async def update_toolholder_scrap(scrap_id: str, body: ToolHolderScrapIn, user=D
         "before_image_url": body.before_image_url or "", "after_image_url": body.after_image_url or "",
         "before_image_urls": body.before_image_urls or ([body.before_image_url] if body.before_image_url else []),
         "after_image_urls": body.after_image_urls or ([body.after_image_url] if body.after_image_url else []),
+        "tool_manufacturer": (body.tool_manufacturer or "").strip(),
+        "tool_name_code": (body.tool_name_code or "").strip(),
+        "part_no": (body.part_no or "").strip(),
+        "break_reasons": clean_break_reasons(body.break_reasons),
         "new_stock": new_stock, "updated_at": now_utc().isoformat(), "updated_by": user.get("name", ""),
     }
     await db.toolholders.update_one({"id": holder["id"]}, {"$set": {"current_stock": new_stock}})
@@ -2911,6 +2939,140 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
     draw_footer()
     pdf.save(); buf.seek(0)
     return StreamingResponse(buf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="hurda-tutanagi-{scrap_id[:8]}.pdf"'})
+
+
+# ==================== Kırılan Takım Kartı (T4.000) Excel çıktısı ====================
+SCRAP_CARD_TEMPLATE = ROOT_DIR / "assets" / "kirilan-takim-karti.xlsx"
+SCRAP_CARD_REASON_CELLS = [f"A{row}" for row in range(21, 32)]
+
+
+def _scrap_card_text(*values) -> str:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _scrap_card_column_pixels(sheet, index: int) -> int:
+    width = sheet.column_dimensions[get_column_letter(index)].width or 8.43
+    return int(round(width * 7 + 5))
+
+
+def _scrap_card_row_pixels(sheet, index: int) -> int:
+    height = sheet.row_dimensions[index].height or 15
+    return int(round(height * 96 / 72))
+
+
+def _scrap_card_box(sheet, first_column: int, last_column: int, first_row: int, last_row: int):
+    width = sum(_scrap_card_column_pixels(sheet, column) for column in range(first_column, last_column + 1))
+    height = sum(_scrap_card_row_pixels(sheet, row) for row in range(first_row, last_row + 1))
+    return max(width, 20), max(height, 20)
+
+
+def _scrap_card_add_photo(sheet, data_url, anchor: str, box_width: int, box_height: int, margin: int = 6) -> None:
+    """Formdaki RESİM kutusuna fotoğrafı en-boy oranını koruyarak yerleştirir."""
+    if not data_url or not str(data_url).startswith("data:image/"):
+        return
+    try:
+        raw = base64.b64decode(str(data_url).split(",", 1)[1])
+        image_bytes = io.BytesIO(raw)
+        # Excel WEBP göstermez; gerekirse PNG'ye çevrilir.
+        with PILImage.open(io.BytesIO(raw)) as probe:
+            if (probe.format or "").upper() not in {"JPEG", "PNG"}:
+                converted = io.BytesIO()
+                probe.convert("RGB").save(converted, format="PNG")
+                image_bytes = io.BytesIO(converted.getvalue())
+        picture = XLImage(image_bytes)
+    except Exception:
+        logger.warning("Kırılan takım kartı görseli çözümlenemedi")
+        return
+    ratio = min(max(box_width - margin * 2, 10) / picture.width, max(box_height - margin * 2, 10) / picture.height)
+    picture.width = max(int(picture.width * ratio), 10)
+    picture.height = max(int(picture.height * ratio), 10)
+    picture.anchor = anchor
+    sheet.add_image(picture)
+
+
+def build_scrap_card_workbook(scrap: dict) -> bytes:
+    """Kırılan Takım Kartı şablonunun biçimini, form numaralarını ve yerleşimini koruyarak doldurur."""
+    if not SCRAP_CARD_TEMPLATE.exists():
+        raise HTTPException(status_code=500, detail="Kırılan takım kartı şablonu bulunamadı")
+    workbook = load_workbook(SCRAP_CARD_TEMPLATE)
+    sheet = workbook.active
+    # Şablondaki örnek fotoğraflar kaldırılır; sol üstteki logo korunur.
+    sheet._images = [
+        image for image in sheet._images
+        if getattr(getattr(image, "anchor", None), "_from", None) is not None
+        and image.anchor._from.row == 0 and image.anchor._from.col == 0
+    ]
+    machine_code = _scrap_card_text(scrap.get("machine_code"), scrap.get("machine_name"))
+    scrap_date = _scrap_card_text(scrap.get("scrap_date"))
+    try:
+        formatted_date = datetime.fromisoformat(scrap_date[:10]).strftime("%d/%m/%Y")
+    except Exception:
+        formatted_date = scrap_date
+    machine_and_date = f"{machine_code}-{formatted_date}" if machine_code else formatted_date
+    document_no = _scrap_card_text(scrap.get("document_no"), "T4.000")
+    document_revision = _scrap_card_text(scrap.get("document_revision"), "00")
+    change_reason = _scrap_card_text(scrap.get("change_reason"))
+    sheet["I1"] = f"Doküman No: {document_no}\nDoküman Rev. No: {document_revision}\nDeğ. Nedeni: {change_reason}"
+    sheet["C5"] = _scrap_card_text(scrap.get("tool_manufacturer"), scrap.get("brand"))
+    sheet["H5"] = _scrap_card_text(scrap.get("tool_name_code"), f"{scrap.get('name', '')} {scrap.get('code', '')}".strip())
+    sheet["C6"] = _scrap_card_text(scrap.get("production_product"))
+    sheet["H6"] = _scrap_card_text(scrap.get("part_no"))
+    sheet["C7"] = _scrap_card_text(scrap.get("operator_name"), scrap.get("user_name"))
+    sheet["H7"] = machine_and_date
+    reasons = clean_break_reasons(scrap.get("break_reasons"))
+    if not reasons:
+        reasons = [value for value in (_scrap_card_text(scrap.get("scrap_reason")), _scrap_card_text(scrap.get("description"))) if value]
+    for index, coordinate in enumerate(SCRAP_CARD_REASON_CELLS):
+        cell = sheet[coordinate]
+        reason = reasons[index] if index < len(reasons) else ""
+        if reason:
+            cell.value = f"{index + 1}. {reason}"
+        elif index < 3:
+            # Şablonda ilk üç satır numaralı boş yer tutucu olarak duruyor.
+            cell.value = f"{index + 1}."
+        else:
+            cell.value = None
+        if cell.value is None:
+            continue
+        if len(cell.value) > 140:
+            alignment = copy(cell.alignment)
+            alignment.wrap_text = True
+            cell.alignment = alignment
+            sheet.row_dimensions[cell.row].height = max(sheet.row_dimensions[cell.row].height or 15, 32)
+    sheet["A33"] = _scrap_card_text(scrap.get("prepared_by"), "Abdullah Tetik")
+    sheet["D33"] = _scrap_card_text(scrap.get("foreman_name"), "Celal")
+    sheet["G33"] = _scrap_card_text(scrap.get("approved_by"))
+    before_images = scrap.get("before_image_urls") or ([scrap.get("before_image_url")] if scrap.get("before_image_url") else [])
+    after_images = scrap.get("after_image_urls") or ([scrap.get("after_image_url")] if scrap.get("after_image_url") else [])
+    if before_images:
+        _scrap_card_add_photo(sheet, before_images[0], "A10", *_scrap_card_box(sheet, 1, 4, 10, 19))
+    if after_images:
+        _scrap_card_add_photo(sheet, after_images[0], "F10", *_scrap_card_box(sheet, 6, 9, 10, 19))
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+@api.get("/toolholder-scraps/{scrap_id}/excel")
+async def toolholder_scrap_excel(scrap_id: str, user=Depends(get_current_user)):
+    scrap = await db.toolholder_scraps.find_one({"id": scrap_id}, {"_id": 0})
+    if not scrap:
+        raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    content = await asyncio.to_thread(build_scrap_card_workbook, scrap)
+    record_no = _scrap_card_text(scrap.get("record_no"), scrap_id[:8])
+    filename = f"kirilan-takim-karti-{record_no}.xlsx"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @api.get("/toolholder-movements")
