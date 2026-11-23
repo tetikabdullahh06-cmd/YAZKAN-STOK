@@ -62,7 +62,7 @@ export default function StockOut() {
   const selected = products.find((p) => p.id === productId);
   const filteredProducts = products.filter((p) => {
     const s = query.toLowerCase().trim();
-    return !s || [p.code, p.name, p.brand, p.quality].some((value) => String(value || "").toLowerCase().includes(s));
+    return !s || [p.code, p.name, p.brand, p.quality, p.category].some((value) => String(value || "").toLowerCase().includes(s));
   });
 
   const submit = async (e) => {
@@ -109,16 +109,18 @@ export default function StockOut() {
         <div>
           <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Ürün Ara</label>
           <input value={query} onChange={(e) => setQuery(e.target.value)} data-testid="so-search"
-            placeholder="Kod, isim, marka veya kalite ile ara..."
+            placeholder="Kod, isim, marka, kategori veya kalite ile ara..."
             className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg px-4 mb-2 focus:ring-2 focus:ring-red-500 outline-none" />
           <select required value={productId} onChange={(e) => setProductId(e.target.value)} data-testid="so-product"
             className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-base focus:ring-2 focus:ring-red-500 outline-none">
             <option value="">-- Ürün seçin --</option>
-            {filteredProducts.map((p) => <option key={p.id} value={p.id}>Marka: {p.brand || "Marka yok"} | {p.code} — {p.name} | Kalite: {p.quality || "-"} | Mevcut: {p.current_stock} {p.unit}</option>)}
+            {filteredProducts.map((p) => <option key={p.id} value={p.id}>Marka: {p.brand || "Marka yok"} | {p.code} — {p.name} | Kategori: {p.category || "-"} | Kalite: {p.quality || "-"} | Mevcut: {p.current_stock} {p.unit}</option>)}
           </select>
           {selected && (
             <div className="mt-2 rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-sm text-slate-200">
               <span className="font-bold text-red-300">Seçilen marka:</span> {selected.brand || selected.manufacturer || selected.marka || "Marka bilgisi yok"}
+              <span className="mx-2 text-slate-500">·</span>
+              <span className="font-bold text-red-300">Kategori:</span> {selected.category || "-"}
               <span className="mx-2 text-slate-500">·</span>
               <span className="font-bold text-red-300">Kalite:</span> {selected.quality || "-"}
             </div>
