@@ -64,6 +64,9 @@ export default function StockOut() {
     const s = query.toLowerCase().trim();
     return !s || [p.code, p.name, p.brand, p.quality, p.category].some((value) => String(value || "").toLowerCase().includes(s));
   });
+  const stockNow = selected ? Number(selected.current_stock ?? 0) : 0;
+  const willGoNegative = !!selected && quantity !== "" && Number(quantity) > stockNow;
+  const shortage = willGoNegative ? Math.round((Number(quantity) - stockNow) * 1000000) / 1000000 : 0;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -76,7 +79,8 @@ export default function StockOut() {
         product_id: productId, quantity: parseFloat(quantity),
         personnel_id: personnelId, machine_id: machineId, toolholder_id: toolholderId, exit_reason: finalExitReason, note, production_product: productionProduct, transaction_date: transactionDate,
       });
-      if (r.data.critical) toast.warning(`Stok çıkışı kaydedildi. UYARI: Kritik seviyede! Yeni stok: ${r.data.new_stock}`);
+      if (r.data.negative) toast.warning(`Stok çıkışı kaydedildi. DİKKAT: Bakiye eksiye düştü! Yeni stok: ${r.data.new_stock}. Sayım yanlışsa Ürünler sayfasında ürünü düzenleyip Mevcut Stok alanına gerçek miktarı yazın.`);
+      else if (r.data.critical) toast.warning(`Stok çıkışı kaydedildi. UYARI: Kritik seviyede! Yeni stok: ${r.data.new_stock}`);
       else toast.success(`Stok çıkışı kaydedildi. Yeni stok: ${r.data.new_stock}`);
       resetForm();
       await reload();
@@ -114,7 +118,7 @@ export default function StockOut() {
           <select required value={productId} onChange={(e) => setProductId(e.target.value)} data-testid="so-product"
             className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-base focus:ring-2 focus:ring-red-500 outline-none">
             <option value="">-- Ürün seçin --</option>
-            {filteredProducts.map((p) => <option key={p.id} value={p.id}>Marka: {p.brand || "Marka yok"} | {p.code} — {p.name} | Kategori: {p.category || "-"} | Kalite: {p.quality || "-"} | Mevcut: {p.current_stock} {p.unit}</option>)}
+            {filteredProducts.map((p) => <option key={p.id} value={p.id}>Marka: {p.brand || "Marka yok"} | {p.code} — {p.name} | Kategori: {p.category || "-"} | Kalite: {p.quality || "-"} | Mevcut: {Number(p.current_stock ?? 0) <= 0 ? "STOK YOK" : p.current_stock} {Number(p.current_stock ?? 0) <= 0 ? "" : p.unit}</option>)}
           </select>
           {selected && (
             <div className="mt-2 rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-sm text-slate-200">
@@ -128,12 +132,20 @@ export default function StockOut() {
           {selected && selected.current_stock <= selected.min_stock && (
             <div className="mt-2 flex items-center gap-2 text-xs text-red-400"><AlertTriangle className="w-4 h-4" /> Bu ürün kritik seviyede</div>
           )}
+          {selected && Number(selected.current_stock ?? 0) <= 0 && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-amber-300"><AlertTriangle className="w-4 h-4" /> Bu ürünün stoğu 0 (veya eksi). Çıkış yine de kaydedilir, bakiye eksiye düşer; sayım yanlışsa Ürünler sayfasında ürünü düzenleyip Mevcut Stok alanından düzeltebilirsiniz.</div>
+          )}
         </div>
 
         <div>
           <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Miktar {selected ? `(mevcut: ${selected.current_stock} ${selected.unit})` : ""}</label>
-          <input required type="number" step="0.01" min="0.01" max={selected?.current_stock} value={quantity} onChange={(e) => setQuantity(e.target.value)} data-testid="so-qty"
+          <input required type="number" step="0.01" min="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} data-testid="so-qty"
             className="w-full h-14 bg-slate-950 border border-slate-700 rounded-lg px-4 text-2xl font-bold font-mono-tab focus:ring-2 focus:ring-red-500 outline-none" />
+          {willGoNegative && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-amber-300">
+              <AlertTriangle className="w-4 h-4" /> Girilen miktar mevcut stoktan fazla: {shortage} {selected.unit} eksik kalacak. Kayıt engellenmez, bakiye eksiye düşer.
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

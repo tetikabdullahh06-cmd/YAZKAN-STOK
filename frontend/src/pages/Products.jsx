@@ -184,7 +184,8 @@ export default function Products() {
     if (!Number.isFinite(qty) || qty <= 0) return toast.error("Miktar 0'dan büyük olmalıdır");
     try {
       const r = await api.post(`/products/${productId}/quick-stock`, { quantity: qty, direction: quickStock.direction, note: quickStock.note || "Ürünler sayfası hızlı stok işlemi" });
-      toast.success(`${quickStock.direction === "in" ? "Stok artırıldı" : "Stok eksiltildi"}. Yeni stok: ${r.data.new_stock}`);
+      if (r.data.negative) toast.warning(`Stok eksiltildi. DİKKAT: Bakiye eksiye düştü! Yeni stok: ${r.data.new_stock}. Sayımı düzeltmek için ürünü düzenleyip "Mevcut Stok" alanına gerçek miktarı yazın.`);
+      else toast.success(`${quickStock.direction === "in" ? "Stok artırıldı" : "Stok eksiltildi"}. Yeni stok: ${r.data.new_stock}`);
       setQuickStock({ productId: "", direction: "in", quantity: "", note: "" });
       load();
     } catch (e) { toast.error(e.response?.data?.detail || "Hızlı stok işlemi yapılamadı"); }

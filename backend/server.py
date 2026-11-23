@@ -1052,18 +1052,17 @@ async def quick_stock_adjustment(pid: str, body: QuickStockAdjustmentIn, user=De
     current = float(product.get("current_stock", 0))
     delta = body.quantity if body.direction == "in" else -body.quantity
     new_stock = round(current + delta, 6)
-    if new_stock < 0:
-        raise HTTPException(status_code=400, detail="Stok eksiye düşemez")
     movement = {
         "id": new_id(), "type": "quick_in" if body.direction == "in" else "quick_out",
         "product_id": product["id"], "product_code": product.get("code", ""),
         "product_name": product.get("name", ""), "quantity": body.quantity,
         "unit_price": 0, "total": 0, "note": body.note or "Ürünler sayfası hızlı stok işlemi",
         "user_id": user["id"], "user_name": user["name"], "created_at": now_utc().isoformat(),
+        "stock_before": current, "stock_after": new_stock, "stock_went_negative": new_stock < 0,
     }
     await db.products.update_one({"id": pid}, {"$set": {"current_stock": new_stock}})
     await db.movements.insert_one(movement)
-    return {"ok": True, "new_stock": new_stock, "movement": clean(movement)}
+    return {"ok": True, "new_stock": new_stock, "previous_stock": current, "negative": new_stock < 0, "movement": clean(movement)}
 
 
 @api.delete("/products/{pid}")
@@ -1211,8 +1210,8 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         raise HTTPException(status_code=404, detail="Ürün bulunamadı")
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="Miktar 0'dan büyük olmalı")
-    if body.quantity > product["current_stock"]:
-        raise HTTPException(status_code=400, detail="Yetersiz stok")
+    # Stok yetersizse çıkış engellenmez: bakiye eksiye düşer ve yanlış sayılan stok görünür olur.
+    previous_stock = float(product.get("current_stock") or 0)
     personnel = await db.personnel.find_one({"id": body.personnel_id})
     if not personnel:
         raise HTTPException(status_code=404, detail="Personel bulunamadı")
@@ -1224,7 +1223,7 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         toolholder = await db.toolholders.find_one({"id": body.toolholder_id})
         if not toolholder:
             raise HTTPException(status_code=404, detail="Takım tutucu bulunamadı")
-    new_stock = product["current_stock"] - body.quantity
+    new_stock = round(previous_stock - body.quantity, 6)
     await db.products.update_one({"id": body.product_id}, {"$set": {"current_stock": new_stock}})
     movement = {
         "id": new_id(), "type": "out", "product_id": product["id"],
@@ -1244,11 +1243,21 @@ async def stock_out(body: StockOutIn, user=Depends(require_admin)):
         "user_id": user["id"], "user_name": user["name"],
         "created_at": now_utc().isoformat(),
         "transaction_date": body.transaction_date or now_utc().date().isoformat(),
+        "stock_before": previous_stock, "stock_after": new_stock,
+        "stock_went_negative": new_stock < 0,
     }
     await db.movements.insert_one(movement)
     critical = new_stock <= product["min_stock"]
     # Kritik stok e-postası kullanıcı isteği üzerine devre dışı — bilgi sadece Ana Panel'de görünür.
-    return {"ok": True, "new_stock": new_stock, "movement": clean(movement), "critical": critical}
+    return {
+        "ok": True,
+        "new_stock": new_stock,
+        "previous_stock": previous_stock,
+        "negative": new_stock < 0,
+        "shortage": max(0, round(-new_stock, 6)),
+        "movement": clean(movement),
+        "critical": critical,
+    }
 
 
 @api.get("/movements")
