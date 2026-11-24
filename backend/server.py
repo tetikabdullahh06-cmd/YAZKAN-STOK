@@ -2486,6 +2486,570 @@ async def glove_consumption_report(user=Depends(get_current_user), date_from: Op
     return list(totals.values())
 
 
+# ==================== Hareket Geçmişi Raporları ====================
+# Hareket Geçmişi sayfası üç sekmeye ayrıldı:
+#   1) Personel Sarfiyatı (takım/elmas/uç + eldiven kullanımı)
+#   2) Stok Hareketleri (giriş/çıkış toplu liste)
+#   3) Ürün / Takım Tutucu hareketleri (tarih aralığında giriş-çıkış detayı)
+# Her sekme için ayrı Excel dışa aktarma biçimi var; içe aktarma tek uçtan yapılır.
+
+def _iso_day(value) -> str:
+    """'2026-11-24T08:00:00' / '24.11.2026' / '24/11/2026' → '2026-11-24'."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if len(raw) >= 10 and raw[4] == "-" and raw[7] == "-":
+        return raw[:10]
+    first = raw.split(" ")[0]
+    for sep in (".", "/", "-"):
+        parts = first.split(sep)
+        if len(parts) == 3 and len(parts[2]) == 4 and parts[0].isdigit() and parts[1].isdigit():
+            return f"{parts[2]}-{int(parts[1]):02d}-{int(parts[0]):02d}"
+    return raw[:10]
+
+
+def _in_range(day: str, date_from: Optional[str], date_to: Optional[str]) -> bool:
+    if date_from and day and day < date_from:
+        return False
+    if date_to and day and day > date_to:
+        return False
+    return True
+
+
+def _num(value, default: float = 0.0) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _norm_text(value) -> str:
+    text = str(value or "").strip().casefold()
+    text = text.replace("ı", "i")
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return " ".join(text.split())
+
+
+@api.get("/reports/personnel-consumption")
+async def personnel_consumption_report(
+    user=Depends(get_current_user),
+    personnel_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Personel bazlı takım/elmas/uç ve eldiven sarfiyatı."""
+    movement_query = {"type": "out"}
+    if personnel_id:
+        movement_query["personnel_id"] = personnel_id
+    raw_tools = await db.movements.find(movement_query, {"_id": 0}).sort("created_at", -1).to_list(20000)
+
+    glove_query = {"type": "out"}
+    if personnel_id:
+        glove_query["personnel_id"] = personnel_id
+    raw_gloves = await db.glove_movements.find(glove_query, {"_id": 0}).sort("created_at", -1).to_list(20000)
+
+    raw_tools = [m for m in raw_tools if _in_range(_iso_day(m.get("transaction_date") or m.get("created_at")), date_from, date_to)]
+    raw_gloves = [g for g in raw_gloves if _in_range(_iso_day(g.get("transaction_date") or g.get("created_at")), date_from, date_to)]
+
+    product_ids = sorted({m.get("product_id") for m in raw_tools if m.get("product_id")})
+    products = await db.products.find({"id": {"$in": product_ids}}, {"_id": 0}).to_list(5000) if product_ids else []
+    product_map = {p["id"]: p for p in products}
+
+    tools = []
+    for m in raw_tools:
+        p = product_map.get(m.get("product_id") or "", {})
+        tools.append({
+            "id": m.get("id", ""),
+            "date": _iso_day(m.get("transaction_date") or m.get("created_at")),
+            "product_id": m.get("product_id", ""),
+            "product_code": m.get("product_code") or p.get("code", ""),
+            "product_name": m.get("product_name") or p.get("name", ""),
+            "brand": p.get("brand", ""),
+            "category": p.get("category", ""),
+            "quality": p.get("quality", ""),
+            "unit": p.get("unit", "adet"),
+            "quantity": _num(m.get("quantity")),
+            "personnel_id": m.get("personnel_id", ""),
+            "personnel_name": m.get("personnel_name", ""),
+            "machine_code": m.get("machine_code", ""),
+            "machine_name": m.get("machine_name", ""),
+            "toolholder_code": m.get("toolholder_code", ""),
+            "toolholder_name": m.get("toolholder_name", ""),
+            "production_product": m.get("production_product", ""),
+            "exit_reason": m.get("movement_category") or m.get("exit_reason") or m.get("movement_purpose") or "",
+            "note": m.get("note", ""),
+            "user_name": m.get("user_name", ""),
+            "source": m.get("source", ""),
+        })
+
+    gloves = []
+    for g in raw_gloves:
+        gloves.append({
+            "id": g.get("id", ""),
+            "date": _iso_day(g.get("transaction_date") or g.get("created_at")),
+            "glove_id": g.get("glove_id", ""),
+            "glove_name": g.get("glove_name", ""),
+            "size": g.get("size", ""),
+            "brand": g.get("brand", ""),
+            "quantity": _num(g.get("quantity")),
+            "personnel_id": g.get("personnel_id", ""),
+            "personnel_name": g.get("personnel_name", ""),
+            "note": g.get("note", ""),
+            "user_name": g.get("user_name", ""),
+        })
+
+    by_personnel = {}
+    for row in tools:
+        key = row["personnel_id"] or _norm_text(row["personnel_name"]) or "-"
+        item = by_personnel.setdefault(key, {
+            "personnel_id": row["personnel_id"], "personnel_name": row["personnel_name"] or "Bilinmeyen",
+            "tool_quantity": 0.0, "tool_lines": 0, "glove_quantity": 0.0, "glove_lines": 0,
+        })
+        item["tool_quantity"] = round(item["tool_quantity"] + row["quantity"], 6)
+        item["tool_lines"] += 1
+    for row in gloves:
+        key = row["personnel_id"] or _norm_text(row["personnel_name"]) or "-"
+        item = by_personnel.setdefault(key, {
+            "personnel_id": row["personnel_id"], "personnel_name": row["personnel_name"] or "Bilinmeyen",
+            "tool_quantity": 0.0, "tool_lines": 0, "glove_quantity": 0.0, "glove_lines": 0,
+        })
+        item["glove_quantity"] = round(item["glove_quantity"] + row["quantity"], 6)
+        item["glove_lines"] += 1
+
+    summary = {
+        "tool_quantity": round(sum(row["quantity"] for row in tools), 6),
+        "tool_lines": len(tools),
+        "tool_items": len({row["product_id"] or row["product_code"] or row["product_name"] for row in tools}),
+        "glove_quantity": round(sum(row["quantity"] for row in gloves), 6),
+        "glove_lines": len(gloves),
+        "glove_items": len({row["glove_id"] or row["glove_name"] for row in gloves}),
+        "personnel_count": len(by_personnel),
+        "date_from": date_from or "",
+        "date_to": date_to or "",
+    }
+    return {
+        "tools": tools,
+        "gloves": gloves,
+        "summary": summary,
+        "by_personnel": sorted(by_personnel.values(), key=lambda x: _norm_text(x["personnel_name"])),
+    }
+
+
+@api.get("/reports/stock-movements")
+async def stock_movements_report(
+    user=Depends(get_current_user),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    type: Optional[str] = None,
+    q: Optional[str] = None,
+):
+    """Ürün stok giriş/çıkışlarının toplu listesi."""
+    query = {}
+    if type in {"in", "out"}:
+        query["type"] = type
+    raw = await db.movements.find(query, {"_id": 0}).sort("created_at", -1).to_list(20000)
+    needle = _norm_text(q)
+    rows = []
+    for m in raw:
+        day = _iso_day(m.get("transaction_date") or m.get("created_at"))
+        if not _in_range(day, date_from, date_to):
+            continue
+        row = {
+            "id": m.get("id", ""),
+            "date": day,
+            "type": m.get("type", ""),
+            "type_label": "Giriş" if m.get("type") == "in" else "Çıkış",
+            "product_id": m.get("product_id", ""),
+            "product_code": m.get("product_code", ""),
+            "product_name": m.get("product_name", ""),
+            "quantity": _num(m.get("quantity")),
+            "personnel_name": m.get("personnel_name", ""),
+            "machine_code": m.get("machine_code", ""),
+            "machine_name": m.get("machine_name", ""),
+            "toolholder_code": m.get("toolholder_code", ""),
+            "toolholder_name": m.get("toolholder_name", ""),
+            "exit_reason": m.get("movement_category") or m.get("exit_reason") or m.get("movement_purpose") or "",
+            "supplier": m.get("supplier", ""),
+            "note": m.get("note", ""),
+            "user_name": m.get("user_name", ""),
+            "stock_before": m.get("stock_before"),
+            "stock_after": m.get("stock_after"),
+            "source": m.get("source", ""),
+        }
+        if needle:
+            hay = _norm_text(" ".join(str(row.get(k) or "") for k in (
+                "product_code", "product_name", "personnel_name", "machine_name", "machine_code",
+                "exit_reason", "supplier", "note", "user_name")))
+            if needle not in hay:
+                continue
+        rows.append(row)
+    in_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "in"), 6)
+    out_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "out"), 6)
+    return {
+        "rows": rows,
+        "summary": {
+            "in_quantity": in_quantity, "out_quantity": out_quantity,
+            "net": round(in_quantity - out_quantity, 6), "line_count": len(rows),
+            "date_from": date_from or "", "date_to": date_to or "",
+        },
+    }
+
+
+@api.get("/reports/item-movements")
+async def item_movements_report(
+    user=Depends(get_current_user),
+    product_id: Optional[str] = None,
+    toolholder_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Seçilen ürün veya takım tutucunun tarih aralığındaki giriş/çıkış detayı."""
+    if not product_id and not toolholder_id:
+        raise HTTPException(status_code=400, detail="Ürün veya takım tutucu seçilmelidir")
+
+    rows = []
+    if product_id:
+        product = await db.products.find_one({"id": product_id}, {"_id": 0})
+        if not product:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+        raw = await db.movements.find({"product_id": product_id}, {"_id": 0}).sort("created_at", -1).to_list(20000)
+        for m in raw:
+            day = _iso_day(m.get("transaction_date") or m.get("created_at"))
+            if not _in_range(day, date_from, date_to):
+                continue
+            rows.append({
+                "id": m.get("id", ""),
+                "date": day,
+                "type": m.get("type", ""),
+                "type_label": "Giriş" if m.get("type") == "in" else "Çıkış",
+                "quantity": _num(m.get("quantity")),
+                "personnel_name": m.get("personnel_name", ""),
+                "machine_code": m.get("machine_code", ""),
+                "machine_name": m.get("machine_name", ""),
+                "toolholder_code": m.get("toolholder_code", ""),
+                "toolholder_name": m.get("toolholder_name", ""),
+                "exit_reason": m.get("movement_category") or m.get("exit_reason") or m.get("movement_purpose") or "",
+                "supplier": m.get("supplier", ""),
+                "note": m.get("note", ""),
+                "user_name": m.get("user_name", ""),
+                "stock_before": m.get("stock_before"),
+                "stock_after": m.get("stock_after"),
+                "source": m.get("source", ""),
+            })
+        item = {
+            "kind": "product", "id": product.get("id", ""), "code": product.get("code", ""),
+            "name": product.get("name", ""), "brand": product.get("brand", ""),
+            "category": product.get("category", ""), "quality": product.get("quality", ""),
+            "unit": product.get("unit", "adet"),
+            "current_stock": _num(product.get("current_stock")),
+            "min_stock": _num(product.get("min_stock")),
+        }
+    else:
+        holder = await db.toolholders.find_one({"id": toolholder_id}, {"_id": 0})
+        if not holder:
+            raise HTTPException(status_code=404, detail="Takım tutucu bulunamadı")
+        raw = await db.toolholder_movements.find({"tool_holder_id": toolholder_id}, {"_id": 0}).sort("created_at", -1).to_list(20000)
+        for m in raw:
+            day = _iso_day(m.get("transaction_date") or m.get("created_at"))
+            if not _in_range(day, date_from, date_to):
+                continue
+            rows.append({
+                "id": m.get("id", ""),
+                "date": day,
+                "type": m.get("type", ""),
+                "type_label": "Giriş" if m.get("type") == "in" else "Çıkış",
+                "quantity": _num(m.get("quantity")),
+                "personnel_name": m.get("personnel_name", ""),
+                "machine_code": m.get("machine_code", ""),
+                "machine_name": m.get("machine_name", ""),
+                "toolholder_code": "",
+                "toolholder_name": "",
+                "exit_reason": m.get("movement_category", ""),
+                "supplier": m.get("supplier", ""),
+                "note": m.get("note", ""),
+                "user_name": m.get("user_name", ""),
+                "stock_before": m.get("stock_before"),
+                "stock_after": m.get("stock_after"),
+                "source": m.get("source", ""),
+            })
+        item = {
+            "kind": "toolholder", "id": holder.get("id", ""), "code": holder.get("code", ""),
+            "name": holder.get("name", ""), "brand": holder.get("brand", ""),
+            "category": holder.get("holder_type") or holder.get("type", ""), "quality": "",
+            "unit": "adet",
+            "current_stock": _num(holder.get("current_stock")),
+            "min_stock": _num(holder.get("min_stock")),
+            "length": holder.get("length", ""), "diameter": holder.get("diameter", ""),
+        }
+
+    in_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "in"), 6)
+    out_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "out"), 6)
+    return {
+        "item": item,
+        "rows": rows,
+        "summary": {
+            "in_quantity": in_quantity, "out_quantity": out_quantity,
+            "net": round(in_quantity - out_quantity, 6), "line_count": len(rows),
+            "date_from": date_from or "", "date_to": date_to or "",
+        },
+    }
+
+
+class ImportMovementRow(BaseModel):
+    kind: str = "product"  # product | toolholder | glove
+    type: str = "out"      # in | out
+    product_code: Optional[str] = ""
+    product_name: Optional[str] = ""
+    toolholder_code: Optional[str] = ""
+    toolholder_name: Optional[str] = ""
+    glove_name: Optional[str] = ""
+    glove_size: Optional[str] = ""
+    quantity: float = 0
+    transaction_date: Optional[str] = ""
+    personnel_name: Optional[str] = ""
+    machine_code: Optional[str] = ""
+    machine_name: Optional[str] = ""
+    exit_reason: Optional[str] = ""
+    note: Optional[str] = ""
+    supplier: Optional[str] = ""
+    key: Optional[str] = ""
+
+
+class ImportMovementsIn(BaseModel):
+    rows: List[ImportMovementRow] = []
+    dry_run: bool = False
+
+
+@api.post("/import/movements")
+async def import_movements(body: ImportMovementsIn, user=Depends(require_admin)):
+    """Excel'den okunan hareketleri içe aktarır.
+
+    dry_run=True iken hiçbir kayıt yazılmaz; yalnızca önizleme döner.
+    Aynı satır iki kez aktarılmasın diye import_key ile mükerrer kontrolü yapılır.
+    Stok eksiye düşebilir (sayım düzeltmesi serbest).
+    """
+    if not body.rows:
+        raise HTTPException(status_code=400, detail="İçe aktarılacak satır bulunamadı")
+    if len(body.rows) > 2000:
+        raise HTTPException(status_code=400, detail="Tek seferde en fazla 2000 satır aktarılabilir")
+
+    products = await db.products.find({}, {"_id": 0}).to_list(20000)
+    toolholders = await db.toolholders.find({}, {"_id": 0}).to_list(20000)
+    gloves = await db.gloves.find({}, {"_id": 0}).to_list(5000)
+    personnel = await db.personnel.find({}, {"_id": 0}).to_list(5000)
+    machines = await db.machines.find({}, {"_id": 0}).to_list(5000)
+
+    product_by_code = {_norm_text(p.get("code")): p for p in products if p.get("code")}
+    product_by_name = {}
+    for p in products:
+        product_by_name.setdefault(_norm_text(p.get("name")), p)
+    holder_by_code = {_norm_text(h.get("code")): h for h in toolholders if h.get("code")}
+    holder_by_name = {}
+    for h in toolholders:
+        holder_by_name.setdefault(_norm_text(h.get("name")), h)
+    glove_index = {}
+    for g in gloves:
+        glove_index.setdefault(_norm_text(g.get("name")), g)
+        if g.get("size"):
+            glove_index.setdefault(f"{_norm_text(g.get('name'))}|{_norm_text(g.get('size'))}", g)
+    personnel_index = {}
+    for p in personnel:
+        full = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+        personnel_index[_norm_text(full)] = p
+    machine_index = {}
+    for m in machines:
+        if m.get("code"):
+            machine_index[_norm_text(m.get("code"))] = m
+        machine_index.setdefault(_norm_text(m.get("name")), m)
+
+    stock_state = {p["id"]: _num(p.get("current_stock")) for p in products}
+    holder_state = {h["id"]: _num(h.get("current_stock")) for h in toolholders}
+    glove_state = {g["id"]: _num(g.get("current_stock")) for g in gloves}
+
+    today = now_utc().date().isoformat()
+    created = 0
+    skipped = []
+    planned = []
+    seen_keys = set()
+
+    for index, row in enumerate(body.rows):
+        row_no = index + 1
+        kind = _norm_text(row.kind) or "product"
+        if kind not in {"product", "toolholder", "glove"}:
+            skipped.append({"row": row_no, "reason": f"Geçersiz kayıt türü: {row.kind}"})
+            continue
+        type_value = _norm_text(row.type)
+        if type_value in {"in", "giris", "girdi", "alim", "gelen", "stok giris"}:
+            movement_type = "in"
+        elif type_value in {"out", "cikis", "cikan", "giden", "sarf", "kullanim", "stok cikis"}:
+            movement_type = "out"
+        else:
+            skipped.append({"row": row_no, "reason": f"Geçersiz tip: {row.type or '(boş)'} (Giriş/Çıkış yazın)"})
+            continue
+        quantity = _num(row.quantity)
+        if quantity <= 0:
+            skipped.append({"row": row_no, "reason": "Miktar 0'dan büyük olmalı"})
+            continue
+        day = _iso_day(row.transaction_date) or today
+        if len(day) != 10:
+            skipped.append({"row": row_no, "reason": f"Tarih okunamadı: {row.transaction_date}"})
+            continue
+
+        person = personnel_index.get(_norm_text(row.personnel_name)) if row.personnel_name else None
+        machine = None
+        if row.machine_code:
+            machine = machine_index.get(_norm_text(row.machine_code))
+        if not machine and row.machine_name:
+            machine = machine_index.get(_norm_text(row.machine_name))
+
+        entity = None
+        if kind == "product":
+            if row.product_code:
+                entity = product_by_code.get(_norm_text(row.product_code))
+            if not entity and row.product_name:
+                entity = product_by_name.get(_norm_text(row.product_name))
+            if not entity:
+                skipped.append({"row": row_no, "reason": f"Ürün bulunamadı: {row.product_code or row.product_name or '(boş)'}"})
+                continue
+        elif kind == "toolholder":
+            if row.toolholder_code:
+                entity = holder_by_code.get(_norm_text(row.toolholder_code))
+            if not entity and row.toolholder_name:
+                entity = holder_by_name.get(_norm_text(row.toolholder_name))
+            if not entity:
+                skipped.append({"row": row_no, "reason": f"Takım tutucu bulunamadı: {row.toolholder_code or row.toolholder_name or '(boş)'}"})
+                continue
+        else:
+            lookup = _norm_text(row.glove_name)
+            if row.glove_size:
+                entity = glove_index.get(f"{lookup}|{_norm_text(row.glove_size)}")
+            entity = entity or glove_index.get(lookup)
+            if not entity:
+                skipped.append({"row": row_no, "reason": f"Eldiven bulunamadı: {row.glove_name or '(boş)'}"})
+                continue
+
+        entity_id = entity["id"]
+        collection = db.movements if kind == "product" else (db.toolholder_movements if kind == "toolholder" else db.glove_movements)
+        import_key = "|".join([
+            kind, movement_type, entity_id, f"{quantity:g}", day,
+            person["id"] if person else "",
+            _norm_text(row.key) or _norm_text(row.note)[:60],
+        ])
+        if import_key in seen_keys:
+            skipped.append({"row": row_no, "reason": "Dosya içinde aynı satır birden fazla var"})
+            continue
+        if await collection.find_one({"import_key": import_key}):
+            skipped.append({"row": row_no, "reason": "Bu satır daha önce aktarılmış (mükerrer)"})
+            continue
+        natural_query = {"type": movement_type, "quantity": quantity, "transaction_date": day}
+        if kind == "product":
+            natural_query["product_id"] = entity_id
+        elif kind == "toolholder":
+            natural_query["tool_holder_id"] = entity_id
+        else:
+            natural_query["glove_id"] = entity_id
+        if person:
+            natural_query["personnel_id"] = person["id"]
+        if await collection.find_one(natural_query):
+            skipped.append({"row": row_no, "reason": "Aynı gün, aynı tip ve miktarda kayıt zaten var (mükerrer)"})
+            continue
+        seen_keys.add(import_key)
+
+        if kind == "product":
+            before = stock_state.get(entity_id, 0.0)
+        elif kind == "toolholder":
+            before = holder_state.get(entity_id, 0.0)
+        else:
+            before = glove_state.get(entity_id, 0.0)
+        after = round(before + quantity if movement_type == "in" else before - quantity, 6)
+
+        name_text = entity.get("name") or ""
+        label = f"{entity['code']} — {name_text}" if entity.get("code") else name_text
+        planned.append({
+            "row": row_no, "kind": kind, "type": movement_type, "date": day,
+            "name": label.strip(), "quantity": quantity,
+            "personnel_name": (f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else ""),
+            "stock_before": before, "stock_after": after,
+        })
+        if body.dry_run:
+            created += 1
+            if kind == "product":
+                stock_state[entity_id] = after
+            elif kind == "toolholder":
+                holder_state[entity_id] = after
+            else:
+                glove_state[entity_id] = after
+            continue
+
+        if kind == "product":
+            stock_state[entity_id] = after
+            await db.products.update_one({"id": entity_id}, {"$set": {"current_stock": after}})
+            movement = {
+                "id": new_id(), "type": movement_type, "product_id": entity_id,
+                "product_code": entity.get("code", ""), "product_name": entity.get("name", ""),
+                "quantity": quantity, "unit_price": 0, "total": 0,
+                "personnel_id": person["id"] if person else "",
+                "personnel_name": f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else "",
+                "machine_id": machine["id"] if machine else "",
+                "machine_code": machine.get("code", "") if machine else "",
+                "machine_name": machine.get("name", "") if machine else "",
+                "exit_reason": (row.exit_reason or "").strip() if movement_type == "out" else "",
+                "movement_purpose": (row.exit_reason or "").strip() if movement_type == "out" else "",
+                "supplier": (row.supplier or "").strip(),
+                "note": (row.note or "").strip(),
+                "user_id": user["id"], "user_name": user["name"],
+                "created_at": now_utc().isoformat(), "transaction_date": day,
+                "stock_before": before, "stock_after": after, "stock_went_negative": after < 0,
+                "source": "excel_import", "import_key": import_key,
+            }
+            await db.movements.insert_one(movement)
+        elif kind == "toolholder":
+            holder_state[entity_id] = after
+            await db.toolholders.update_one({"id": entity_id}, {"$set": {"current_stock": after}})
+            movement = {
+                "id": new_id(), "type": movement_type, "tool_holder_id": entity_id,
+                "name": entity.get("name", ""), "brand": entity.get("brand", ""),
+                "holder_type": entity.get("type", ""), "quantity": quantity,
+                "personnel_id": person["id"] if person else "",
+                "personnel_name": f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else "",
+                "machine_id": machine["id"] if machine else "",
+                "machine_code": machine.get("code", "") if machine else "",
+                "machine_name": machine.get("name", "") if machine else "",
+                "supplier": (row.supplier or "").strip(), "note": (row.note or "").strip(),
+                "user_id": user["id"], "user_name": user["name"],
+                "created_at": now_utc().isoformat(), "transaction_date": day,
+                "stock_before": before, "stock_after": after, "stock_went_negative": after < 0,
+                "source": "excel_import", "import_key": import_key,
+            }
+            await db.toolholder_movements.insert_one(movement)
+        else:
+            glove_state[entity_id] = after
+            await db.gloves.update_one({"id": entity_id}, {"$set": {"current_stock": after}})
+            movement = {
+                "id": new_id(), "type": movement_type, "glove_id": entity_id,
+                "glove_name": entity.get("name", ""), "size": entity.get("size", ""),
+                "brand": entity.get("brand", ""), "quantity": quantity,
+                "personnel_id": person["id"] if person else "",
+                "personnel_name": f"{person.get('first_name', '')} {person.get('last_name', '')}".strip() if person else "",
+                "note": (row.note or "").strip(),
+                "user_id": user["id"], "user_name": user["name"],
+                "created_at": now_utc().isoformat(), "transaction_date": day,
+                "stock_before": before, "stock_after": after, "stock_went_negative": after < 0,
+                "source": "excel_import", "import_key": import_key,
+            }
+            await db.glove_movements.insert_one(movement)
+        created += 1
+
+    return {
+        "dry_run": body.dry_run,
+        "created": created,
+        "skipped": skipped,
+        "planned": planned[:200],
+        "total": len(body.rows),
+    }
+
+
 # ==================== Tool Holders (Takım Tutucular) ====================
 @api.get("/toolholders")
 async def list_toolholders(user=Depends(get_current_user)):

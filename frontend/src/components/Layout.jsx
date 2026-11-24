@@ -23,7 +23,7 @@ const NAV = [
   { to: "/hurda-tutucular", label: "Hurda / Kullanım Dışı", icon: PackageX, testid: "nav-holder-scrap", adminOnly: true },
   { to: "/tedarikciler", label: "Tedarikçiler", icon: Building2, testid: "nav-suppliers" },
   { to: "/siparisler", label: "Siparişler", icon: ClipboardList, testid: "nav-orders" },
-  { to: "/hareketler", label: "Hareketler", icon: History, testid: "nav-movements" },
+  { to: "/hareketler", label: "Hareket Geçmişi", icon: History, testid: "nav-movements" },
   { to: "/kritik-stok", label: "Kritik Stok", icon: AlertTriangle, testid: "nav-critical" },
   { to: "/raporlar", label: "Raporlar", icon: FileBarChart2, testid: "nav-reports" },
   { to: "/ayarlar", label: "Ayarlar", icon: Cog, testid: "nav-settings" },
