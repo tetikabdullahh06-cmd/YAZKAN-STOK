@@ -49,7 +49,7 @@ export function ActionButtons({ onExport, onImport, exportDisabled, importLabel 
   const { isAdmin } = useAuth();
   return (
     <div className="flex gap-2 ml-auto flex-wrap">
-      {isAdmin && (
+      {isAdmin && onImport && (
         <button onClick={onImport} data-testid="movements-import"
           className="h-12 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold inline-flex items-center gap-2">
           <FileUp className="w-4 h-4" /> {importLabel}

@@ -70,8 +70,27 @@ export async function buildReportWorkbook({ sheets }) {
     });
     headerRow.height = 30;
 
-    (spec.rows || []).forEach((row, rowIndex) => {
-      const excelRow = worksheet.getRow(headerRowNumber + rowIndex + 1);
+    const rows = spec.rows || [];
+    let hasBand = false;
+    let cursor = headerRowNumber + 1;
+    rows.forEach((row) => {
+      if (row && row.__band) {
+        hasBand = true;
+        const bandRow = worksheet.getRow(cursor);
+        columns.forEach((column, index) => {
+          const cell = bandRow.getCell(index + 1);
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCE6F1" } };
+          cell.border = BORDER;
+        });
+        const bandCell = bandRow.getCell(1);
+        bandCell.value = row.__band;
+        bandCell.font = { bold: true, size: 11, color: TITLE_COLOR };
+        bandCell.alignment = { horizontal: "left", vertical: "middle" };
+        bandRow.height = 20;
+        cursor += 1;
+        return;
+      }
+      const excelRow = worksheet.getRow(cursor);
       columns.forEach((column, index) => {
         const cell = excelRow.getCell(index + 1);
         cell.value = cellValue(column, row);
@@ -88,10 +107,11 @@ export async function buildReportWorkbook({ sheets }) {
         }
         if (row.__negative) cell.font = { size: 10, color: { argb: "FF9C0006" }, bold: true };
       });
+      cursor += 1;
     });
 
-    const dataEndRow = headerRowNumber + (spec.rows || []).length;
-    if (columns.length && (spec.rows || []).length) {
+    const dataEndRow = cursor - 1;
+    if (columns.length && rows.length && !hasBand) {
       worksheet.autoFilter = {
         from: { row: headerRowNumber, column: 1 },
         to: { row: dataEndRow, column: columns.length },
