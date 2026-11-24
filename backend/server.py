@@ -2537,17 +2537,27 @@ async def personnel_consumption_report(
     personnel_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    scope: Optional[str] = None,
 ):
-    """Personel bazlı takım/elmas/uç ve eldiven sarfiyatı."""
+    """Personel bazlı takım/elmas/uç ve eldiven sarfiyatı.
+
+    scope="gloves" yalnızca eldiven, scope="tools" yalnızca takım sarfiyatını hesaplar.
+    """
+    include_tools = scope not in {"gloves", "glove"}
+    include_gloves = scope not in {"tools", "tool"}
     movement_query = {"type": "out"}
     if personnel_id:
         movement_query["personnel_id"] = personnel_id
-    raw_tools = await db.movements.find(movement_query, {"_id": 0}).sort("created_at", -1).to_list(20000)
+    raw_tools = []
+    if include_tools:
+        raw_tools = await db.movements.find(movement_query, {"_id": 0}).sort("created_at", -1).to_list(20000)
 
     glove_query = {"type": "out"}
     if personnel_id:
         glove_query["personnel_id"] = personnel_id
-    raw_gloves = await db.glove_movements.find(glove_query, {"_id": 0}).sort("created_at", -1).to_list(20000)
+    raw_gloves = []
+    if include_gloves:
+        raw_gloves = await db.glove_movements.find(glove_query, {"_id": 0}).sort("created_at", -1).to_list(20000)
 
     raw_tools = [m for m in raw_tools if _in_range(_iso_day(m.get("transaction_date") or m.get("created_at")), date_from, date_to)]
     raw_gloves = [g for g in raw_gloves if _in_range(_iso_day(g.get("transaction_date") or g.get("created_at")), date_from, date_to)]
@@ -2617,6 +2627,55 @@ async def personnel_consumption_report(
         item["glove_quantity"] = round(item["glove_quantity"] + row["quantity"], 6)
         item["glove_lines"] += 1
 
+    tool_totals_map = {}
+    for row in tools:
+        key = row["product_id"] or row["product_code"] or row["product_name"]
+        total = tool_totals_map.setdefault(key, {
+            "product_id": row["product_id"], "code": row["product_code"], "name": row["product_name"],
+            "brand": row["brand"], "category": row["category"], "quality": row["quality"],
+            "unit": row["unit"], "quantity": 0.0, "line_count": 0,
+            "first_date": row["date"], "last_date": row["date"],
+        })
+        total["quantity"] = round(total["quantity"] + row["quantity"], 6)
+        total["line_count"] += 1
+        if row["date"] and (not total["first_date"] or row["date"] < total["first_date"]):
+            total["first_date"] = row["date"]
+        if row["date"] and row["date"] > total["last_date"]:
+            total["last_date"] = row["date"]
+    tool_totals = sorted(tool_totals_map.values(), key=lambda x: (-x["quantity"], _norm_text(x["name"])))
+
+    glove_totals_map = {}
+    for row in gloves:
+        key = row["glove_id"] or f'{row["glove_name"]}|{row["size"]}'
+        total = glove_totals_map.setdefault(key, {
+            "glove_id": row["glove_id"], "name": row["glove_name"], "size": row["size"], "brand": row["brand"],
+            "quantity": 0.0, "line_count": 0, "first_date": row["date"], "last_date": row["date"],
+        })
+        total["quantity"] = round(total["quantity"] + row["quantity"], 6)
+        total["line_count"] += 1
+        if row["date"] and (not total["first_date"] or row["date"] < total["first_date"]):
+            total["first_date"] = row["date"]
+        if row["date"] and row["date"] > total["last_date"]:
+            total["last_date"] = row["date"]
+    glove_totals = sorted(glove_totals_map.values(), key=lambda x: (-x["quantity"], _norm_text(x["name"])))
+
+    monthly_map = {}
+    for row in tools:
+        month = (row["date"] or "")[:7]
+        if not month:
+            continue
+        bucket = monthly_map.setdefault(month, {"month": month, "tool_quantity": 0.0, "glove_quantity": 0.0, "line_count": 0})
+        bucket["tool_quantity"] = round(bucket["tool_quantity"] + row["quantity"], 6)
+        bucket["line_count"] += 1
+    for row in gloves:
+        month = (row["date"] or "")[:7]
+        if not month:
+            continue
+        bucket = monthly_map.setdefault(month, {"month": month, "tool_quantity": 0.0, "glove_quantity": 0.0, "line_count": 0})
+        bucket["glove_quantity"] = round(bucket["glove_quantity"] + row["quantity"], 6)
+        bucket["line_count"] += 1
+    monthly = sorted(monthly_map.values(), key=lambda x: x["month"])
+
     summary = {
         "tool_quantity": round(sum(row["quantity"] for row in tools), 6),
         "tool_lines": len(tools),
@@ -2633,6 +2692,9 @@ async def personnel_consumption_report(
         "gloves": gloves,
         "summary": summary,
         "by_personnel": sorted(by_personnel.values(), key=lambda x: _norm_text(x["personnel_name"])),
+        "tool_totals": tool_totals,
+        "glove_totals": glove_totals,
+        "monthly": monthly,
     }
 
 
@@ -2684,6 +2746,40 @@ async def stock_movements_report(
             if needle not in hay:
                 continue
         rows.append(row)
+    product_ids = sorted({row["product_id"] for row in rows if row.get("product_id")})
+    product_units = await db.products.find({"id": {"$in": product_ids}}, {"_id": 0, "id": 1, "unit": 1}).to_list(5000) if product_ids else []
+    unit_map = {p["id"]: p.get("unit", "") for p in product_units}
+    totals_map = {}
+    monthly_map = {}
+    for row in rows:
+        key = row.get("product_id") or row.get("product_code") or row.get("product_name")
+        total = totals_map.setdefault(key, {
+            "product_id": row.get("product_id", ""), "code": row.get("product_code", ""),
+            "name": row.get("product_name", ""), "unit": unit_map.get(row.get("product_id"), ""),
+            "in_quantity": 0.0, "out_quantity": 0.0, "line_count": 0,
+        })
+        if row["type"] == "in":
+            total["in_quantity"] = round(total["in_quantity"] + row["quantity"], 6)
+        else:
+            total["out_quantity"] = round(total["out_quantity"] + row["quantity"], 6)
+        total["line_count"] += 1
+        month = (row.get("date") or "")[:7]
+        if month:
+            bucket = monthly_map.setdefault(month, {"month": month, "in_quantity": 0.0, "out_quantity": 0.0, "line_count": 0})
+            if row["type"] == "in":
+                bucket["in_quantity"] = round(bucket["in_quantity"] + row["quantity"], 6)
+            else:
+                bucket["out_quantity"] = round(bucket["out_quantity"] + row["quantity"], 6)
+            bucket["line_count"] += 1
+    product_totals = []
+    for total in totals_map.values():
+        total["net"] = round(total["in_quantity"] - total["out_quantity"], 6)
+        product_totals.append(total)
+    product_totals.sort(key=lambda x: (-(x["in_quantity"] + x["out_quantity"]), _norm_text(x["name"])))
+    monthly = sorted(monthly_map.values(), key=lambda x: x["month"])
+    for bucket in monthly:
+        bucket["net"] = round(bucket["in_quantity"] - bucket["out_quantity"], 6)
+
     in_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "in"), 6)
     out_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "out"), 6)
     return {
@@ -2693,6 +2789,8 @@ async def stock_movements_report(
             "net": round(in_quantity - out_quantity, 6), "line_count": len(rows),
             "date_from": date_from or "", "date_to": date_to or "",
         },
+        "product_totals": product_totals,
+        "monthly": monthly,
     }
 
 
@@ -2783,6 +2881,31 @@ async def item_movements_report(
             "length": holder.get("length", ""), "diameter": holder.get("diameter", ""),
         }
 
+    monthly_map = {}
+    personnel_map = {}
+    for row in rows:
+        month = (row.get("date") or "")[:7]
+        if month:
+            bucket = monthly_map.setdefault(month, {"month": month, "in_quantity": 0.0, "out_quantity": 0.0, "line_count": 0})
+            if row["type"] == "in":
+                bucket["in_quantity"] = round(bucket["in_quantity"] + row["quantity"], 6)
+            else:
+                bucket["out_quantity"] = round(bucket["out_quantity"] + row["quantity"], 6)
+            bucket["line_count"] += 1
+        person_name = row.get("personnel_name") or "Belirtilmemiş"
+        person = personnel_map.setdefault(person_name, {"personnel_name": person_name, "in_quantity": 0.0, "out_quantity": 0.0, "line_count": 0})
+        if row["type"] == "in":
+            person["in_quantity"] = round(person["in_quantity"] + row["quantity"], 6)
+        else:
+            person["out_quantity"] = round(person["out_quantity"] + row["quantity"], 6)
+        person["line_count"] += 1
+    monthly = sorted(monthly_map.values(), key=lambda x: x["month"])
+    for bucket in monthly:
+        bucket["net"] = round(bucket["in_quantity"] - bucket["out_quantity"], 6)
+    personnel_totals = sorted(personnel_map.values(), key=lambda x: (-x["out_quantity"], _norm_text(x["personnel_name"])))
+    for person in personnel_totals:
+        person["net"] = round(person["in_quantity"] - person["out_quantity"], 6)
+
     in_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "in"), 6)
     out_quantity = round(sum(r["quantity"] for r in rows if r["type"] == "out"), 6)
     return {
@@ -2793,6 +2916,8 @@ async def item_movements_report(
             "net": round(in_quantity - out_quantity, 6), "line_count": len(rows),
             "date_from": date_from or "", "date_to": date_to or "",
         },
+        "monthly": monthly,
+        "personnel_totals": personnel_totals,
     }
 
 

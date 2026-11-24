@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { ArrowLeftRight, Boxes, Users } from "lucide-react";
+import { ArrowLeftRight, Boxes, Package, Users } from "lucide-react";
 import PersonnelConsumptionTab from "@/components/movements/PersonnelConsumptionTab";
+import GloveConsumptionTab from "@/components/movements/GloveConsumptionTab";
 import StockMovementsTab from "@/components/movements/StockMovementsTab";
 import ItemMovementsTab from "@/components/movements/ItemMovementsTab";
 
 const TABS = [
   { id: "personnel", label: "Personel Sarfiyatı", icon: Users, hint: "Tarih aralığında personelin kullandığı takım/elmas/uç ve eldiven listesi" },
+  { id: "glove", label: "Eldiven Sarfiyatı", icon: Package, hint: "Personel bazında eldiven kullanımı, aylık ve eldiven bazında toplamlar" },
   { id: "stock", label: "Stok Hareketleri", icon: ArrowLeftRight, hint: "Tüm ürünlerin giriş/çıkış hareketleri toplu liste" },
   { id: "item", label: "Ürün / Takım Tutucu", icon: Boxes, hint: "Seçilen ürün veya takım tutucunun tarih aralığındaki hareket detayı" },
 ];
@@ -39,6 +41,7 @@ export default function Movements() {
       </div>
 
       {tab === "personnel" && <PersonnelConsumptionTab />}
+      {tab === "glove" && <GloveConsumptionTab />}
       {tab === "stock" && <StockMovementsTab />}
       {tab === "item" && <ItemMovementsTab />}
     </div>

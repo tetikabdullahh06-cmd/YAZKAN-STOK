@@ -155,6 +155,13 @@ export function parseMovementWorkbook(arrayBuffer, mode) {
         key: `${sheetName}-${rowIndex + 1}`,
       };
 
+      if (mode === "glove") {
+        if (!gloveName) continue;
+        rows.push({ ...base, kind: "glove", type: "out", glove_name: gloveName, glove_size: String(pick("gloveSize") ?? "").trim() });
+        count += 1;
+        continue;
+      }
+
       if (mode === "personnel" && looksGlove) {
         rows.push({ ...base, kind: "glove", type: "out", glove_name: gloveName, glove_size: String(pick("gloveSize") ?? "").trim() });
         count += 1;

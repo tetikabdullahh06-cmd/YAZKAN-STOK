@@ -6,6 +6,7 @@ import { parseMovementWorkbook } from "@/lib/movementExcelParse";
 
 const MODE_HINTS = {
   personnel: "Takım Sarfiyatı ve Eldiven Sarfiyatı sayfaları okunur. Tarih, Ürün Kodu/Adı, Miktar, Personel sütunları kullanılır.",
+  glove: "Eldiven Sarfiyatı sayfası okunur. Tarih, Eldiven, Beden, Miktar, Personel sütunları kullanılır.",
   stock: "Stok Hareketleri sayfası okunur. Tip (Giriş/Çıkış), Ürün Kodu/Adı, Miktar, Tarih, Personel sütunları kullanılır.",
   product: "Ürün hareketleri sayfası okunur. Tip (Giriş/Çıkış), Ürün Kodu/Adı, Miktar, Tarih sütunları kullanılır.",
   toolholder: "Takım tutucu hareketleri sayfası okunur. Tip (Giriş/Çıkış), Takım Tutucu Kodu/Adı, Miktar, Tarih sütunları kullanılır.",

@@ -76,3 +76,45 @@ export const formatDay = (value) => {
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : String(value);
 };
+
+export const formatMonth = (value) => {
+  if (!value) return "-";
+  const match = String(value).match(/^(\d{4})-(\d{2})/);
+  if (!match) return String(value);
+  const names = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+  return `${names[Number(match[2]) - 1] || match[2]} ${match[1]}`;
+};
+
+export function TotalsCard({ title, hint, columns, rows, emptyText = "Toplam oluşturacak kayıt yok" }) {
+  return (
+    <div className="bg-slate-800/60 border border-slate-700 rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-3 flex-wrap">
+        <div className="font-bold text-slate-100">{title}</div>
+        {hint && <div className="text-xs text-slate-500">{hint}</div>}
+      </div>
+      <div className="overflow-auto max-h-80">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-900/50 text-slate-400 uppercase tracking-wider text-xs sticky top-0">
+            <tr>
+              {columns.map((column) => (
+                <th key={column.key} className={`px-3 py-2 ${column.align === "right" ? "text-right" : "text-left"}`}>{column.header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-700">
+            {rows.length === 0 && <EmptyRow colSpan={columns.length} text={emptyText} />}
+            {rows.map((row, index) => (
+              <tr key={row.id || row.key || index} className="hover:bg-slate-700/40">
+                {columns.map((column) => (
+                  <td key={column.key} className={`px-3 py-2 ${column.align === "right" ? "text-right font-mono-tab" : ""} ${column.className || "text-slate-300"}`}>
+                    {column.render ? column.render(row) : row[column.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

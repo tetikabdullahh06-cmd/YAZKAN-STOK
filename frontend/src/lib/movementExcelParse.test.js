@@ -41,6 +41,12 @@ test("stok modunda eldiven sayfası ürün olarak okunmaz", () => {
   expect(parsed.rows.every((row) => row.kind === "product")).toBe(true);
 });
 
+test("eldiven modunda yalnızca eldiven satırları okunur", () => {
+  const parsed = parseMovementWorkbook(buildWorkbook(), "glove");
+  expect(parsed.rows).toHaveLength(1);
+  expect(parsed.rows[0]).toMatchObject({ kind: "glove", type: "out", glove_name: "Nitril Eldiven", glove_size: "L", quantity: 2, personnel_name: "MERTCAN ÇAĞLAMAZ" });
+});
+
 test("tarih, miktar ve tip dönüşümleri Türkçe biçimleri kabul eder", () => {
   expect(toIsoDay("24.11.2026")).toBe("2026-11-24");
   expect(toIsoDay("2026-11-24T08:00:00")).toBe("2026-11-24");

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Loader2, Users } from "lucide-react";
 import { downloadReportWorkbook } from "@/lib/reportExcel";
 import MovementImport from "./MovementImport";
-import { ActionButtons, DateRangeFields, EmptyRow, Kpi, formatDay, monthStartISO, todayISO } from "./shared";
+import { ActionButtons, DateRangeFields, EmptyRow, Kpi, TotalsCard, formatDay, formatMonth, monthStartISO, todayISO } from "./shared";
 
 const TOOL_COLUMNS = [
   { header: "Tarih", key: "date", type: "date", width: 12 },
@@ -71,6 +71,9 @@ export default function PersonnelConsumptionTab() {
   const tools = data?.tools || [];
   const gloves = data?.gloves || [];
   const byPersonnel = data?.by_personnel || [];
+  const toolTotals = data?.tool_totals || [];
+  const gloveTotals = data?.glove_totals || [];
+  const monthly = data?.monthly || [];
 
   const exportExcel = () => {
     if (!tools.length && !gloves.length) return toast.info("Dışa aktarılacak sarfiyat kaydı bulunamadı");
@@ -109,6 +112,44 @@ export default function PersonnelConsumptionTab() {
           columns: GLOVE_COLUMNS,
           rows: gloveRows,
           footer: { label: "TOPLAM", sumKeys: ["quantity"] },
+        },
+        {
+          name: "Ürün Toplamları",
+          title: "YAZKAN İŞLEME — ÜRÜN BAZINDA TAKIM SARFİYATI",
+          subtitle: `Personel: ${selectedName} · Dönem: ${period}`,
+          columns: [
+            { header: "Ürün Kodu", key: "code", width: 16 },
+            { header: "Ürün Adı", key: "name", width: 30 },
+            { header: "Marka", key: "brand", width: 16 },
+            { header: "Kategori", key: "category", width: 16 },
+            { header: "Kalite", key: "quality", width: 12 },
+            { header: "Birim", key: "unit", width: 8 },
+            { header: "Toplam Miktar", key: "quantity", type: "number", width: 14 },
+            { header: "Kayıt Sayısı", key: "line_count", type: "number", width: 12 },
+            { header: "İlk Tarih", key: "first_date", type: "date", width: 12 },
+            { header: "Son Tarih", key: "last_date", type: "date", width: 12 },
+          ],
+          rows: toolTotals.map((row) => ({
+            code: row.code, name: row.name, brand: row.brand, category: row.category, quality: row.quality,
+            unit: row.unit, quantity: row.quantity, line_count: row.line_count,
+            first_date: row.first_date, last_date: row.last_date,
+          })),
+          footer: { label: "TOPLAM", sumKeys: ["quantity", "line_count"] },
+        },
+        {
+          name: "Aylık Toplamlar",
+          title: "YAZKAN İŞLEME — AYLIK SARFİYAT",
+          subtitle: `Personel: ${selectedName} · Dönem: ${period}`,
+          columns: [
+            { header: "Ay", key: "month", width: 14 },
+            { header: "Takım / Elmas / Uç", key: "tool_quantity", type: "number", width: 18 },
+            { header: "Eldiven", key: "glove_quantity", type: "number", width: 14 },
+            { header: "Kayıt Sayısı", key: "line_count", type: "number", width: 12 },
+          ],
+          rows: monthly.map((row) => ({
+            month: row.month, tool_quantity: row.tool_quantity, glove_quantity: row.glove_quantity, line_count: row.line_count,
+          })),
+          footer: { label: "TOPLAM", sumKeys: ["tool_quantity", "glove_quantity", "line_count"] },
         },
         {
           name: "Personel Özeti",
@@ -278,6 +319,45 @@ export default function PersonnelConsumptionTab() {
           </table>
         </div>
       </div>
+
+      <TotalsCard
+        title="Ürün Bazında Toplam"
+        hint="Seçilen dönemde hangi üründen kaç adet kullanıldı"
+        columns={[
+          { key: "name", header: "Ürün", render: (row) => (<div><div className="text-slate-100 font-medium">{row.name || "-"}</div><div className="text-xs text-slate-500 font-mono-tab">{row.code}</div></div>) },
+          { key: "brand", header: "Marka", render: (row) => row.brand || "-" },
+          { key: "category", header: "Kategori", render: (row) => row.category || "-" },
+          { key: "quality", header: "Kalite", render: (row) => row.quality || "-" },
+          { key: "quantity", header: "Toplam", align: "right", render: (row) => <span className="text-blue-300 font-bold">{row.quantity} <span className="text-xs text-slate-500">{row.unit}</span></span> },
+          { key: "line_count", header: "Kayıt", align: "right" },
+          { key: "range", header: "İlk – Son", render: (row) => `${formatDay(row.first_date)} – ${formatDay(row.last_date)}` },
+        ]}
+        rows={toolTotals}
+      />
+
+      <TotalsCard
+        title="Eldiven Bazında Toplam"
+        hint="Seçilen dönemde hangi eldivenden kaç çift kullanıldı"
+        columns={[
+          { key: "name", header: "Eldiven", render: (row) => <span className="text-slate-100">{row.name || "-"}</span> },
+          { key: "size", header: "Beden", render: (row) => row.size || "-" },
+          { key: "quantity", header: "Toplam", align: "right", render: (row) => <span className="text-amber-300 font-bold">{row.quantity}</span> },
+          { key: "line_count", header: "Kayıt", align: "right" },
+        ]}
+        rows={gloveTotals}
+      />
+
+      <TotalsCard
+        title="Aylık Toplam"
+        hint="Ay ay takım ve eldiven kullanımı"
+        columns={[
+          { key: "month", header: "Ay", render: (row) => <span className="text-slate-100">{formatMonth(row.month)}</span> },
+          { key: "tool_quantity", header: "Takım / Elmas / Uç", align: "right", render: (row) => <span className="text-blue-300 font-bold">{row.tool_quantity}</span> },
+          { key: "glove_quantity", header: "Eldiven", align: "right", render: (row) => <span className="text-amber-300 font-bold">{row.glove_quantity}</span> },
+          { key: "line_count", header: "Kayıt", align: "right" },
+        ]}
+        rows={monthly}
+      />
 
       {importOpen && (
         <MovementImport

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Boxes, Loader2, Wrench } from "lucide-react";
 import { downloadReportWorkbook } from "@/lib/reportExcel";
 import MovementImport from "./MovementImport";
-import { ActionButtons, DateRangeFields, EmptyRow, Kpi, formatDay, monthStartISO, todayISO } from "./shared";
+import { ActionButtons, DateRangeFields, EmptyRow, Kpi, TotalsCard, formatDay, formatMonth, monthStartISO, todayISO } from "./shared";
 
 const COLUMNS = [
   { header: "Tarih", key: "date", type: "date", width: 12 },
@@ -75,6 +75,8 @@ export default function ItemMovementsTab() {
   const item = data?.item;
   const rows = data?.rows || [];
   const summary = data?.summary || {};
+  const monthly = data?.monthly || [];
+  const personnelTotals = data?.personnel_totals || [];
 
   const exportExcel = () => {
     if (!item) return toast.info("Önce ürün veya takım tutucu seçin");
@@ -98,6 +100,38 @@ export default function ItemMovementsTab() {
           columns: COLUMNS,
           rows: sheetRows,
           footer: { label: "TOPLAM", sumKeys: ["quantity"] },
+        },
+        {
+          name: "Aylık Toplamlar",
+          title: mode === "product" ? "YAZKAN İŞLEME — AYLIK ÜRÜN HAREKETİ" : "YAZKAN İŞLEME — AYLIK TUTUCU HAREKETİ",
+          subtitle: `${itemLabel} · Dönem: ${period}`,
+          columns: [
+            { header: "Ay", key: "month", width: 14 },
+            { header: "Giriş", key: "in_quantity", type: "number", width: 12 },
+            { header: "Çıkış", key: "out_quantity", type: "number", width: 12 },
+            { header: "Net", key: "net", type: "number", width: 12 },
+            { header: "Kayıt Sayısı", key: "line_count", type: "number", width: 12 },
+          ],
+          rows: monthly.map((row) => ({
+            month: row.month, in_quantity: row.in_quantity, out_quantity: row.out_quantity, net: row.net, line_count: row.line_count,
+          })),
+          footer: { label: "TOPLAM", sumKeys: ["in_quantity", "out_quantity", "net", "line_count"] },
+        },
+        {
+          name: "Personel Toplamları",
+          title: "YAZKAN İŞLEME — PERSONEL BAZINDA HAREKET",
+          subtitle: `${itemLabel} · Dönem: ${period}`,
+          columns: [
+            { header: "Personel", key: "personnel", width: 28 },
+            { header: "Giriş", key: "in_quantity", type: "number", width: 12 },
+            { header: "Çıkış", key: "out_quantity", type: "number", width: 12 },
+            { header: "Net", key: "net", type: "number", width: 12 },
+            { header: "Kayıt Sayısı", key: "line_count", type: "number", width: 12 },
+          ],
+          rows: personnelTotals.map((row) => ({
+            personnel: row.personnel_name, in_quantity: row.in_quantity, out_quantity: row.out_quantity, net: row.net, line_count: row.line_count,
+          })),
+          footer: { label: "TOPLAM", sumKeys: ["in_quantity", "out_quantity", "net", "line_count"] },
         },
         {
           name: "Özet",
@@ -268,6 +302,32 @@ export default function ItemMovementsTab() {
           </div>
         </>
       )}
+
+      <TotalsCard
+        title="Aylık Toplam"
+        hint="Ay ay giriş / çıkış"
+        columns={[
+          { key: "month", header: "Ay", render: (row) => <span className="text-slate-100">{formatMonth(row.month)}</span> },
+          { key: "in_quantity", header: "Giriş", align: "right", render: (row) => <span className="text-emerald-300 font-bold">{row.in_quantity}</span> },
+          { key: "out_quantity", header: "Çıkış", align: "right", render: (row) => <span className="text-amber-300 font-bold">{row.out_quantity}</span> },
+          { key: "net", header: "Net", align: "right", render: (row) => <span className={row.net < 0 ? "text-red-300 font-bold" : "text-slate-200"}>{row.net}</span> },
+          { key: "line_count", header: "Kayıt", align: "right" },
+        ]}
+        rows={monthly}
+      />
+
+      <TotalsCard
+        title="Personel Bazında Toplam"
+        hint={mode === "product" ? "Bu üründen kim ne kadar kullandı" : "Bu tutucuyu kim ne kadar kullandı"}
+        columns={[
+          { key: "personnel_name", header: "Personel", render: (row) => <span className="text-slate-100">{row.personnel_name}</span> },
+          { key: "in_quantity", header: "Giriş", align: "right", render: (row) => <span className="text-emerald-300 font-bold">{row.in_quantity}</span> },
+          { key: "out_quantity", header: "Çıkış", align: "right", render: (row) => <span className="text-amber-300 font-bold">{row.out_quantity}</span> },
+          { key: "net", header: "Net", align: "right", render: (row) => <span className={row.net < 0 ? "text-red-300 font-bold" : "text-slate-200"}>{row.net}</span> },
+          { key: "line_count", header: "Kayıt", align: "right" },
+        ]}
+        rows={personnelTotals}
+      />
 
       {importOpen && (
         <MovementImport
