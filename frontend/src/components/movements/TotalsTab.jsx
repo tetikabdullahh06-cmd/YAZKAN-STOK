@@ -47,6 +47,8 @@ const buildProductTotals = (rows) => {
       category: row.category || "-",
       quality: row.quality || "-",
       unit: row.unit || "adet",
+      current_stock: Number(row.current_stock ?? 0),
+      min_stock: Number(row.min_stock ?? 0),
       quantity: 0,
       line_count: 0,
       first_date: row.date,
@@ -70,6 +72,9 @@ const buildGloveTotals = (rows) => {
       name: row.glove_name || "-",
       size: row.size || "-",
       brand: row.brand || "-",
+      unit: row.unit || "çift",
+      current_stock: Number(row.current_stock ?? 0),
+      min_stock: Number(row.min_stock ?? 0),
       quantity: 0,
       line_count: 0,
       first_date: row.date,
@@ -208,6 +213,7 @@ export default function TotalsTab() {
           unit: row.unit,
           quantity: row.quantity,
           line_count: row.line_count,
+          current_stock: row.current_stock,
         });
       });
       buildGloveTotals(monthGloves).forEach((row) => {
@@ -219,6 +225,7 @@ export default function TotalsTab() {
           unit: "çift",
           quantity: row.quantity,
           line_count: row.line_count,
+          current_stock: row.current_stock,
         });
       });
     });
@@ -241,6 +248,7 @@ export default function TotalsTab() {
       line_count: row.line_count,
       first_date: row.first_date,
       last_date: row.last_date,
+      current_stock: row.current_stock,
     }));
 
     const gloveRows = gloveTotals.map((row) => ({
@@ -251,6 +259,7 @@ export default function TotalsTab() {
       line_count: row.line_count,
       first_date: row.first_date,
       last_date: row.last_date,
+      current_stock: row.current_stock,
     }));
 
     const personnelRows = personnelTotals.map((row) => ({
@@ -304,6 +313,7 @@ export default function TotalsTab() {
             { header: "Birim", key: "unit", width: 9 },
             { header: "Miktar", key: "quantity", type: "number", width: 11 },
             { header: "Kayıt", key: "line_count", type: "number", width: 9 },
+            { header: "Kalan Stok", key: "current_stock", type: "number", width: 12 },
           ],
           rows: summaryRows,
           footer: { label: "GENEL TOPLAM", sumKeys: ["quantity", "line_count"] },
@@ -323,6 +333,7 @@ export default function TotalsTab() {
             { header: "Kayıt Sayısı", key: "line_count", type: "number", width: 12 },
             { header: "İlk Tarih", key: "first_date", type: "date", width: 12 },
             { header: "Son Tarih", key: "last_date", type: "date", width: 12 },
+            { header: "Kalan Stok", key: "current_stock", type: "number", width: 12 },
           ],
           rows: productRows,
           footer: { label: "TOPLAM", sumKeys: ["quantity", "line_count"] },
@@ -339,6 +350,7 @@ export default function TotalsTab() {
             { header: "Kayıt Sayısı", key: "line_count", type: "number", width: 12 },
             { header: "İlk Tarih", key: "first_date", type: "date", width: 12 },
             { header: "Son Tarih", key: "last_date", type: "date", width: 12 },
+            { header: "Kalan Stok", key: "current_stock", type: "number", width: 12 },
           ],
           rows: gloveRows,
           footer: { label: "TOPLAM", sumKeys: ["quantity", "line_count"] },
@@ -489,7 +501,7 @@ export default function TotalsTab() {
 
       <TotalsCard
         title="Ürün Bazında Toplam"
-        hint={`${scopeLabel} · hangi üründen ne kadar kullanıldı`}
+        hint={`${scopeLabel} · hangi üründen ne kadar kullanıldı · kalan stok güncel değerdir`}
         columns={[
           { key: "code", header: "Kod", render: (row) => <span className="text-slate-400">{row.code}</span> },
           { key: "name", header: "Ürün", render: (row) => <span className="text-slate-100">{row.name}</span> },
@@ -498,19 +510,39 @@ export default function TotalsTab() {
           { key: "unit", header: "Birim", render: (row) => row.unit || "adet" },
           { key: "quantity", header: "Toplam", align: "right", render: (row) => <span className="text-blue-300 font-bold">{row.quantity}</span> },
           { key: "line_count", header: "Kayıt", align: "right" },
+          {
+            key: "current_stock",
+            header: "Kalan Stok",
+            align: "right",
+            render: (row) => (
+              <span className={`font-bold ${Number(row.current_stock) <= Number(row.min_stock || 0) ? "text-red-400" : "text-emerald-300"}`}>
+                {row.current_stock} <span className="text-xs opacity-70">{row.unit || "adet"}</span>
+              </span>
+            ),
+          },
         ]}
         rows={productTotals}
       />
 
       <TotalsCard
         title="Eldiven Bazında Toplam"
-        hint={`${scopeLabel} · hangi eldivenden ne kadar kullanıldı`}
+        hint={`${scopeLabel} · hangi eldivenden ne kadar kullanıldı · kalan stok güncel değerdir`}
         columns={[
           { key: "name", header: "Eldiven", render: (row) => <span className="text-slate-100">{row.name}</span> },
           { key: "size", header: "Beden", render: (row) => row.size || "-" },
           { key: "brand", header: "Marka", render: (row) => row.brand || "-" },
           { key: "quantity", header: "Toplam", align: "right", render: (row) => <span className="text-amber-300 font-bold">{row.quantity}</span> },
           { key: "line_count", header: "Kayıt", align: "right" },
+          {
+            key: "current_stock",
+            header: "Kalan Stok",
+            align: "right",
+            render: (row) => (
+              <span className={`font-bold ${Number(row.current_stock) <= Number(row.min_stock || 0) ? "text-red-400" : "text-emerald-300"}`}>
+                {row.current_stock} <span className="text-xs opacity-70">{row.unit || "çift"}</span>
+              </span>
+            ),
+          },
         ]}
         rows={gloveTotals}
       />

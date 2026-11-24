@@ -2566,6 +2566,10 @@ async def personnel_consumption_report(
     products = await db.products.find({"id": {"$in": product_ids}}, {"_id": 0}).to_list(5000) if product_ids else []
     product_map = {p["id"]: p for p in products}
 
+    glove_ids = sorted({g.get("glove_id") for g in raw_gloves if g.get("glove_id")})
+    glove_docs = await db.gloves.find({"id": {"$in": glove_ids}}, {"_id": 0}).to_list(2000) if glove_ids else []
+    glove_map = {g["id"]: g for g in glove_docs}
+
     tools = []
     for m in raw_tools:
         p = product_map.get(m.get("product_id") or "", {})
@@ -2579,6 +2583,8 @@ async def personnel_consumption_report(
             "category": p.get("category", ""),
             "quality": p.get("quality", ""),
             "unit": p.get("unit", "adet"),
+            "current_stock": _num(p.get("current_stock")),
+            "min_stock": _num(p.get("min_stock")),
             "quantity": _num(m.get("quantity")),
             "personnel_id": m.get("personnel_id", ""),
             "personnel_name": m.get("personnel_name", ""),
@@ -2595,6 +2601,7 @@ async def personnel_consumption_report(
 
     gloves = []
     for g in raw_gloves:
+        glove_doc = glove_map.get(g.get("glove_id") or "", {})
         gloves.append({
             "id": g.get("id", ""),
             "date": _iso_day(g.get("transaction_date") or g.get("created_at")),
@@ -2602,6 +2609,9 @@ async def personnel_consumption_report(
             "glove_name": g.get("glove_name", ""),
             "size": g.get("size", ""),
             "brand": g.get("brand", ""),
+            "unit": glove_doc.get("unit", "çift"),
+            "current_stock": _num(glove_doc.get("current_stock")),
+            "min_stock": _num(glove_doc.get("min_stock")),
             "quantity": _num(g.get("quantity")),
             "personnel_id": g.get("personnel_id", ""),
             "personnel_name": g.get("personnel_name", ""),
