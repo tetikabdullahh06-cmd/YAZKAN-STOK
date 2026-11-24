@@ -17,6 +17,10 @@ const cellValue = (column, row) => {
   return raw ?? "";
 };
 
+// Türkçe Excel "#,##0.###" biçiminde tam sayıları "5," gibi gösterdiği için
+// tam sayılarda düz "0", ondalıklı değerlerde "0.###" kullanılır (binlik ayırıcı yok).
+const numberFormat = (value) => (Number.isInteger(Number(value ?? 0)) ? "0" : "0.###");
+
 /**
  * Hareket Geçmişi sekmeleri için biçimlendirilmiş çalışma kitabı üretir.
  * sheets: [{ name, title, subtitle, columns: [{ header, key, type, width }], rows, footer }]
@@ -100,7 +104,7 @@ export async function buildReportWorkbook({ sheets }) {
           cell.numFmt = "dd/mm/yyyy";
           cell.alignment = { horizontal: "center" };
         } else if (column.type === "number") {
-          cell.numFmt = "#,##0.###";
+          cell.numFmt = numberFormat(cell.value);
           cell.alignment = { horizontal: "right" };
         } else if (column.type === "center") {
           cell.alignment = { horizontal: "center" };
@@ -138,7 +142,7 @@ export async function buildReportWorkbook({ sheets }) {
         cell.border = BORDER;
         const column = columns[index];
         if (column?.type === "number") {
-          cell.numFmt = "#,##0.###";
+          cell.numFmt = numberFormat(value);
           cell.alignment = { horizontal: "right" };
         }
       });
