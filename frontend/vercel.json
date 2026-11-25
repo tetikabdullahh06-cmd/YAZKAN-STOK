@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "CI=false DISABLE_ESLINT_PLUGIN=true npm run build",
+  "outputDirectory": "build",
   "rewrites": [
     { "source": "/((?!static/)(?!.*\\.).*)", "destination": "/index.html" }
   ]

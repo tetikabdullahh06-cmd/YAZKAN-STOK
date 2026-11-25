@@ -1,0 +1,13 @@
+.git
+frontend
+node_modules
+memory
+notes
+test_reports
+tests
+scripts
+.emergent
+design_guidelines.json
+tool-holder-research.md
+SESSION_PROGRESS.md
+test_result.md

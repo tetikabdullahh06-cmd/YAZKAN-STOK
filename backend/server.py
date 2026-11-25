@@ -76,6 +76,7 @@ async def health_check():
 
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_KEY = os.environ.get("EMAIL_KEY", "") or RESEND_API_KEY
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "CNC Takımhane")
 OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "")
 
@@ -4577,6 +4578,16 @@ async def send_daily_digest():
 @api.post("/admin/send-daily-digest")
 async def trigger_daily_digest(user=Depends(require_admin)):
     """Manual trigger for daily digest — useful for testing."""
+    await send_daily_digest()
+    return {"ok": True}
+
+
+@api.get("/cron/daily-digest")
+async def cron_daily_digest(request: Request):
+    """Sunucusuz ortamda (Vercel Cron) günlük özeti tetikler."""
+    secret = os.environ.get("CRON_SECRET", "")
+    if secret and request.headers.get("authorization") != f"Bearer {secret}":
+        raise HTTPException(status_code=401, detail="Yetkisiz istek")
     await send_daily_digest()
     return {"ok": True}
 

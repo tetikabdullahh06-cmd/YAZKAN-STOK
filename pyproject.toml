@@ -1,2 +1,25 @@
+[project]
+name = "yazkan-stok-api"
+version = "1.0.0"
+description = "YAZKAN STOK - CNC Takimhane envanter API"
+requires-python = ">=3.12"
+dependencies = [
+    "APScheduler==3.11.3",
+    "bcrypt==4.1.3",
+    "email-validator==2.3.0",
+    "fastapi==0.110.1",
+    "httpx==0.28.1",
+    "motor==3.3.1",
+    "openpyxl==3.1.5",
+    "reportlab==4.4.10",
+    "pillow==12.3.0",
+    "pydantic==2.13.4",
+    "PyJWT==2.13.0",
+    "pymongo==4.6.3",
+    "python-dotenv==1.2.2",
+    "python-multipart==0.0.32",
+    "uvicorn==0.25.0",
+]
+
 [tool.vercel]
 entrypoint = "backend.server:app"
