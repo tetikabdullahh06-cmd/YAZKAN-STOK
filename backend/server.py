@@ -80,6 +80,33 @@ EMAIL_KEY = os.environ.get("EMAIL_KEY", "") or RESEND_API_KEY
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "CNC Takımhane")
 OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "")
 
+
+async def send_email_resend(to_email: str, subject: str, html: str) -> bool:
+    """Resend API ile e-posta gönderir. Test göndericisi hesap sahibine teslim eder;
+    kayıtlı adres reddedilirse OWNER_EMAIL adresine tekrar dener."""
+    if not RESEND_API_KEY or not to_email:
+        return False
+    recipients = [to_email]
+    if OWNER_EMAIL and OWNER_EMAIL.lower() != to_email.lower():
+        recipients.append(OWNER_EMAIL)
+    payload = {"from": f"{EMAIL_FROM_NAME} <onboarding@resend.dev>",
+               "subject": subject, "html": html}
+    async with httpx.AsyncClient(timeout=20) as c:
+        for rcpt in recipients:
+            payload["to"] = [rcpt]
+            try:
+                r = await c.post("https://api.resend.com/emails",
+                                 headers={"Authorization": f"Bearer {RESEND_API_KEY}",
+                                          "Content-Type": "application/json"},
+                                 json=payload)
+                if r.status_code < 400:
+                    return True
+                logger.error(f"Resend {rcpt} -> {r.status_code} {r.text[:160]}")
+            except Exception as e:
+                logger.error(f"Resend {rcpt} hata: {e}")
+    return False
+
+
 logger = logging.getLogger("cnc")
 logging.basicConfig(level=logging.INFO)
 
@@ -749,14 +776,8 @@ async def send_critical_stock_email(product: dict):
       </td></tr>
     </table>
     """
-    payload = {"to": [OWNER_EMAIL], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
-    try:
-        async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
-                             headers={"X-Email-Key": EMAIL_KEY}, json=payload)
-            r.raise_for_status()
-    except Exception as e:
-        logger.error(f"Kritik stok e-posta hatası: {e}")
+    if not await send_email_resend(OWNER_EMAIL, subject, html):
+        logger.error("Kritik stok e-posta gönderilemedi")
 
 
 # ---------- Auth ----------
@@ -823,16 +844,26 @@ async def send_password_reset_email(to_email: str, reset_url: str, user_name: st
     </div>
     """
     payload = {"from": f"{EMAIL_FROM_NAME} <onboarding@resend.dev>", "to": [to_email], "subject": subject, "html": html}
-    try:
-        async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.post("https://api.resend.com/emails",
-                 headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-                 json=payload )
-            r.raise_for_status()
-        return True
-    except Exception as e:
-        logger.error(f"Password reset email failed: {e}")
-        return False
+    # Resend test göndericisi yalnızca hesap sahibinin adresine teslim edebiliyor;
+    # kayıtlı adres reddedilirse yönetici adresine (OWNER_EMAIL) tekrar denenir.
+    recipients = [to_email]
+    if OWNER_EMAIL and OWNER_EMAIL.lower() != to_email.lower():
+        recipients.append(OWNER_EMAIL)
+
+    async with httpx.AsyncClient(timeout=15) as c:
+        for rcpt in recipients:
+            payload["to"] = [rcpt]
+            try:
+                r = await c.post("https://api.resend.com/emails",
+                     headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                     json=payload)
+                if r.status_code < 400:
+                    logger.info(f"Password reset email sent to {rcpt}")
+                    return True
+                logger.error(f"Password reset email to {rcpt} failed: {r.status_code} {r.text[:200]}")
+            except Exception as e:
+                logger.error(f"Password reset email to {rcpt} failed: {e}")
+    return False
 
 
 @api.post("/auth/forgot-password")
@@ -4564,15 +4595,10 @@ async def send_daily_digest():
       <p style="color:#94a3b8; font-size:12px; margin-top:24px;">CNC Takımhane Stok Takip Sistemi — Otomatik günlük özet</p>
     </div>
     """
-    payload = {"to": [OWNER_EMAIL], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
-    try:
-        async with httpx.AsyncClient(timeout=20) as c:
-            r = await c.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
-                             headers={"X-Email-Key": EMAIL_KEY}, json=payload)
-            r.raise_for_status()
+    if await send_email_resend(OWNER_EMAIL, subject, html):
         logger.info(f"Daily digest sent for {yesterday}")
-    except Exception as e:
-        logger.error(f"Daily digest email failed: {e}")
+    else:
+        logger.error("Daily digest email failed")
 
 
 @api.post("/admin/send-daily-digest")
