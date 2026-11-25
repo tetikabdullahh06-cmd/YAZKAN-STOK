@@ -4587,6 +4587,11 @@ _scheduler: Optional[AsyncIOScheduler] = None
 @app.on_event("startup")
 async def start_scheduler():
     global _scheduler
+    # Sunucusuz ortamda (Vercel) her örnek kendi zamanlayıcısını başlatıp günlük
+    # özeti birden çok kez gönderebilir; bu yüzden orada kapatılır.
+    if os.environ.get("DISABLE_SCHEDULER", "").lower() in {"1", "true", "yes"}:
+        logger.info("Scheduler disabled by DISABLE_SCHEDULER")
+        return
     if _scheduler is None:
         _scheduler = AsyncIOScheduler(timezone=TR_TZ)
         _scheduler.add_job(send_daily_digest, CronTrigger(hour=8, minute=0, timezone=TR_TZ),
