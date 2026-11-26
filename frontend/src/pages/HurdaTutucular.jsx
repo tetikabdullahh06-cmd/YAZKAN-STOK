@@ -303,6 +303,16 @@ export default function HurdaTutucular() {
     }
   };
 
+  const downloadPdf = async (s) => {
+    try {
+      const r = await api.get(`/toolholder-scraps/${s.id}/pdf-kart`, { responseType: "blob" });
+      downloadBlob(r.data, `kirilan-takim-karti-${s.record_no || s.id.slice(0, 8)}.pdf`);
+      toast.success("Kart PDF olarak indirildi");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "PDF kart indirilemedi");
+    }
+  };
+
   const setBreakReason = (index, value) => setForm((f) => ({ ...f, break_reasons: f.break_reasons.map((item, i) => (i === index ? value : item)) }));
   const addBreakReason = () => setForm((f) => ({ ...f, break_reasons: [...f.break_reasons, ""] }));
   const removeBreakReason = (index) => setForm((f) => ({ ...f, break_reasons: f.break_reasons.filter((_, i) => i !== index) }));
@@ -640,6 +650,9 @@ export default function HurdaTutucular() {
                         </button>
                         <button type="button" onClick={() => downloadExcel(s)} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-black">
                           <FileSpreadsheet className="w-4 h-4" /> Tutanağı Excel İndir
+                        </button>
+                        <button type="button" onClick={() => downloadPdf(s)} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-900 font-black">
+                          <FileText className="w-4 h-4" /> Tutanağı PDF İndir
                         </button>
                       </div>
                     </td>

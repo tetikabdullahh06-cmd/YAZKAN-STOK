@@ -46,6 +46,10 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.utils import ImageReader
+try:  # paket olarak (backend.server:app) veya doğrudan çalıştırma
+    from .scrap_card_pdf import build_scrap_card_pdf, extra_groups, pdf_fonts
+except ImportError:  # pragma: no cover
+    from scrap_card_pdf import build_scrap_card_pdf, extra_groups, pdf_fonts
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -3554,15 +3558,10 @@ async def toolholder_scrap_pdf(scrap_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
     buf = io.BytesIO()
     pdf = canvas.Canvas(buf, pagesize=A4)
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont("DejaVu", font_path))
-        pdf.setFont("DejaVu", 11)
-    else:
-        pdf.setFont("Helvetica", 11)
+    # Türkçe karakterler için paket içindeki DejaVu fontları kullanılır (sunucuda sistem fontu olmayabilir).
+    regular_font, bold_font = pdf_fonts()
+    pdf.setFont(regular_font, 11)
     width, height = A4
-    regular_font = "DejaVu" if os.path.exists(font_path) else "Helvetica"
-    bold_font = "DejaVu" if os.path.exists(font_path) else "Helvetica-Bold"
     logo_path = ROOT_DIR / "assets" / "yazkan-logo.jpg"
     if logo_path.exists():
         pdf.drawImage(str(logo_path), 55, height - 88, width=180, height=50, preserveAspectRatio=True, anchor="sw", mask="auto")
@@ -3778,6 +3777,72 @@ def _scrap_card_add_photo(sheet, data_url, anchor: str, box_width: int, box_heig
     sheet.add_image(picture)
 
 
+def _scrap_card_add_extra_sheet(workbook, scrap: dict) -> None:
+    """Formda doldurulan tüm alanları (beş sekmenin tamamı) ikinci sayfaya yazar."""
+    from openpyxl.styles import Border, Font, PatternFill, Side
+
+    title = "EK BİLGİLER"
+    if title in workbook.sheetnames:
+        del workbook[title]
+    sheet = workbook.create_sheet(title)
+    sheet.sheet_view.showGridLines = False
+    sheet.column_dimensions["A"].width = 42
+    sheet.column_dimensions["B"].width = 96
+    thin = Side(style="thin", color="9AA5B1")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    head_fill = PatternFill("solid", fgColor="1F3A5F")
+    group_fill = PatternFill("solid", fgColor="DCE6F1")
+    label_fill = PatternFill("solid", fgColor="F4F6F9")
+
+    row = 1
+    sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+    cell = sheet.cell(row=row, column=1, value="KIRILAN TAKIM KARTI — EK BİLGİLER (formda doldurulan tüm alanlar)")
+    cell.font = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
+    cell.fill = head_fill
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+    sheet.row_dimensions[row].height = 26
+    row += 1
+
+    record_no = _scrap_card_text(scrap.get("record_no"), "-")
+    scrap_date = _scrap_card_text(scrap.get("scrap_date"), "-")
+    sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+    cell = sheet.cell(row=row, column=1, value=f"Tutanak No: {record_no}   ·   Hurda tarihi: {scrap_date}")
+    cell.font = Font(name="Calibri", size=10, italic=True, color="334155")
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+    sheet.row_dimensions[row].height = 20
+    row += 2
+
+    for group_title, fields in extra_groups(scrap):
+        sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+        cell = sheet.cell(row=row, column=1, value=group_title)
+        cell.font = Font(name="Calibri", size=11, bold=True, color="1F3A5F")
+        cell.fill = group_fill
+        cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        cell.border = border
+        sheet.cell(row=row, column=2).border = border
+        sheet.row_dimensions[row].height = 22
+        row += 1
+        for label, value in fields:
+            label_cell = sheet.cell(row=row, column=1, value=label)
+            label_cell.font = Font(name="Calibri", size=10, bold=True, color="334155")
+            label_cell.fill = label_fill
+            label_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, indent=1)
+            label_cell.border = border
+            value_cell = sheet.cell(row=row, column=2, value=value)
+            value_cell.font = Font(name="Calibri", size=10, color="0F172A")
+            value_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, indent=1)
+            value_cell.border = border
+            text = str(value or "")
+            estimated_lines = max(1, -(-len(text) // 92))
+            sheet.row_dimensions[row].height = max(20, estimated_lines * 15 + 5)
+            row += 1
+        row += 1
+
+    sheet.page_setup.orientation = "portrait"
+    sheet.page_setup.fitToWidth = 1
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+
+
 def build_scrap_card_workbook(scrap: dict) -> bytes:
     """Kırılan Takım Kartı şablonunun biçimini, form numaralarını ve yerleşimini koruyarak doldurur."""
     if not SCRAP_CARD_TEMPLATE.exists():
@@ -3836,6 +3901,7 @@ def build_scrap_card_workbook(scrap: dict) -> bytes:
         _scrap_card_add_photo(sheet, before_images[0], "A10", *_scrap_card_box(sheet, 1, 4, 10, 19))
     if after_images:
         _scrap_card_add_photo(sheet, after_images[0], "F10", *_scrap_card_box(sheet, 6, 9, 10, 19))
+    _scrap_card_add_extra_sheet(workbook, scrap)
     buffer = io.BytesIO()
     workbook.save(buffer)
     buffer.seek(0)
@@ -3857,6 +3923,24 @@ async def toolholder_scrap_excel(scrap_id: str, user=Depends(get_current_user)):
         io.BytesIO(content),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": disposition},
+    )
+
+
+@api.get("/toolholder-scraps/{scrap_id}/pdf-kart")
+async def toolholder_scrap_card_pdf(scrap_id: str, user=Depends(get_current_user)):
+    """Kırılan takım kartının Excel çıktısıyla aynı yerleşimde tek sayfalık PDF hâli."""
+    scrap = await db.toolholder_scraps.find_one({"id": scrap_id}, {"_id": 0})
+    if not scrap:
+        raise HTTPException(status_code=404, detail="Hurda kaydı bulunamadı")
+    content = await asyncio.to_thread(build_scrap_card_pdf, scrap)
+    record_no = _scrap_card_text(scrap.get("record_no"), scrap_id[:8])
+    raw_filename = f"kirilan-takim-karti-{record_no}.pdf"
+    ascii_filename = _ascii_filename(raw_filename)
+    disposition = f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(raw_filename)}"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": disposition, "Cache-Control": "no-store"},
     )
 
 
